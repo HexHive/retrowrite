@@ -5,13 +5,13 @@ BUILD=$(CDIR)/build/
 all: $(BUILD)overflow_heap $(BUILD)overflow_heap_asan $(BUILD)overflow_stack $(BUILD)overflow_stack_asan $(BUILD)overflow_global $(BUILD)overflow_global_asan
 
 $(BUILD)tinylib.o: tinylib.c
-	$(CC) -c $< -o $@ -fpic --save-temps
+	$(CC) -c $< -o $@ -fpic
 
 $(BUILD)libtiny.so: $(BUILD)tinylib.o
 	$(CC) -shared -o $@ $< 
 
 $(BUILD)tinylib_asan.o: tinylib.c
-	$(CC) -c $< -fpic -o $@ -fsanitize=address
+	$(CC) -c $< -fpic -o $@ -fsanitize=address --save-temps -fverbose-asm
 
 $(BUILD)libtinyasan.so: $(BUILD)tinylib_asan.o
 	$(CC) -shared -o $@ $<
