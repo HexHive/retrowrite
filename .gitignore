@@ -1,3 +1,4 @@
 *.swp
 testbins/build/
 retrowrite.wiki/
+__pycache__/
