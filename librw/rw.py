@@ -1,5 +1,9 @@
 import argparse
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
+from capstone.x86_const import X86_REG_RIP
+
+from elftools.elf.descriptions import describe_reloc_type
+from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 
 
 class Rewriter():
@@ -50,16 +54,18 @@ class Rewriter():
     def symbolize(self):
         symb = Symbolizer()
         symb.symbolize_text_section(self.container, None)
+        symb.symbolize_data_sections(self.container, None)
 
     def dump(self):
         results = list()
-        for sec, section in self.container.sections.items():
+        for sec, section in sorted(
+                self.container.sections.items(), key=lambda x: x[1].base):
             results.append("%s" % (section))
 
         results.append(".section .text")
         results.append(".align 16")
 
-        for _, function in self.container.functions.items():
+        for _, function in sorted(self.container.functions.items()):
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             results.append("%s" % (function))
@@ -107,14 +113,14 @@ class Symbolizer():
     ]
 
     def __init__(self):
-        pass
+        self.bases = set()
+        self.symbolized = set()
 
     # TODO: Use named symbols instead of generic labels when possible.
     # TODO: Replace generic call labels with function names instead
     def symbolize_text_section(self, container, context):
         # Symbolize using relocation information.
         for rel in container.relocations[".text"]:
-
             fn = container.function_of_address(rel['offset'])
             if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
                 continue
@@ -130,22 +136,31 @@ class Symbolizer():
                 else:
                     # Figure out which argument needs to be
                     # converted to a symbol.
-                    mem_access, idx = inst.get_mem_access_op()
+                    mem_access, _ = inst.get_mem_access_op()
                     if not mem_access:
                         continue
                     value = hex(mem_access.disp)
                     inst.op_str = inst.op_str.replace(
-                        value, rel['name'].split("@")[0])
+                        value, "%s@GOTPCREL" % (rel['name'].split("@")[0]))
             else:
-                mem_access, idx = inst.get_mem_access_op()
+                mem_access, _ = inst.get_mem_access_op()
                 if not mem_access:
                     # These are probably calls?
                     continue
-                value = hex(mem_access.disp)
-                inst.op_str = inst.op_str.replace(value,
-                                                  ".LC%x" % (rel['st_value']))
+                value = mem_access.disp
+                ripbase = inst.address + inst.sz
+                inst.op_str = inst.op_str.replace(
+                    hex(value), ".LC%x" % (ripbase + value))
+
+                if ".rodata" in rel["name"]:
+                    self.bases.add(ripbase + value)
+
+            self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
+
+        # Symbolize remaining memory accesses
+        self.symbolize_mem_accesses(container, context)
 
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
@@ -161,8 +176,45 @@ class Symbolizer():
                         function.bbstarts.add(target)
                         instruction.op_str = ".L%x" % (target)
 
+    def symbolize_mem_accesses(self, container, context):
+        for _, function in container.functions.items():
+            for inst in function.cache:
+                if inst.address in self.symbolized:
+                    continue
+
+                mem_access, _ = inst.get_mem_access_op()
+                if not mem_access:
+                    continue
+
+                # Now we have a memory access,
+                # check if it is rip relative.
+                base = mem_access.base
+                if base == X86_REG_RIP:
+                    value = mem_access.disp
+                    ripbase = inst.address + inst.sz
+                    inst.op_str = inst.op_str.replace(
+                        hex(value), ".LC%x" % (ripbase + value))
+
     def symbolize_data_sections(self, container, context=None):
-        pass
+        for secname, section in container.sections.items():
+            print(secname)
+            for rel in section.relocations:
+                reloc_type = rel['type']
+                if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
+                    swbase = None
+                    for base in sorted(self.bases):
+                        if base > rel['offset']:
+                            break
+                        swbase = base
+                    value = rel['st_value'] + rel['addend'] - (
+                        rel['offset'] - swbase)
+                    swlbl = ".LC%x-.LC%x" % (value, swbase)
+                    section.replace(rel['offset'], 4, swlbl)
+                elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
+                    value = rel['st_value'] + rel['addend']
+                    label = ".LC%x" % value
+                    section.replace(rel['offset'], 8, label)
+                    print(hex(rel['offset']), label)
 
 
 if __name__ == "__main__":

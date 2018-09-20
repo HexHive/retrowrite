@@ -1,4 +1,5 @@
 from collections import defaultdict
+import struct
 
 from capstone import CS_OP_IMM, CS_OP_MEM
 
@@ -10,7 +11,7 @@ class SzPfx():
         1: '.byte',
         2: '.word',
         4: '.long',
-        8: '.qword',
+        8: '.quad',
         16: '.xmmword',
     }
 
@@ -100,6 +101,8 @@ class Function():
         for instruction in self.cache:
             if instruction.address in self.bbstarts:
                 results.append(".L%x:" % (instruction.address))
+                # XXX: This is a hack!
+                results.append(".LC%x:" % (instruction.address))
             else:
                 results.append(".LC%x:" % (instruction.address))
             results.append(
@@ -144,6 +147,22 @@ class DataSection():
     def add_relocations(self, relocations):
         self.relocations.extend(relocations)
 
+    def read_at(self, address, sz):
+        cacheoff = address - self.base
+        value = struct.unpack(
+            "<I",
+            bytes([x.value for x in self.cache[cacheoff:cacheoff + sz]]))[0]
+
+        return value
+
+    def replace(self, address, sz, value):
+        cacheoff = address - self.base
+        self.cache[cacheoff].value = value
+        self.cache[cacheoff].sz = sz
+
+        for cell in self.cache[cacheoff + 1:cacheoff + sz]:
+            cell.set_ignored()
+
     def __str__(self):
         assert self.cache, "Section not loaded!"
 
@@ -156,8 +175,8 @@ class DataSection():
             if not cell.ignored:
                 results.append(".LC%x:" % (location))
                 results.append("\t%s" % (cell))
-            if not cell.is_instrumented:
-                location += cell.sz
+                if not cell.is_instrumented:
+                    location += cell.sz
 
         return "\n".join(results)
 
@@ -181,6 +200,9 @@ class DataCell():
 
     def __str__(self):
         if not self.ignored:
-            return "%s 0x%x" % (SzPfx.pfx(self.sz), self.value)
+            if isinstance(self.value, int):
+                return "%s 0x%x" % (SzPfx.pfx(self.sz), self.value)
+            else:
+                return "%s %s" % (SzPfx.pfx(self.sz), self.value)
         else:
             return ""

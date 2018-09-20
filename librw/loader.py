@@ -69,7 +69,8 @@ class Loader():
                     'name': symbol_name,
                     'st_value': symbol['st_value'],
                     'offset': rel['r_offset'],
-                    'addend': rel['r_addend']
+                    'addend': rel['r_addend'],
+                    'type': rel['r_info_type'],
                 }
 
                 relocs[section.name].append(reloc_i)
