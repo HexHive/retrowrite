@@ -68,7 +68,7 @@ class Rewriter():
         for _, function in sorted(self.container.functions.items()):
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
-            results.append("%s" % (function))
+            results.append("\t.text\n%s" % (function))
 
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results))
