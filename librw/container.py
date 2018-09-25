@@ -3,7 +3,7 @@ import struct
 
 from capstone import CS_OP_IMM, CS_OP_MEM
 
-import disasm
+from . import disasm
 
 
 class SzPfx():
@@ -99,6 +99,10 @@ class Function():
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
         for instruction in self.cache:
+            if isinstance(instruction, InstrumentedInstruction):
+                results.append("%s" % (instruction))
+                continue
+
             if instruction.address in self.bbstarts:
                 results.append(".L%x:" % (instruction.address))
                 # XXX: This is a hack!
@@ -128,6 +132,19 @@ class InstructionWrapper():
             if op.type == CS_OP_MEM:
                 return (op.mem, idx)
         return (None, None)
+
+
+class InstrumentedInstruction():
+    def __init__(self, code, label=None, forinst=None):
+        self.code = code
+        self.label = label
+        self.forinst = forinst
+
+    def __str__(self):
+        if self.label:
+            return "%s: # %s\n\t%s" % (self.label, self.forinst, self.code)
+        else:
+            return "%s" % (self.code)
 
 
 class DataSection():
@@ -189,7 +206,7 @@ class DataCell():
         self.is_instrumented = False
 
     @staticmethod
-    def instrumented(self, value, sz):
+    def instrumented(value, sz):
         dc = DataCell(value, sz)
         dc.instrumented = True
 

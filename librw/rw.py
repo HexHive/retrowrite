@@ -75,43 +75,6 @@ class Rewriter():
 
 
 class Symbolizer():
-    JUMPS = [
-        "jmp",
-        "jo",
-        "jno",
-        "js",
-        "jns",
-        "je",
-        "jz",
-        "jne",
-        "jnz",
-        "jb",
-        "jbe",
-        "jnae",
-        "jc",
-        "jnb",
-        "jae",
-        "jnc",
-        "jna",
-        "ja",
-        "jae",
-        "jnbe",
-        "jl",
-        "jnge",
-        "jge",
-        "jnl",
-        "jle",
-        "jng",
-        "jg",
-        "jnle",
-        "jp",
-        "jpe",
-        "jnp",
-        "jpo",
-        "jcxz",
-        "jecxz",
-    ]
-
     def __init__(self):
         self.bases = set()
         self.symbolized = set()
@@ -158,7 +121,6 @@ class Symbolizer():
             self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
-
         # Symbolize remaining memory accesses
         self.symbolize_mem_accesses(container, context)
 
@@ -197,7 +159,6 @@ class Symbolizer():
 
     def symbolize_data_sections(self, container, context=None):
         for secname, section in container.sections.items():
-            print(secname)
             for rel in section.relocations:
                 reloc_type = rel['type']
                 if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
@@ -214,19 +175,15 @@ class Symbolizer():
                     value = rel['st_value'] + rel['addend']
                     label = ".LC%x" % value
                     section.replace(rel['offset'], 8, label)
-                    print(hex(rel['offset']), label)
 
 
 if __name__ == "__main__":
-    from loader import Loader
+    from .loader import Loader
 
     argp = argparse.ArgumentParser()
 
     argp.add_argument("bin", type=str, help="Input binary to load")
     argp.add_argument("outfile", type=str, help="Symbolized ASM output")
-
-    argp.add_argument(
-        "--flist", type=str, help="Load function list from .json file")
 
     args = argp.parse_args()
 

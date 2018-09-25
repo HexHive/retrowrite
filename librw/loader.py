@@ -8,7 +8,7 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
 
-from container import Container, Function, DataSection
+from .container import Container, Function, DataSection
 
 
 class Loader():
