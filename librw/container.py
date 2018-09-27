@@ -25,6 +25,7 @@ class Container():
         self.functions = dict()
         self.function_names = set()
         self.sections = dict()
+        self.globals = None
         self.relocations = defaultdict(list)
         self.loader = None
 
@@ -36,6 +37,27 @@ class Container():
 
     def add_section(self, section):
         self.sections[section.name] = section
+
+    def add_globals(self, globals):
+        self.globals = globals
+        done = set()
+
+        for location, gobjs in globals.items():
+            found = None
+            for sec, section in self.sections.items():
+                if section.base <= location < section.base + section.sz:
+                    found = sec
+                    break
+
+            if not found:
+                continue
+
+            for gobj in gobjs:
+                if gobj['name'] in done:
+                    continue
+                self.sections[found].add_global(location, gobj['name'],
+                                                gobj['sz'])
+                done.add(gobj['name'])
 
     def attach_loader(self, loader):
         self.loader = loader
@@ -65,19 +87,21 @@ class Container():
 
 
 class Function():
-    def __init__(self, name, start, sz, bytes):
+    def __init__(self, name, start, sz, bytes, bind="STB_LOCAL"):
         self.name = name
         self.cache = list()
         self.start = start
         self.sz = sz
         self.bytes = bytes
         self.bbstarts = set()
+        self.bind = bind
 
         self.bbstarts.add(start)
 
     def disasm(self):
         assert not self.cache
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
+            #if not decoded.mnemonic.startswith("nop"):
             self.cache.append(InstructionWrapper(decoded))
 
     def instruction_of_address(self, address):
@@ -94,8 +118,10 @@ class Function():
 
         results = []
         # Put all function names and define them.
-        # TODO: Maintain globl/local property.
-        results.append(".globl %s" % (self.name))
+        if self.bind == "STB_GLOBAL":
+            results.append(".globl %s" % (self.name))
+        else:
+            results.append(".local %s" % (self.name))
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
         for instruction in self.cache:
@@ -148,13 +174,15 @@ class InstrumentedInstruction():
 
 
 class DataSection():
-    def __init__(self, name, base, sz, bytes):
+    def __init__(self, name, base, sz, bytes, align=16):
         self.name = name
         self.cache = list()
         self.base = base
         self.sz = sz
         self.bytes = bytes
         self.relocations = list()
+        self.align = align
+        self.named_globals = defaultdict(list)
 
     def load(self):
         assert not self.cache
@@ -163,6 +191,12 @@ class DataSection():
 
     def add_relocations(self, relocations):
         self.relocations.extend(relocations)
+
+    def add_global(self, location, label, sz):
+        self.named_globals[location].append({
+            'label': label,
+            'sz': sz,
+        })
 
     def read_at(self, address, sz):
         cacheoff = address - self.base
@@ -180,22 +214,56 @@ class DataSection():
         for cell in self.cache[cacheoff + 1:cacheoff + sz]:
             cell.set_ignored()
 
+    def iter_cells(self):
+        location = self.base
+        for cidx, cell in enumerate(self.cache):
+            if cell.ignored or cell.is_instrumented:
+                continue
+            yield cidx, location, cell
+            location = location + cell.sz
+
     def __str__(self):
         assert self.cache, "Section not loaded!"
 
+        # XXX: HACK!
+        if self.name == ".init_array":
+            self.cache = self.cache[1:]
+
         results = []
-        results.append(".section %s" % (self.name))
-        results.append(".align 16")
+        results.append(".align {}".format(self.align))
+        results.append(".section {}".format(self.name))
         location = self.base
 
-        for cell in self.cache:
-            if not cell.ignored:
-                results.append(".LC%x:" % (location))
-                results.append("\t%s" % (cell))
-                if not cell.is_instrumented:
-                    location += cell.sz
+        valid_cells = False
 
-        return "\n".join(results)
+        for cell in self.cache:
+            if cell.ignored:
+                continue
+
+            valid_cells = True
+
+            if cell.is_instrumented:
+                results.append("\t%s" % (cell))
+                continue
+
+            if location in self.named_globals:
+                for gobj in self.named_globals[location]:
+                    symdef = ".type\t{name},@object\n.globl {name}".format(
+                        name=gobj["label"])
+                    lblstr = "{}: # {:x} -- {:x}".format(
+                        gobj["label"], location, location + gobj["sz"])
+
+                    results.append(symdef)
+                    results.append(lblstr)
+
+            results.append(".LC%x:" % (location))
+            location += cell.sz
+            results.append("\t%s" % (cell))
+
+        if valid_cells:
+            return "\n".join(results)
+        else:
+            return ""
 
 
 class DataCell():
@@ -208,7 +276,7 @@ class DataCell():
     @staticmethod
     def instrumented(value, sz):
         dc = DataCell(value, sz)
-        dc.instrumented = True
+        dc.is_instrumented = True
 
         return dc
 
@@ -217,9 +285,10 @@ class DataCell():
 
     def __str__(self):
         if not self.ignored:
+            if self.is_instrumented:
+                return self.value
             if isinstance(self.value, int):
                 return "%s 0x%x" % (SzPfx.pfx(self.sz), self.value)
-            else:
-                return "%s %s" % (SzPfx.pfx(self.sz), self.value)
+            return "%s %s" % (SzPfx.pfx(self.sz), self.value)
         else:
             return ""

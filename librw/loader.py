@@ -2,7 +2,6 @@
 
 import argparse
 from collections import defaultdict
-import json
 
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
@@ -24,7 +23,9 @@ class Loader():
         for faddr, fvalue in fnlist.items():
             section_offset = faddr - base
             bytes = data[section_offset:section_offset + fvalue["sz"]]
-            function = Function(fvalue["name"], faddr, fvalue["sz"], bytes)
+
+            function = Function(
+                fvalue["name"], faddr, fvalue["sz"], bytes, fvalue["bind"])
             self.container.add_function(function)
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
@@ -32,7 +33,8 @@ class Loader():
             sval = seclist[sec]
             section = self.elffile.get_section_by_name(sec)
             bytes = section.data()
-            ds = DataSection(sec, sval["base"], sval["sz"], bytes)
+            ds = DataSection(sec, sval["base"], sval["sz"], bytes,
+                             sval['align'])
             self.container.add_section(ds)
 
     def load_relocations(self, relocs):
@@ -101,6 +103,8 @@ class Loader():
                     function_list[symbol['st_value']] = {
                         'name': symbol.name,
                         'sz': symbol['st_size'],
+                        'visibility': symbol['st_other']['visibility'],
+                        'bind': symbol['st_info']['bind'],
                     }
 
         return function_list
@@ -111,13 +115,52 @@ class Loader():
             sections[section.name] = {
                 'base': section['sh_addr'],
                 'sz': section['sh_size'],
+                'align': section['sh_addralign'],
             }
 
         return sections
 
+    def load_globals_from_glist(self, glist):
+        self.container.add_globals(glist)
+
+    def global_data_list_from_symtab(self):
+        symbol_tables = [
+            sec for sec in self.elffile.iter_sections()
+            if isinstance(sec, SymbolTableSection)
+        ]
+
+        global_list = defaultdict(list)
+
+        for section in symbol_tables:
+            if not isinstance(section, SymbolTableSection):
+                continue
+
+            if section['sh_entsize'] == 0:
+                continue
+
+            for symbol in section.iter_symbols():
+                # XXX: HACK
+                if "@@GLIBC" in symbol.name:
+                    continue
+                if symbol['st_other']['visibility'] == "STV_HIDDEN":
+                    continue
+                if symbol['st_size'] == 0:
+                    continue
+
+                if (symbol['st_info']['type'] == 'STT_OBJECT'
+                        and symbol['st_shndx'] != 'SHN_UNDEF'):
+                    global_list[symbol['st_value']].append({
+                        'name':
+                        "{}_{:x}".format(symbol.name, symbol['st_value']),
+                        'sz':
+                        symbol['st_size'],
+                    })
+
+        return global_list
+
 
 if __name__ == "__main__":
-    from rw import Rewriter
+    from .rw import Rewriter
 
     argp = argparse.ArgumentParser()
 
@@ -132,11 +175,20 @@ if __name__ == "__main__":
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
 
+    print(flist)
+
     slist = loader.slist_from_symtab()
     loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
 
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)
 
+    global_list = loader.global_data_list_from_symtab()
+    loader.load_globals_from_glist(global_list)
+
     for addr, function in loader.container.functions.items():
         print(hex(addr), function.name)
+
+    for addr, datas in loader.container.globals.items():
+        for data in datas:
+            print(hex(addr), data["name"], hex(data["sz"]))

@@ -18,6 +18,9 @@ def do_symbolization(input, outfile):
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)
 
+    global_list = loader.global_data_list_from_symtab()
+    loader.load_globals_from_glist(global_list)
+
     loader.container.attach_loader(loader)
 
     rw = Rewriter(loader.container, outfile + ".s")

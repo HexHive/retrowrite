@@ -71,7 +71,7 @@ class Rewriter():
             results.append("\t.text\n%s" % (function))
 
         with open(self.outfile, 'w') as outfd:
-            outfd.write("\n".join(results))
+            outfd.write("\n".join(results + ['']))
 
 
 class Symbolizer():
@@ -93,30 +93,44 @@ class Symbolizer():
                 continue
 
             # Fix up imports
-            if rel['st_value'] == 0 and "@@" in rel['name']:
+            if "@" in rel['name']:
+                suffix = ""
+                if rel['st_value'] == 0:
+                    suffix = "@PLT"
+
                 if len(inst.cs.operands) == 1:
-                    inst.op_str = "%s@PLT" % (rel['name'].split("@")[0])
+                    inst.op_str = "%s%s" % (rel['name'].split("@")[0], suffix)
                 else:
                     # Figure out which argument needs to be
                     # converted to a symbol.
+                    if suffix:
+                        suffix = "@GOTPCREL"
                     mem_access, _ = inst.get_mem_access_op()
                     if not mem_access:
                         continue
                     value = hex(mem_access.disp)
                     inst.op_str = inst.op_str.replace(
-                        value, "%s@GOTPCREL" % (rel['name'].split("@")[0]))
+                        value, "%s%s" % (rel['name'].split("@")[0], suffix))
             else:
                 mem_access, _ = inst.get_mem_access_op()
                 if not mem_access:
                     # These are probably calls?
                     continue
-                value = mem_access.disp
-                ripbase = inst.address + inst.sz
-                inst.op_str = inst.op_str.replace(
-                    hex(value), ".LC%x" % (ripbase + value))
 
-                if ".rodata" in rel["name"]:
-                    self.bases.add(ripbase + value)
+                if (rel['type'] in [ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
+                                    ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]]):
+
+                    value = mem_access.disp
+                    ripbase = inst.address + inst.sz
+                    inst.op_str = inst.op_str.replace(
+                        hex(value), ".LC%x" % (ripbase + value))
+                    if ".rodata" in rel["name"]:
+                        self.bases.add(ripbase + value)
+                else:
+                    print("[*] Possible incorrect handling of relocation!")
+                    value = mem_access.disp
+                    inst.op_str = inst.op_str.replace(
+                        hex(value), ".LC%x" % (rel['st_value']))
 
             self.symbolized.add(inst.address)
 
@@ -175,6 +189,8 @@ class Symbolizer():
                     value = rel['st_value'] + rel['addend']
                     label = ".LC%x" % value
                     section.replace(rel['offset'], 8, label)
+                else:
+                    print("[*] Unhandled relocation {}".format(reloc_type))
 
 
 if __name__ == "__main__":
@@ -197,6 +213,9 @@ if __name__ == "__main__":
 
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)
+
+    global_list = loader.global_data_list_from_symtab()
+    loader.load_globals_from_glist(global_list)
 
     loader.container.attach_loader(loader)
 

@@ -1,4 +1,6 @@
 import copy
+import math
+from collections import defaultdict
 
 from capstone.x86_const import X86_REG_RSP
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
@@ -7,15 +9,23 @@ import rwtools.asan.snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 
+ASAN_SHADOW_OFF = 2147450880
+ASAN_GLOBAL_DS_BASE = 0x3000000000000000
+ASAN_INIT_LOC = 0x1000000000000000
+ASAN_DEINIT_LOC = 0x2000000000000000
+
 
 class Instrument():
-    def __init__(self, rewriter, stackrz_sz=32):
+    def __init__(self, rewriter, stackrz_sz=32, globalrz_sz=64):
         self.rewriter = rewriter
         self.stackrz_sz = stackrz_sz
+        self.globalrz_sz = globalrz_sz
+        self.global_count = 0
 
     def instrument_init_array(self):
         section = self.rewriter.container.sections[".init_array"]
-        constructor = DataCell.instrumented(sp.ASAN_INIT_FN, 8)
+        constructor = DataCell.instrumented(".quad {}".format(sp.ASAN_INIT_FN),
+                                            8)
         section.cache.append(constructor)
 
         if ".fini_array" not in self.rewriter.container.sections:
@@ -23,18 +33,21 @@ class Instrument():
             self.rewriter.container.add_section(finiarr)
 
         fini = self.rewriter.container.sections[".fini_array"]
-        destructor = DataCell.instrumented(sp.ASAN_DEINIT_FN, 8)
+        destructor = DataCell.instrumented(
+            ".quad {}".format(sp.ASAN_DEINIT_FN), 8)
         fini.cache.append(destructor)
 
-        initfn = Function(sp.ASAN_INIT_FN, 0x1000000000000000, 0, "")
-        initcode = InstrumentedInstruction('\n'.join(sp.MODULE_INIT), None,
-                                           None)
+        initfn = Function(sp.ASAN_INIT_FN, ASAN_INIT_LOC, 0, "")
+        initcode = InstrumentedInstruction(
+            '\n'.join(sp.MODULE_INIT).format(global_count=self.global_count),
+            None, None)
         initfn.cache.append(initcode)
         self.rewriter.container.add_function(initfn)
 
-        finifn = Function(sp.ASAN_DEINIT_FN, 0x2000000000000000, 0, "")
-        finicode = InstrumentedInstruction('\n'.join(sp.MODULE_DEINIT), None,
-                                           None)
+        finifn = Function(sp.ASAN_DEINIT_FN, ASAN_DEINIT_LOC, 0, "")
+        finicode = InstrumentedInstruction(
+            '\n'.join(sp.MODULE_DEINIT).format(global_count=self.global_count),
+            None, None)
         finifn.cache.append(finicode)
         self.rewriter.container.add_function(finifn)
 
@@ -87,6 +100,14 @@ class Instrument():
         for _, fn in self.rewriter.container.functions.items():
             inserts = list()
             for idx, instruction in enumerate(fn.cache):
+                if isinstance(instruction, InstrumentedInstruction):
+                    continue
+
+                # XXX: THIS IS A TODO.
+                if instruction.mnemonic.startswith("rep stos"):
+                    print("[*] Skipping: {}".format(instruction))
+                    continue
+
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
                 if not mem:
@@ -101,22 +122,28 @@ class Instrument():
                 elif acsz == 8:
                     instrument = self._access8()
                 else:
-                    print("[*] Maybe missed an access: %s" % (instruction))
+                    print("[*] Maybe missed an access: %s -- %d" %
+                          (instruction, acsz))
                     continue
 
                 args = dict()
 
                 # XXX: Bug in capstone?
                 if any([
-                    instruction.mnemonic.startswith(x) for x in
+                        instruction.mnemonic.startswith(x) for x in
                     ["sar", "shl", "shl", "stos", "shr", "rep stos"]
                 ]):
                     midx = 1
 
-                if midx == 0:
+                if len(instruction.cs.operands) == 1:
+                    lexp = instruction.op_str
+                elif midx == 0:
                     lexp = instruction.op_str.rsplit(",", 1)[0]
                 else:
                     lexp = instruction.op_str.split(",", 1)[1]
+
+                if lexp.startswith("*"):
+                    lexp = lexp[1:]
 
                 args["lexp"] = lexp
                 args["acsz"] = acsz
@@ -142,17 +169,84 @@ class Instrument():
                 fn.cache.insert(idx + code[0], code[1])
 
     def instrument_globals(self):
-        pass
+        gmap = list()
+        for _, sec in self.rewriter.container.sections.items():
+            location = sec.base
+            appends = defaultdict(list)
+            for idx, cell in enumerate(sec.cache):
+                if cell.ignored or cell.is_instrumented:
+                    continue
+
+                if location in sec.named_globals:
+                    self.global_count += 1
+                    gobj = sec.named_globals[location][0]
+                    #print("[*] Instrumenting: %s" % (gobj))
+                    asan_global_meta = self.new_global_metadata(gobj)
+                    gmap.append(asan_global_meta)
+                    # Need to add padding.
+                    # Redzone above the global
+                    appends[location].append(asan_global_meta.pad_up)
+                    # Redzone below the global
+                    appends[location + gobj["sz"]].append(
+                        asan_global_meta.pad_down)
+
+                location += cell.sz
+
+            location = sec.base
+            oldcache = copy.copy(sec.cache)
+            icount = 0
+
+            for idx, cell in enumerate(oldcache):
+                if cell.is_instrumented or cell.ignored:
+                    continue
+                if location in appends:
+                    for pad in appends[location]:
+                        instrumented = DataCell.instrumented(
+                            ".zero {}".format(pad), pad)
+                        sec.cache.insert(idx + icount, instrumented)
+                        icount += 1
+                location += cell.sz
+
+        ds = DataSection(".data.asan", ASAN_GLOBAL_DS_BASE, 0, None)
+        ds.cache.append(
+            DataCell.instrumented("{}:".format(sp.ASAN_GLOBAL_DS), 0))
+        #ds.add_global(ASAN_GLOBAL_DS_BASE,
+        #self.global_count * GlobalMetaData.ENT_SZ)
+        for meta in gmap:
+            ds.cache.extend(meta.to_instrumented())
+        self.rewriter.container.add_section(ds)
+
+    def new_global_metadata(self, gobj):
+        location = gobj["label"]
+        sz = gobj["sz"]
+        if sz % self.globalrz_sz == 0:
+            sz_with_rz = self.globalrz_sz + sz
+        else:
+            sz_with_rz = int(
+                math.ceil(sz / self.globalrz_sz) * self.globalrz_sz)
+        name = 0
+        mod_name = 0
+        has_dynamic_init = 0
+
+        meta = GlobalMetaData(location, sz, sz_with_rz, name, mod_name,
+                              has_dynamic_init)
+
+        diff = sz_with_rz - sz
+        if diff % 2 > 0:
+            meta.pad_up += 1
+        meta.pad_up += int(diff / 2)
+        meta.pad_down += int(diff / 2)
+
+        return meta
 
     def poison_stack(self, poison_extent, args):
         assert poison_extent % 32 == 0
         instrumentation = copy.copy(sp.STACK_POISON_BASE)
 
         for idx in range(0, int(poison_extent / 32)):
-            args["off"] = 2147450880 + idx
+            args["off"] = ASAN_SHADOW_OFF + idx
             instrumentation.append(
-                copy.copy(sp.STACK_POISON_SLOT).format(**args)
-            )
+                copy.copy(sp.STACK_POISON_SLOT).format(**args))
 
         instrumentation.append("popq {clob1}")
         return "\n".join(instrumentation).format(**args)
@@ -162,10 +256,9 @@ class Instrument():
         instrumentation = copy.copy(sp.STACK_POISON_BASE)
 
         for idx in range(0, int(poison_extent / 32)):
-            args["off"] = 2147450880 + idx
+            args["off"] = ASAN_SHADOW_OFF + idx
             instrumentation.append(
-                copy.copy(sp.STACK_UNPOISON_SLOT).format(**args)
-            )
+                copy.copy(sp.STACK_UNPOISON_SLOT).format(**args))
 
         instrumentation.append("popq {clob1}")
         return "\n".join(instrumentation).format(**args)
@@ -204,8 +297,8 @@ class Instrument():
                     redzone_sz = self.stackrz_sz
                     instruction = "sub ${0}, %rsp".format(redzone_sz)
 
-                    args = dict(clob1="%rbx",
-                                pbase="{0}(%rsp)".format(redzone_sz))
+                    args = dict(
+                        clob1="%rbx", pbase="{0}(%rsp)".format(redzone_sz))
 
                     poisoni = self.poison_stack(redzone_sz, args)
                     poisoni = instruction + "\n" + poisoni
@@ -235,8 +328,8 @@ class Instrument():
 
                     redzone_sz = self.stackrz_sz
                     instruction = "add ${0}, %rsp".format(redzone_sz)
-                    args = dict(clob1="%rbx",
-                                pbase="{0}(%rsp)".format(redzone_sz))
+                    args = dict(
+                        clob1="%rbx", pbase="{0}(%rsp)".format(redzone_sz))
 
                     unpoisoni = self.unpoison_stack(redzone_sz, args)
                     unpoisoni = unpoisoni + "\n" + instruction
@@ -248,6 +341,46 @@ class Instrument():
 
     def do_instrument(self):
         self.instrument_globals()
-        self.instrument_stack()
-        #self.instrument_mem_accesses()
-        #self.instrument_init_array()
+        #self.instrument_stack()
+        self.instrument_mem_accesses()
+        self.instrument_init_array()
+
+
+class GlobalMetaData():
+    ENT_SZ = 48
+
+    def __init__(self, location, sz, sz_with_rz, name, mod_name,
+                 has_dynamic_init):
+        self.location = location
+        self.sz = sz
+        self.sz_with_rz = sz_with_rz
+        self.name = name
+        self.mod_name = mod_name
+        self.has_dynamic_init = has_dynamic_init
+
+        self.pad_up = 0
+        self.pad_down = 0
+
+    def __str__(self):
+        results = [
+            ".quad {}".format(self.location),
+            ".quad {}".format(self.sz),
+            ".quad {}".format(self.sz_with_rz),
+            ".quad {}".format(self.name),
+            ".quad {}".format(self.mod_name),
+            ".quad {}".format(self.has_dynamic_init),
+        ]
+
+        return "\n".join(results)
+
+    def to_instrumented(self):
+        results = [
+            ".quad {}".format(self.location),
+            ".quad {}".format(self.sz),
+            ".quad {}".format(self.sz_with_rz),
+            ".quad {}".format(self.name),
+            ".quad {}".format(self.mod_name),
+            ".quad {}".format(self.has_dynamic_init),
+        ]
+
+        return list(map(lambda x: DataCell.instrumented(x, 8), results))

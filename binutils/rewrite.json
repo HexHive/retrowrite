@@ -1,0 +1,274 @@
+[
+    {
+        "uuid": "b1ed186521dc25562ab0b00bcb8a30eff26554acb1e44f242113de87",
+        "arch": "x64",
+        "path": "/home/binary-store/binary_corpus_reloc/b1ed186521dc25562ab0b00bcb8a30eff26554acb1e44f242113de87",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "compiler_version": "4.8.5",
+        "name": "ar",
+        "version": "2.29",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "checksum": "f0c098510cda42c579cd75161f1ff8e512c1eedf96544978bc0ceb9bfd43df3f"
+    },
+    {
+        "name": "addr2line",
+        "arch": "x64",
+        "path": "/home/binary-store/binary_corpus_reloc/b68d41f1c6aa0d1ef9bef515e8ce5fd2fd843c015e809ee481344cf6",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "checksum": "ed380e377fb9da7d33f6bbc9025b1b849b4b06582c5da55e373518829a414a8c",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "uuid": "b68d41f1c6aa0d1ef9bef515e8ce5fd2fd843c015e809ee481344cf6"
+    },
+    {
+        "uuid": "8a25596f344bd5a7d871f22adff5bfaa16fb1276e5ab266f11c44c14",
+        "name": "ld.bfd",
+        "path": "/home/binary-store/binary_corpus_reloc/8a25596f344bd5a7d871f22adff5bfaa16fb1276e5ab266f11c44c14",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "arch": "x64",
+        "compiler_version": "4.8.5",
+        "version": "2.29",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "checksum": "6944a71c9331b243e473e345b63fe372bc618dfa1afe555611fca2df50a0a7a0"
+    },
+    {
+        "arch": "x64",
+        "uuid": "9f1c9a616cb32d7c46404738bd8ea3bde84390af87d8201395716a9b",
+        "path": "/home/binary-store/binary_corpus_reloc/9f1c9a616cb32d7c46404738bd8ea3bde84390af87d8201395716a9b",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "nm",
+        "checksum": "4b509ab4ea893b2962b38f10cef5aef922450393e3e3a4cb0906959d7d10ef8b",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "uuid": "90e61013d904ba40748815fdaf6e3ea9b4ac91f1b0bc2244faa853ea",
+        "path": "/home/binary-store/binary_corpus_reloc/90e61013d904ba40748815fdaf6e3ea9b4ac91f1b0bc2244faa853ea",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "gprof",
+        "checksum": "eda589f7fb37d0c3c33d14832e81299ed3e1231b290ba1166ffb90562f90fd43",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "uuid": "eb71aa8228cfe5a6e169171a884b6ef5d8ca64aa81671ceff1ae2c17",
+        "path": "/home/binary-store/binary_corpus_reloc/eb71aa8228cfe5a6e169171a884b6ef5d8ca64aa81671ceff1ae2c17",
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "readelf",
+        "checksum": "bc6407c4dbdf67a4cf1e7e912de99ceffd09f5431617bf4b70ca0ef731a846d8",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "uuid": "05f5c9a11a81a487226767454412e5b14a57bd3391c459a9158f933a",
+        "path": "/home/binary-store/binary_corpus_reloc/05f5c9a11a81a487226767454412e5b14a57bd3391c459a9158f933a",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "c++filt",
+        "checksum": "ad4fb87ef52fdb7b600085dc4ed5c6a2ac89843724009e7410ceadd3e62186a4",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "uuid": "44fbf8c3d229d5e5f87f58b71f036d73e6b4f09a72727afd1a048a52",
+        "arch": "x64",
+        "path": "/home/binary-store/binary_corpus_reloc/44fbf8c3d229d5e5f87f58b71f036d73e6b4f09a72727afd1a048a52",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "ld",
+        "checksum": "6944a71c9331b243e473e345b63fe372bc618dfa1afe555611fca2df50a0a7a0",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "uuid": "eb99636c19fd234f2c11e861872a8331e9c38d7c284bd61db1cb0985",
+        "name": "ranlib",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "arch": "x64",
+        "compiler_version": "4.8.5",
+        "checksum": "2d52602dfba6f8d2d9640ab809d8ee33e7e1ed1b6eed5bb80c37737a694d8f90",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "path": "/home/binary-store/binary_corpus_reloc/eb99636c19fd234f2c11e861872a8331e9c38d7c284bd61db1cb0985"
+    },
+    {
+        "uuid": "d0d161c31a341c585e9862283a17de9300b368ca56b987adf16f1b30",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "path": "/home/binary-store/binary_corpus_reloc/d0d161c31a341c585e9862283a17de9300b368ca56b987adf16f1b30",
+        "version": "2.29",
+        "arch": "x64",
+        "compiler_version": "4.8.5",
+        "name": "objdump",
+        "checksum": "820efc624828221887ce9a3cca1c2e0a21c876f2d3932af096fe9726945fe8d0",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "name": "size",
+        "path": "/home/binary-store/binary_corpus_reloc/3ba8bfba218f1b06b67c324717f67d26a33c6598a916b483bfe490ab",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "compiler_version": "4.8.5",
+        "version": "2.29",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "uuid": "3ba8bfba218f1b06b67c324717f67d26a33c6598a916b483bfe490ab",
+        "checksum": "78bb8975b27b08aea7e5d47ed903085988adc25b6740aebe01fa82de55584c7d"
+    },
+    {
+        "uuid": "5de8fbb7795d13ac5df735b7f6242e8c9e1298a2bfc2a4d4aa58d78d",
+        "name": "as",
+        "path": "/home/binary-store/binary_corpus_reloc/5de8fbb7795d13ac5df735b7f6242e8c9e1298a2bfc2a4d4aa58d78d",
+        "version": "2.29",
+        "arch": "x64",
+        "compiler_version": "4.8.5",
+        "checksum": "91b4d0c7e192aa9c75852db2261fa1ddadd9834edd776aa9f8b5b22d1e0a97e2",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "compiler": "gcc",
+        "compiler_opts": "-O2-fpie"
+    },
+    {
+        "uuid": "0ae8dd18d2f942662a5cf797378bd0f7fb4ba6818b6957a38f37325d",
+        "name": "strip",
+        "path": "/home/binary-store/binary_corpus_reloc/0ae8dd18d2f942662a5cf797378bd0f7fb4ba6818b6957a38f37325d",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "arch": "x64",
+        "compiler_version": "4.8.5",
+        "checksum": "e2537f9a2b6a1f2c6d5034cc0e6052888a9ddc0df962dd702fbad55d269a1fb7",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "version": "2.29"
+    },
+    {
+        "arch": "x64",
+        "uuid": "187ac08894085a3839578eb4f2f4a8aff56291f3f515e064099e9106",
+        "path": "/home/binary-store/binary_corpus_reloc/187ac08894085a3839578eb4f2f4a8aff56291f3f515e064099e9106",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "elfedit",
+        "checksum": "39d83ee25924d9ffe8a92aac04b73dfbc879248f1111fa9d1cce75de9d435b7e",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "name": "strings",
+        "path": "/home/binary-store/binary_corpus_reloc/dbd28353a61547c99cbaf95f645c13d349d5caab6a6850a9bfbb72b9",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "uuid": "dbd28353a61547c99cbaf95f645c13d349d5caab6a6850a9bfbb72b9",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc",
+        "checksum": "5543ae371473e66b9cd176631b6492d81b53868865066acf74f26e4dc52ce19e"
+    },
+    {
+        "uuid": "9750bf0bf49cfb6744d8c8be06fe623332fa3d2783a8499525054f05",
+        "arch": "x64",
+        "path": "/home/binary-store/binary_corpus_reloc/9750bf0bf49cfb6744d8c8be06fe623332fa3d2783a8499525054f05",
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "submit.sh",
+        "checksum": "2cd0a16e3ae1e2e0b1b90c3bc39677678a9570c65faed63709861e3abfc717a3",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    },
+    {
+        "arch": "x64",
+        "uuid": "4b87ae7609338e499196998e1c9eb4c3e9d8eb44222f1e4dade453bc",
+        "path": "/home/binary-store/binary_corpus_reloc/4b87ae7609338e499196998e1c9eb4c3e9d8eb44222f1e4dade453bc",
+        "tags": [
+            "binutils",
+            "c",
+            "pie"
+        ],
+        "version": "2.29",
+        "compiler_version": "4.8.5",
+        "name": "objcopy",
+        "checksum": "b5c0d4acae7a497f38d2ea3f6f48c57ba43c12e60a97e6b3ef4075c32e800505",
+        "compiler_opts": "-O2-fpie",
+        "compiler": "gcc"
+    }
+]
