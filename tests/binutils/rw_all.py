@@ -25,7 +25,9 @@ if __name__ == "__main__":
 
     argp.add_argument("test_file", type=str, help="JSON file containing tests")
     argp.add_argument(
-        "--targets", type=str, help="Only test build target, comma separated string of names")
+        "--targets",
+        type=str,
+        help="Only test build target, comma separated string of names")
 
     args = argp.parse_args()
 

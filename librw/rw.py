@@ -117,8 +117,10 @@ class Symbolizer():
                     # These are probably calls?
                     continue
 
-                if (rel['type'] in [ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
-                                    ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]]):
+                if (rel['type'] in [
+                        ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
+                        ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]
+                ]):
 
                     value = mem_access.disp
                     ripbase = inst.address + inst.sz

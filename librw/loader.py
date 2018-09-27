@@ -24,8 +24,8 @@ class Loader():
             section_offset = faddr - base
             bytes = data[section_offset:section_offset + fvalue["sz"]]
 
-            function = Function(
-                fvalue["name"], faddr, fvalue["sz"], bytes, fvalue["bind"])
+            function = Function(fvalue["name"], faddr, fvalue["sz"], bytes,
+                                fvalue["bind"])
             self.container.add_function(function)
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
