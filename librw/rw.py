@@ -1,4 +1,6 @@
 import argparse
+from collections import defaultdict
+
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
 from capstone.x86_const import X86_REG_RIP
 
@@ -23,7 +25,7 @@ class Rewriter():
         "__gmon_start",
         "frame_dummy",
         "__do_global_ctors_aux",
-        "atexit",
+        #"atexit",
         "__register_frame_info",
         "deregister_tm_clones",
         "register_tm_clones",
@@ -77,6 +79,7 @@ class Rewriter():
 class Symbolizer():
     def __init__(self):
         self.bases = set()
+        self.pot_sw_bases = defaultdict(set)
         self.symbolized = set()
 
     # TODO: Use named symbols instead of generic labels when possible.
@@ -104,7 +107,7 @@ class Symbolizer():
                     # Figure out which argument needs to be
                     # converted to a symbol.
                     if suffix:
-                        suffix = "@GOTPCREL"
+                        suffix = "@PLT"
                     mem_access, _ = inst.get_mem_access_op()
                     if not mem_access:
                         continue
@@ -128,6 +131,7 @@ class Symbolizer():
                         hex(value), ".LC%x" % (ripbase + value))
                     if ".rodata" in rel["name"]:
                         self.bases.add(ripbase + value)
+                        self.pot_sw_bases[fn.start].add(ripbase + value)
                 else:
                     print("[*] Possible incorrect handling of relocation!")
                     value = mem_access.disp
@@ -139,6 +143,7 @@ class Symbolizer():
         self.symbolize_cf_transfer(container, context)
         # Symbolize remaining memory accesses
         self.symbolize_mem_accesses(container, context)
+        self.symbolize_switch_tables(container, context)
 
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
@@ -153,6 +158,90 @@ class Symbolizer():
                     if container.is_in_section(".text", target):
                         function.bbstarts.add(target)
                         instruction.op_str = ".L%x" % (target)
+                    elif target in container.plt:
+                        instruction.op_str = "{}@PLT".format(
+                            container.plt[target])
+                    else:
+                        gotent = container.is_target_gotplt(target)
+                        if gotent:
+                            found = False
+                            for relocation in container.relocations[".dyn"]:
+                                if gotent == relocation['offset']:
+                                    instruction.op_str = "{}@PLT".format(
+                                        relocation['name'])
+                                    found = True
+                                    break
+                            if not found:
+                                print("[x] Missed GOT entry!")
+                        else:
+                            print("[x] Missed call target: %x" % (target))
+
+    def symbolize_switch_tables(self, container, context):
+        rodata = container.sections.get(".rodata", None)
+        if not rodata:
+            return
+
+        all_bases = set([x for _, y in self.pot_sw_bases.items() for x in y])
+
+        for faddr, swbases in self.pot_sw_bases.items():
+            fn = container.functions[faddr]
+            for swbase in sorted(swbases, reverse=True):
+                value = rodata.read_at(swbase, 4)
+                if not value:
+                   continue
+
+                value = (value + swbase) & 0xffffffff
+                if not fn.is_valid_instruction(value):
+                    continue
+
+                # We have a valid switch base now.
+                swlbl = ".LC%x-.LC%x" % (value, swbase)
+                rodata.replace(swbase, 4, swlbl)
+
+                # Symbolize as long as we can
+                for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
+                    if any([x in all_bases for x in range(slot, slot + 4)]):
+                        break
+
+                    value = rodata.read_at(slot, 4)
+                    if not value:
+                        break
+
+                    value = (value + swbase) & 0xFFFFFFFF
+                    if not fn.is_valid_instruction(value):
+                        break
+
+                    swlbl = ".LC%x-.LC%x" % (value, swbase)
+                    rodata.replace(slot, 4, swlbl)
+
+    def _adjust_target(self, container, target):
+        # Find the nearest section
+        sec = None
+        for sname, sval in sorted(container.sections.items(), key=lambda x:
+                                  x[1].base):
+            if sval.base >= target:
+                break
+            sec = sval
+
+        assert sec is not None
+
+        end = sec.base  # + sec.sz - 1
+        adjust = target - end
+
+        assert adjust > 0
+
+        return end, adjust
+
+    def _is_target_in_region(self, container, target):
+        for sec, sval in container.sections.items():
+            if sval.base <= target < sval.base + sval.sz:
+                return True
+
+        for fn, fval in container.functions.items():
+            if fval.start <= target < fval.start + fval.sz:
+                return True
+
+        return False
 
     def symbolize_mem_accesses(self, container, context):
         for _, function in container.functions.items():
@@ -170,29 +259,87 @@ class Symbolizer():
                 if base == X86_REG_RIP:
                     value = mem_access.disp
                     ripbase = inst.address + inst.sz
-                    inst.op_str = inst.op_str.replace(
-                        hex(value), ".LC%x" % (ripbase + value))
+                    target = ripbase + value
+
+                    is_an_import = False
+
+                    for relocation in container.relocations[".dyn"]:
+                        if relocation['st_value'] == target:
+                            is_an_import = relocation['name']
+                            sfx = ""
+                            break
+                        elif target in container.plt:
+                            is_an_import = container.plt[target]
+                            sfx = "@PLT"
+                            break
+                        elif relocation['offset'] == target:
+                            is_an_import = relocation['name']
+                            sfx = "@GOTPCREL"
+                            break
+
+                    if is_an_import:
+                        inst.op_str = inst.op_str.replace(
+                            hex(value), "%s%s" % (is_an_import, sfx))
+                    else:
+                        # Check if target is contained within a known region
+                        in_region = self._is_target_in_region(container, target)
+                        if in_region:
+                            inst.op_str = inst.op_str.replace(
+                                hex(value),
+                                ".LC%x" % (target))
+                        else:
+                            target, adjust = self._adjust_target(container, target)
+                            inst.op_str = inst.op_str.replace(
+                                hex(value),
+                                "%d+.LC%x" % (adjust, target))
+                            print("[*] Adjusted: %x -- %d+.LC%x" %
+                                  (inst.address, adjust, target))
+
+                    if container.is_in_section(".rodata", target):
+                        self.pot_sw_bases[function.start].add(target)
+
+    def _handle_relocation(self, container, section, rel):
+        reloc_type = rel['type']
+        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
+            swbase = None
+            for base in sorted(self.bases):
+                if base > rel['offset']:
+                    break
+                swbase = base
+            value = rel['st_value'] + rel['addend'] - (
+                rel['offset'] - swbase)
+            swlbl = ".LC%x-.LC%x" % (value, swbase)
+            section.replace(rel['offset'], 4, swlbl)
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
+            value = rel['st_value'] + rel['addend']
+            label = ".LC%x" % value
+            section.replace(rel['offset'], 8, label)
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
+            value = rel['addend']
+            label = ".LC%x" % value
+            section.replace(rel['offset'], 8, label)
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
+            # NOP
+            pass
+        else:
+            print(
+                "[*] Unhandled relocation {}".format(
+                    describe_reloc_type(reloc_type, container.loader.elffile)))
 
     def symbolize_data_sections(self, container, context=None):
+        # Section specific relocation
         for secname, section in container.sections.items():
             for rel in section.relocations:
-                reloc_type = rel['type']
-                if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
-                    swbase = None
-                    for base in sorted(self.bases):
-                        if base > rel['offset']:
-                            break
-                        swbase = base
-                    value = rel['st_value'] + rel['addend'] - (
-                        rel['offset'] - swbase)
-                    swlbl = ".LC%x-.LC%x" % (value, swbase)
-                    section.replace(rel['offset'], 4, swlbl)
-                elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
-                    value = rel['st_value'] + rel['addend']
-                    label = ".LC%x" % value
-                    section.replace(rel['offset'], 8, label)
-                else:
-                    print("[*] Unhandled relocation {}".format(reloc_type))
+                self._handle_relocation(container, section, rel)
+
+        # .dyn relocations
+        dyn = container.relocations[".dyn"]
+        for rel in dyn:
+            section = container.section_of_address(rel['offset'])
+            if section:
+                self._handle_relocation(container, section, rel)
+            else:
+                print("[x] Couldn't find valid section {:x}".format(rel['offset']))
 
 
 if __name__ == "__main__":

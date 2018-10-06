@@ -8,6 +8,7 @@ from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
 
 from .container import Container, Function, DataSection
+from .disasm import disasm_bytes
 
 
 class Loader():
@@ -32,19 +33,49 @@ class Loader():
         for sec in [sec for sec in seclist if section_filter(sec)]:
             sval = seclist[sec]
             section = self.elffile.get_section_by_name(sec)
-            bytes = section.data()
+            data = section.data()
+            more = bytearray()
+            if sec == ".init_array":
+                if len(data) > 8:
+                    data = data[8:]
+                else:
+                    data = b''
+                more.extend(data)
+            else:
+                more.extend(data)
+                if len(more) < sval['sz']:
+                    more.extend([0x0 for _ in range(0, sval['sz'] - len(more))])
+
+            bytes = more
             ds = DataSection(sec, sval["base"], sval["sz"], bytes,
                              sval['align'])
+
             self.container.add_section(ds)
+
+        # Find if there is a plt section
+        for sec in seclist:
+            if sec == '.plt':
+                self.container.plt_base = seclist[sec]['base']
+            if sec == ".plt.got":
+                section = self.elffile.get_section_by_name(sec)
+                data = section.data()
+                entries = list(disasm_bytes(section.data(), seclist[sec]['base']))
+                self.container.gotplt_base = seclist[sec]['base']
+                self.container.gotplt_sz = seclist[sec]['sz']
+                self.container.gotplt_entries = entries
 
     def load_relocations(self, relocs):
         for reloc_section, relocations in relocs.items():
             section = reloc_section[5:]
 
+            if reloc_section == ".rela.plt":
+                self.container.add_plt_information(relocations)
+
             if section in self.container.sections:
                 self.container.sections[section].add_relocations(relocations)
             else:
-                print("[*] Relocations for a section that's not loaded!")
+                print("[*] Relocations for a section that's not loaded:",
+                      reloc_section)
                 self.container.add_relocations(section, relocations)
 
     def reloc_list_from_symtab(self):
@@ -57,15 +88,19 @@ class Loader():
             symtable = self.elffile.get_section(section['sh_link'])
 
             for rel in section.iter_relocations():
-                if rel['r_info_sym'] == 0:
-                    continue
+                symbol = None
+                if rel['r_info_sym'] != 0:
+                    symbol = symtable.get_symbol(rel['r_info_sym'])
 
-                symbol = symtable.get_symbol(rel['r_info_sym'])
-                if symbol['st_name'] == 0:
-                    symsec = self.elffile.get_section(symbol['st_shndx'])
-                    symbol_name = symsec.name
+                if symbol:
+                    if symbol['st_name'] == 0:
+                        symsec = self.elffile.get_section(symbol['st_shndx'])
+                        symbol_name = symsec.name
+                    else:
+                        symbol_name = symbol.name
                 else:
-                    symbol_name = symbol.name
+                    symbol = dict(st_value=None)
+                    symbol_name = None
 
                 reloc_i = {
                     'name': symbol_name,
@@ -115,6 +150,7 @@ class Loader():
             sections[section.name] = {
                 'base': section['sh_addr'],
                 'sz': section['sh_size'],
+                'offset': section['sh_offset'],
                 'align': section['sh_addralign'],
             }
 
@@ -175,7 +211,7 @@ if __name__ == "__main__":
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
 
-    print(flist)
+    #print(flist)
 
     slist = loader.slist_from_symtab()
     loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
@@ -186,9 +222,13 @@ if __name__ == "__main__":
     global_list = loader.global_data_list_from_symtab()
     loader.load_globals_from_glist(global_list)
 
-    for addr, function in loader.container.functions.items():
-        print(hex(addr), function.name)
+    #print(hex(loader.container.plt_base))
+    #for ent, v in loader.container.plt.items():
+        #print(hex(ent), v)
 
-    for addr, datas in loader.container.globals.items():
-        for data in datas:
-            print(hex(addr), data["name"], hex(data["sz"]))
+    #for addr, function in loader.container.functions.items():
+    #print(hex(addr), function.name)
+
+    #for addr, datas in loader.container.globals.items():
+    #for data in datas:
+    #print(hex(addr), data["name"], hex(data["sz"]))

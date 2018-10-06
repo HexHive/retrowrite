@@ -1,7 +1,7 @@
 from collections import defaultdict
 import struct
 
-from capstone import CS_OP_IMM, CS_OP_MEM
+from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP
 
 from . import disasm
 
@@ -28,6 +28,13 @@ class Container():
         self.globals = None
         self.relocations = defaultdict(list)
         self.loader = None
+        # PLT information
+        self.plt_base = None
+        self.plt = dict()
+
+        self.gotplt_base = None
+        self.gotplt_sz = None
+        self.gotplt_entries = list()
 
     def add_function(self, function):
         if function.name in self.function_names:
@@ -59,6 +66,20 @@ class Container():
                                                 gobj['sz'])
                 done.add(gobj['name'])
 
+    def is_target_gotplt(self, target):
+        assert self.gotplt_base and self.gotplt_sz
+
+        if not (self.gotplt_base <= target < self.gotplt_base + self.gotplt_sz):
+            return False
+
+        for ent in self.gotplt_entries:
+            if ent.address == target:
+                if (CS_GRP_JUMP in ent.groups and
+                        ent.operands[0].type == CS_OP_MEM):
+                    return ent.operands[0].mem.disp + ent.address + ent.size
+
+        return False
+
     def attach_loader(self, loader):
         self.loader = loader
 
@@ -75,11 +96,23 @@ class Container():
     def add_relocations(self, section_name, relocations):
         self.relocations[section_name].extend(relocations)
 
+    def section_of_address(self, addr):
+        for _, section in self.sections.items():
+            if section.base <= addr < section.base + section.sz:
+                return section
+        # XXX: This does not check for .text section
+        return None
+
     def function_of_address(self, addr):
         for _, function in self.functions.items():
             if function.start <= addr < function.start + function.sz:
                 return function
         return None
+
+    def add_plt_information(self, relocinfo):
+        plt_base = self.plt_base
+        for idx, relocation in enumerate(relocinfo, 1):
+            self.plt[plt_base + idx * 16] = relocation['name']
 
     def reloc(self, target):
         assert self.loader, "No loader found!"
@@ -103,6 +136,15 @@ class Function():
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
             #if not decoded.mnemonic.startswith("nop"):
             self.cache.append(InstructionWrapper(decoded))
+
+    def is_valid_instruction(self, address):
+        assert self.cache, "Function not disassembled!"
+
+        for instruction in self.cache:
+            if instruction.address == address:
+                return True
+
+        return False
 
     def instruction_of_address(self, address):
         assert self.cache, "Function not disassembled!"
@@ -200,6 +242,12 @@ class DataSection():
 
     def read_at(self, address, sz):
         cacheoff = address - self.base
+        if any([
+                not isinstance(x.value, int)
+                for x in self.cache[cacheoff:cacheoff + sz]
+        ]):
+            return None
+
         value = struct.unpack(
             "<I",
             bytes([x.value for x in self.cache[cacheoff:cacheoff + sz]]))[0]
@@ -208,6 +256,11 @@ class DataSection():
 
     def replace(self, address, sz, value):
         cacheoff = address - self.base
+
+        if cacheoff >= len(self.cache):
+            print("[x] Could not replace value in {}".format(self.name))
+            return
+
         self.cache[cacheoff].value = value
         self.cache[cacheoff].sz = sz
 
@@ -223,11 +276,9 @@ class DataSection():
             location = location + cell.sz
 
     def __str__(self):
-        assert self.cache, "Section not loaded!"
-
-        # XXX: HACK!
-        if self.name == ".init_array":
-            self.cache = self.cache[1:]
+        #assert self.cache, "Section not loaded!"
+        if not self.cache:
+            return ""
 
         results = []
         results.append(".align {}".format(self.align))
