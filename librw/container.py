@@ -69,13 +69,14 @@ class Container():
     def is_target_gotplt(self, target):
         assert self.gotplt_base and self.gotplt_sz
 
-        if not (self.gotplt_base <= target < self.gotplt_base + self.gotplt_sz):
+        if not (self.gotplt_base <= target <
+                self.gotplt_base + self.gotplt_sz):
             return False
 
         for ent in self.gotplt_entries:
             if ent.address == target:
-                if (CS_GRP_JUMP in ent.groups and
-                        ent.operands[0].type == CS_OP_MEM):
+                if (CS_GRP_JUMP in ent.groups
+                        and ent.operands[0].type == CS_OP_MEM):
                     return ent.operands[0].mem.disp + ent.address + ent.size
 
         return False
@@ -276,13 +277,12 @@ class DataSection():
             location = location + cell.sz
 
     def __str__(self):
-        #assert self.cache, "Section not loaded!"
         if not self.cache:
             return ""
 
         results = []
-        results.append(".align {}".format(self.align))
         results.append(".section {}".format(self.name))
+        results.append(".align {}".format(self.align))
         location = self.base
 
         valid_cells = False

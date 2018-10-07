@@ -44,7 +44,8 @@ class Loader():
             else:
                 more.extend(data)
                 if len(more) < sval['sz']:
-                    more.extend([0x0 for _ in range(0, sval['sz'] - len(more))])
+                    more.extend(
+                        [0x0 for _ in range(0, sval['sz'] - len(more))])
 
             bytes = more
             ds = DataSection(sec, sval["base"], sval["sz"], bytes,
@@ -59,7 +60,8 @@ class Loader():
             if sec == ".plt.got":
                 section = self.elffile.get_section_by_name(sec)
                 data = section.data()
-                entries = list(disasm_bytes(section.data(), seclist[sec]['base']))
+                entries = list(
+                    disasm_bytes(section.data(), seclist[sec]['base']))
                 self.container.gotplt_base = seclist[sec]['base']
                 self.container.gotplt_sz = seclist[sec]['sz']
                 self.container.gotplt_entries = entries
@@ -224,7 +226,7 @@ if __name__ == "__main__":
 
     #print(hex(loader.container.plt_base))
     #for ent, v in loader.container.plt.items():
-        #print(hex(ent), v)
+    #print(hex(ent), v)
 
     #for addr, function in loader.container.functions.items():
     #print(hex(addr), function.name)

@@ -188,7 +188,7 @@ class Symbolizer():
             for swbase in sorted(swbases, reverse=True):
                 value = rodata.read_at(swbase, 4)
                 if not value:
-                   continue
+                    continue
 
                 value = (value + swbase) & 0xffffffff
                 if not fn.is_valid_instruction(value):
@@ -217,8 +217,8 @@ class Symbolizer():
     def _adjust_target(self, container, target):
         # Find the nearest section
         sec = None
-        for sname, sval in sorted(container.sections.items(), key=lambda x:
-                                  x[1].base):
+        for sname, sval in sorted(
+                container.sections.items(), key=lambda x: x[1].base):
             if sval.base >= target:
                 break
             sec = sval
@@ -282,16 +282,16 @@ class Symbolizer():
                             hex(value), "%s%s" % (is_an_import, sfx))
                     else:
                         # Check if target is contained within a known region
-                        in_region = self._is_target_in_region(container, target)
+                        in_region = self._is_target_in_region(
+                            container, target)
                         if in_region:
                             inst.op_str = inst.op_str.replace(
-                                hex(value),
-                                ".LC%x" % (target))
+                                hex(value), ".LC%x" % (target))
                         else:
-                            target, adjust = self._adjust_target(container, target)
+                            target, adjust = self._adjust_target(
+                                container, target)
                             inst.op_str = inst.op_str.replace(
-                                hex(value),
-                                "%d+.LC%x" % (adjust, target))
+                                hex(value), "%d+.LC%x" % (adjust, target))
                             print("[*] Adjusted: %x -- %d+.LC%x" %
                                   (inst.address, adjust, target))
 
@@ -306,8 +306,7 @@ class Symbolizer():
                 if base > rel['offset']:
                     break
                 swbase = base
-            value = rel['st_value'] + rel['addend'] - (
-                rel['offset'] - swbase)
+            value = rel['st_value'] + rel['addend'] - (rel['offset'] - swbase)
             swlbl = ".LC%x-.LC%x" % (value, swbase)
             section.replace(rel['offset'], 4, swlbl)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
@@ -322,9 +321,8 @@ class Symbolizer():
             # NOP
             pass
         else:
-            print(
-                "[*] Unhandled relocation {}".format(
-                    describe_reloc_type(reloc_type, container.loader.elffile)))
+            print("[*] Unhandled relocation {}".format(
+                describe_reloc_type(reloc_type, container.loader.elffile)))
 
     def symbolize_data_sections(self, container, context=None):
         # Section specific relocation
@@ -339,7 +337,8 @@ class Symbolizer():
             if section:
                 self._handle_relocation(container, section, rel)
             else:
-                print("[x] Couldn't find valid section {:x}".format(rel['offset']))
+                print("[x] Couldn't find valid section {:x}".format(
+                    rel['offset']))
 
 
 if __name__ == "__main__":
