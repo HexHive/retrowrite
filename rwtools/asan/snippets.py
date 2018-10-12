@@ -15,10 +15,10 @@ MODULE_INIT = [
     ".Ltmp11:",
     "    callq    {}@PLT".format(ASAN_LIB_INIT),
     #"    callq    %s@PLT" % (ASAN_VERSION_CHECK),
-    "    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
-    "    movl    ${global_count}, %eax",
-    "    movl    %eax, %esi",
-    "    callq    __asan_register_globals@PLT",
+    #"    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
+    #"    movl    ${global_count}, %eax",
+    #"    movl    %eax, %esi",
+    #"    callq    __asan_register_globals@PLT",
     "    popq    %rax",
     "    retq",
 ]
@@ -28,10 +28,10 @@ MODULE_DEINIT = [
     "# BB#0:",
     "    pushq    %rax",
     ".Ltmp12:",
-    "    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
-    "    movl    ${global_count}, %eax",
-    "    movl    %eax, %esi",
-    "    callq    __asan_unregister_globals@PLT",
+    #"    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
+    #"    movl    ${global_count}, %eax",
+    #"    movl    %eax, %esi",
+    #"    callq    __asan_unregister_globals@PLT",
     "    popq    %rax",
     "    retq",
 ]
@@ -55,6 +55,7 @@ MEM_LOAD_SZ = [
 ]
 
 MEM_REG_SAVE = [
+    "\tpushf",
     "\tpushq %(clob1)s",
     "\tpushq %(tgt)s",
 ]
@@ -63,6 +64,7 @@ MEM_REG_RESTORE = [
     "{0}_%(addr)x:".format(ASAN_MEM_EXIT),
     "\tpopq %(tgt)s",
     "\tpopq %(clob1)s",
+    "\tpopf",
 ]
 
 STACK_POISON_BASE = [

@@ -23,9 +23,9 @@ def do_test(tests, filter, asan, outdir):
 
         if asan:
             try:
-                outp = os.path.join(outdir, test["name"] + "_asan.s")
+                outp = os.path.join(outdir, test["name"] + "_asan")
                 subprocess.check_call(
-                    "python -m librw.rw {} {}".format(binp, outp), shell=True)
+                    "python -m rwtools.asan.asantool {} {}".format(binp, outp), shell=True)
             except subprocess.CalledProcessError:
                 print("[x] Failed ASAN: {}".format(test["name"]))
 

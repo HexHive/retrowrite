@@ -103,6 +103,14 @@ class Instrument():
                 if isinstance(instruction, InstrumentedInstruction):
                     continue
 
+                # Do not instrument nops
+                if instruction.mnemonic.startswith("nop"):
+                    continue
+
+                # Do not instrument lea
+                if instruction.mnemonic.startswith("lea"):
+                    continue
+
                 # XXX: THIS IS A TODO.
                 if instruction.mnemonic.startswith("rep stos"):
                     print("[*] Skipping: {}".format(instruction))
@@ -137,6 +145,9 @@ class Instrument():
 
                 if len(instruction.cs.operands) == 1:
                     lexp = instruction.op_str
+                elif len(instruction.cs.operands) > 2:
+                    print("[*] Found op len > 2: %s" % (instruction))
+                    lexp = instruction.op_str.split(",", 2)[1]
                 elif midx == 0:
                     lexp = instruction.op_str.rsplit(",", 1)[0]
                 else:
@@ -340,7 +351,7 @@ class Instrument():
                 fn.cache.insert(idx + code[0], code[1])
 
     def do_instrument(self):
-        self.instrument_globals()
+        #self.instrument_globals()
         #self.instrument_stack()
         self.instrument_mem_accesses()
         self.instrument_init_array()
