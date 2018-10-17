@@ -188,13 +188,12 @@ class Function():
         return "\n".join(results)
 
     def next_of(self, instruction_idx):
-        print(self.cache[instruction_idx], self.nexts[instruction_idx])
         nexts = list()
         for x in self.nexts[instruction_idx]:
             if isinstance(x, str):
                 nexts.append(x)
             else:
-                nexts.append(self.cache[x].address)
+                nexts.append(x)
         return nexts
 
 
