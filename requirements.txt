@@ -1,3 +1,9 @@
-capstone==3.0.5
+archinfo==8.18.10.5
+bitstring==3.1.5
+capstone==4.0.0rc1
+cffi==1.11.5
+future==0.16.0
+pycparser==2.19
 pyelftools==0.25
+pyvex==8.18.10.5
 yapf==0.24.0

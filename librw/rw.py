@@ -146,11 +146,32 @@ class Symbolizer():
         self.symbolize_switch_tables(container, context)
 
     def symbolize_cf_transfer(self, container, context=None):
+        addr_to_idx = dict()
         for _, function in container.functions.items():
-            for instruction in function.cache:
+            for inst_idx, instruction in enumerate(function.cache):
+                addr_to_idx[instruction.address] = inst_idx
+
+        for _, function in container.functions.items():
+            for inst_idx, instruction in enumerate(function.cache):
+
                 if (CS_GRP_JUMP not in instruction.cs.groups
                         and CS_GRP_CALL not in instruction.cs.groups):
+                    # Simple, next is idx + 1
+                    if instruction.mnemonic.startswith('ret'):
+                        function.nexts[inst_idx].append("ret")
+                    else:
+                        function.nexts[inst_idx].append(inst_idx + 1)
                     continue
+
+                if (CS_GRP_JUMP in instruction.cs.groups and
+                        not instruction.mnemonic.startswith("jmp")):
+
+                    if inst_idx + 1 < len(function.cache):
+                        function.nexts[inst_idx].append(inst_idx + 1)
+                    else:
+                        function.nexts[inst_idx].append("undef")
+                elif CS_GRP_CALL in instruction.cs.groups:
+                    function.nexts[inst_idx].append("call")
 
                 if instruction.cs.operands[0].type == CS_OP_IMM:
                     target = instruction.cs.operands[0].imm
@@ -175,6 +196,17 @@ class Symbolizer():
                                 print("[x] Missed GOT entry!")
                         else:
                             print("[x] Missed call target: %x" % (target))
+
+                    if target in addr_to_idx:
+                        idx = addr_to_idx[target]
+                        function.nexts[inst_idx].append(idx)
+                    else:
+                        function.nexts[inst_idx].append("undef")
+
+                elif CS_GRP_CALL in instruction.cs.groups:
+                    function.nexts[inst_idx].append("call")
+                else:
+                    function.nexts[inst_idx].append("undef")
 
     def symbolize_switch_tables(self, container, context):
         rodata = container.sections.get(".rodata", None)
@@ -343,6 +375,7 @@ class Symbolizer():
 
 if __name__ == "__main__":
     from .loader import Loader
+    from .analysis import register
 
     argp = argparse.ArgumentParser()
 
@@ -369,4 +402,13 @@ if __name__ == "__main__":
 
     rw = Rewriter(loader.container, args.outfile)
     rw.symbolize()
-    rw.dump()
+
+    for f, func in loader.container.functions.items():
+        if func.name != "P7AllocTrace":
+            continue
+        ra = register.RegisterAnalysis()
+        ra.analyze_function(func)
+        print("===== FREE REGS:", func.name)
+        for instruction in func.cache:
+            print(instruction, ra.free_regs[instruction.address])
+    #rw.dump()

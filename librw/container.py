@@ -1,7 +1,7 @@
 from collections import defaultdict
 import struct
 
-from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP
+from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
 from . import disasm
 
@@ -130,12 +130,15 @@ class Function():
         self.bbstarts = set()
         self.bind = bind
 
+        # Populated during symbolization.
+        # Invalidated by any instrumentation.
+        self.nexts = defaultdict(list)
+
         self.bbstarts.add(start)
 
     def disasm(self):
         assert not self.cache
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
-            #if not decoded.mnemonic.startswith("nop"):
             self.cache.append(InstructionWrapper(decoded))
 
     def is_valid_instruction(self, address):
@@ -184,6 +187,16 @@ class Function():
 
         return "\n".join(results)
 
+    def next_of(self, instruction_idx):
+        print(self.cache[instruction_idx], self.nexts[instruction_idx])
+        nexts = list()
+        for x in self.nexts[instruction_idx]:
+            if isinstance(x, str):
+                nexts.append(x)
+            else:
+                nexts.append(self.cache[x].address)
+        return nexts
+
 
 class InstructionWrapper():
     def __init__(self, instruction):
@@ -201,6 +214,14 @@ class InstructionWrapper():
             if op.type == CS_OP_MEM:
                 return (op.mem, idx)
         return (None, None)
+
+    def reg_reads(self):
+        regs = self.cs.regs_access()[0]
+        return [self.cs.reg_name(x) for x in regs]
+
+    def reg_writes(self):
+        regs = self.cs.regs_access()[1]
+        return [self.cs.reg_name(x) for x in regs]
 
 
 class InstrumentedInstruction():

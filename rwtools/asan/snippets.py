@@ -37,34 +37,46 @@ MODULE_DEINIT = [
 ]
 
 MEM_LOAD_COMMON = [
-    "\tleaq %(lexp)s, %(clob1)s",
-    "\tmovq %(clob1)s, %(tgt)s",
-    "\tshrq $3, %(tgt)s",
-    "\tmovb 2147450880(%(tgt)s), %(tgt_8)s",
-    "\ttestb %(tgt_8)s, %(tgt_8)s",
-    "\tje {0}_%(addr)x".format(ASAN_MEM_EXIT),
+    "\tleaq {lexp}, {clob1}",
+    "\tmovq {clob1}, {tgt}",
+    "\tshrq $3, {tgt}",
+    "\tmovb 2147450880({tgt}), {tgt_8}",
+    "\ttestb {tgt_8}, {tgt_8}",
+    "\tje {0}_{{addr}}".format(ASAN_MEM_EXIT),
 ]
 
 MEM_LOAD_SZ = [
-    "\tandl $7, %(clob1_32)s",
-    "\taddl $%(acsz_1)d, %(clob1_32)s",
-    "\tmovsbl %(tgt_8)s, %(tgt_32)s",
-    "\tcmpl %(tgt_32)s, %(clob1_32)s",
-    "\tjl {0}_%(addr)x".format(ASAN_MEM_EXIT),
-    "\tcallq __asan_report_load%(acsz)d@PLT",
+    "\tandl $7, {clob1_32}",
+    "\taddl ${acsz_1}, {clob1_32}",
+    "\tmovsbl {tgt_8}, {tgt_32}",
+    "\tcmpl {tgt_32}, {clob1_32}",
+    "\tjl {0}_{{addr}}".format(ASAN_MEM_EXIT),
+    "\tcallq __asan_report_load{acsz}@PLT",
 ]
 
 MEM_REG_SAVE = [
-    "\tpushf",
-    "\tpushq %(clob1)s",
-    "\tpushq %(tgt)s",
+    # Save Regs
+    "\tpushq {clob1}",
+    "\tpushq {tgt}",
+    # Save Flags
+    "\tpushq %rax",
+    "\tlahf",
+    "\tseto %al",
+    "\txchg %ah, %al",
+    "\txchg %rax, 0(%rsp)",
 ]
 
 MEM_REG_RESTORE = [
-    "{0}_%(addr)x:".format(ASAN_MEM_EXIT),
-    "\tpopq %(tgt)s",
-    "\tpopq %(clob1)s",
-    "\tpopf",
+    "{0}_{{addr}}:".format(ASAN_MEM_EXIT),
+    # Restore Flags
+    "\txchg %rax, 0(%rsp)",
+    "\txchg %ah, %al",
+    "\tadd $0x7f, %al",
+    "\tsahf",
+    "\tpopq %rax",
+    # Restore others
+    "\tpopq {tgt}",
+    "\tpopq {clob1}",
 ]
 
 STACK_POISON_BASE = [

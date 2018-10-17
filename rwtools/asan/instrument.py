@@ -67,7 +67,7 @@ class Instrument():
         rest = copy.copy(sp.MEM_REG_RESTORE)
         save = copy.copy(sp.MEM_REG_SAVE)
 
-        ac1[2] = "incl %(clob1_32)s"
+        ac1[2] = "incl {clob1_32}"
 
         return "\n".join(save + common + ac1 + rest)
 
@@ -84,7 +84,7 @@ class Instrument():
         rest = copy.copy(sp.MEM_REG_RESTORE)
         save = copy.copy(sp.MEM_REG_SAVE)
 
-        common[3] = "cmpb $0, 2147450880(%(tgt)s)"
+        common[3] = "cmpb $0, 2147450880({tgt})"
         common[4] = common[5]
         common[5] = sp.MEM_LOAD_SZ[-1]
 
@@ -170,7 +170,7 @@ class Instrument():
 
                 enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
 
-                iinstr = InstrumentedInstruction(instrument % (args),
+                iinstr = InstrumentedInstruction(instrument.format(**args),
                                                  enter_lbl, str(instruction))
 
                 # TODO: Replace original instruction for efficiency
