@@ -1,8 +1,16 @@
 archinfo==8.18.10.5
+atomicwrites==1.2.1
+attrs==18.2.0
 bitstring==3.1.5
 cffi==1.11.5
 future==0.16.0
+more-itertools==4.3.0
+pathlib2==2.3.2
+pluggy==0.8.0
+py==1.7.0
 pycparser==2.19
 pyelftools==0.25
+pytest==3.9.1
 pyvex==8.18.10.5
+six==1.11.0
 yapf==0.24.0
