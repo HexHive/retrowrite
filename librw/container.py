@@ -136,6 +136,9 @@ class Function():
 
         self.bbstarts.add(start)
 
+        # Dict to save function analysis results
+        self.analysis = dict()
+
     def disasm(self):
         assert not self.cache
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
@@ -215,10 +218,16 @@ class InstructionWrapper():
         return (None, None)
 
     def reg_reads(self):
+        # Handle nop
+        if self.mnemonic.startswith("nop"):
+            return []
         regs = self.cs.regs_access()[0]
         return [self.cs.reg_name(x) for x in regs]
 
     def reg_writes(self):
+        # Handle nop
+        if self.mnemonic.startswith("nop"):
+            return []
         regs = self.cs.regs_access()[1]
         return [self.cs.reg_name(x) for x in regs]
 

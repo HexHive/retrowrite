@@ -15,13 +15,13 @@ def do_test(tests, filter, asan, outdir):
 
         print("[!] Running on {}".format(test["name"]))
 
-        try:
-            subprocess.check_call(
-                "python -m librw.rw {} {}".format(binp, outp), shell=True)
-        except subprocess.CalledProcessError:
-            print("[x] Failed: {}".format(test["name"]))
-
-        if asan:
+        if not asan:
+            try:
+                subprocess.check_call(
+                    "python -m librw.rw {} {}".format(binp, outp), shell=True)
+            except subprocess.CalledProcessError:
+                print("[x] Failed: {}".format(test["name"]))
+        else:
             try:
                 outp = os.path.join(outdir, test["name"] + "_asan")
                 subprocess.check_call(

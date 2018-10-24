@@ -1,11 +1,15 @@
 import copy
 import math
 from collections import defaultdict
+import numpy as np
+import json
+
+from archinfo import ArchAMD64
 
 from capstone.x86_const import X86_REG_RSP
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
 
-import rwtools.asan.snippets as sp
+from . import snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 
@@ -21,6 +25,40 @@ class Instrument():
         self.stackrz_sz = stackrz_sz
         self.globalrz_sz = globalrz_sz
         self.global_count = 0
+
+        # Get the register map
+        amd64 = ArchAMD64()
+        self.regmap = defaultdict(lambda: defaultdict(dict))
+        for reg in amd64.register_list:
+            if reg.general_purpose:
+                for subr in reg.subregisters:
+                    base = subr[1]
+                    sz = subr[2] * 8
+                    self.regmap[reg.name][base][sz] = subr[0]
+                if reg.name in [
+                        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]:
+                    self.regmap[reg.name][0][32] = reg.name + "d"
+                    self.regmap[reg.name][0][16] = reg.name + "w"
+                    self.regmap[reg.name][0][8] = reg.name + "b"
+                if reg.name == "rbp":
+                    self.regmap[reg.name][0][32] = "ebp"
+                    self.regmap[reg.name][0][16] = "bp"
+                    self.regmap[reg.name][0][8] = "bpl"
+
+        # Some stats
+        self.memcheck_sites = defaultdict(list)
+
+    def _get_subreg32(self, regname):
+        return self.regmap[regname][0][32]
+
+    def _get_subreg8l(self, regname):
+        return self.regmap[regname][0][8]
+
+    def _get_subreg8h(self, regname):
+        return self.regmap[regname][1][8]
+
+    def _get_subreg16(self, regname):
+        return self.regmap[regname][0][16]
 
     def instrument_init_array(self):
         section = self.rewriter.container.sections[".init_array"]
@@ -54,49 +92,183 @@ class Instrument():
     def _access1(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
-        rest = copy.copy(sp.MEM_REG_RESTORE)
-        save = copy.copy(sp.MEM_REG_SAVE)
 
         del ac1[2]
 
-        return "\n".join(save + common + ac1 + rest)
+        return "\n".join(common + ac1)
 
     def _access2(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
-        rest = copy.copy(sp.MEM_REG_RESTORE)
-        save = copy.copy(sp.MEM_REG_SAVE)
 
-        ac1[2] = "incl {clob1_32}"
+        ac1[2] = "\tincl {clob1_32}"
 
-        return "\n".join(save + common + ac1 + rest)
+        return "\n".join(common + ac1)
 
     def _access4(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
-        rest = copy.copy(sp.MEM_REG_RESTORE)
-        save = copy.copy(sp.MEM_REG_SAVE)
 
-        return "\n".join(save + common + ac1 + rest)
+        return "\n".join(common + ac1)
 
     def _access8(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
-        rest = copy.copy(sp.MEM_REG_RESTORE)
-        save = copy.copy(sp.MEM_REG_SAVE)
 
-        common[3] = "cmpb $0, 2147450880({tgt})"
+        common[3] = "\tcmpb $0, 2147450880({tgt})"
         common[4] = common[5]
         common[5] = sp.MEM_LOAD_SZ[-1]
 
         # rest = [rest[0], rest[1]]
         # save = [save[0]]
 
-        return "\n".join(save + common + rest)
+        return "\n".join(common)
 
     def _access16(self):
         raise NotImplementedError
 
+    def get_mem_instrumentation(self, acsz, instruction, midx, free):
+        affinity = ["rdi", "rsi", "rcx", "rdx", "rbx", "r8", "r9", "r10",
+                    "r11", "r12", "r13", "r14", "r15", "rax", "rbp"]
+
+        free = sorted(
+            list(free),
+            key=lambda x: affinity.index(x) if x in affinity else len(affinity))
+
+        codecache = list()
+        save = list()
+        restore = list()
+        save_rflags = "unopt"
+        save_rax = True
+        r1 = [True, "%rdi"]
+        r2 = [True, "%rsi"]
+
+        if "rflags" in free:
+            save_rflags = False
+            free.remove("rflags")
+
+        if "rax" in free:
+            save_rax = False
+
+        if len(free) > 0:
+            r2 = [False, "%{}".format(free[0])]
+            if len(free) > 1:
+                r1 = [False, "%{}".format(free[1])]
+
+            if save_rflags:
+                save_rflags = "opt"
+                save_rax = "rax" not in free
+
+        if r1[0]:
+            save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r1[1]))
+            restore.append(copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r1[1]))
+
+        if r2[0]:
+            save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r2[1]))
+            restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r2[1]))
+
+        if save_rflags == "unopt":
+            save.append(copy.copy(sp.MEM_FLAG_SAVE)[0])
+            restore.insert(0, copy.copy(sp.MEM_FLAG_RESTORE)[0])
+        elif save_rflags == "opt":
+            if save_rax:
+                save.append(copy.copy(
+                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
+                                                           dst=r1[1]))
+                save.extend(copy.copy(
+                    sp.MEM_FLAG_SAVE_OPT))
+
+                save.append(copy.copy(
+                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
+                                                           src=r1[1]))
+
+                restore.insert(0, copy.copy(
+                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
+                                                           src=r1[1]))
+
+                restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
+
+                restore.insert(0, copy.copy(
+                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
+                                                           dst=r1[1]))
+            else:
+                save.extend(copy.copy(
+                    sp.MEM_FLAG_SAVE_OPT))
+                restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
+
+        if acsz == 1:
+            memcheck = self._access1()
+        elif acsz == 2:
+            memcheck = self._access2()
+        elif acsz == 4:
+            memcheck = self._access4()
+        elif acsz == 8:
+            memcheck = self._access8()
+        else:
+            assert False, "Reached unreachable code!"
+
+        codecache.extend(save)
+        codecache.append(memcheck)
+        codecache.append(
+            copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
+        codecache.extend(restore)
+
+        # XXX: Bug in capstone?
+        if any([
+            instruction.mnemonic.startswith(x) for x in
+            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
+        ]):
+            midx = 1
+
+        if len(instruction.cs.operands) == 1:
+            lexp = instruction.op_str
+        elif len(instruction.cs.operands) > 2:
+            print("[*] Found op len > 2: %s" % (instruction))
+            lexp = instruction.op_str.split(",", 2)[1]
+        elif midx == 0:
+            lexp = instruction.op_str.rsplit(",", 1)[0]
+        else:
+            lexp = instruction.op_str.split(",", 1)[1]
+
+        if lexp.startswith("*"):
+            lexp = lexp[1:]
+
+        args = dict()
+        args["lexp"] = lexp
+        args["acsz"] = acsz
+        args["acsz_1"] = acsz - 1
+
+        args["clob1"] = r1[1]
+        args["clob1_32"] = "%{}".format(self._get_subreg32(r1[1][1:]))
+
+        args["tgt"] = r2[1]
+        args["tgt_32"] = "%{}".format(self._get_subreg32(r2[1][1:]))
+        args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
+
+        args["addr"] = instruction.address
+        enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
+
+        codecache = '\n'.join(codecache)
+
+        comment = "{}: {}".format(str(instruction), str(free))
+        return InstrumentedInstruction(codecache.format(**args),
+                                       enter_lbl, comment)
+
     def instrument_mem_accesses(self):
+        #included = set()
+        #excluded = set()
+        #excluded_new = set()
+        #debug_data = None
+
+        #with open("debug/incl") as fd:
+            #debug_data = json.load(fd)
+            #for key in debug_data:
+                #if key == "included":
+                    #included.update(debug_data[key])
+                #else:
+                    #excluded.update(debug_data[key])
+
+        #print("[*] Excluded: {}".format(len(excluded)))
+
         for _, fn in self.rewriter.container.functions.items():
             inserts = list()
             for idx, instruction in enumerate(fn.cache):
@@ -111,6 +283,9 @@ class Instrument():
                 if instruction.mnemonic.startswith("lea"):
                     continue
 
+                #if instruction.address in excluded:
+                    #continue
+
                 # XXX: THIS IS A TODO.
                 if instruction.mnemonic.startswith("rep stos"):
                     print("[*] Skipping: {}".format(instruction))
@@ -120,64 +295,41 @@ class Instrument():
                 # This is not a memory access
                 if not mem:
                     continue
+
                 acsz = instruction.cs.operands[midx].size
-                if acsz == 1:
-                    instrument = self._access1()
-                elif acsz == 2:
-                    instrument = self._access2()
-                elif acsz == 4:
-                    instrument = self._access4()
-                elif acsz == 8:
-                    instrument = self._access8()
-                else:
+
+                if acsz not in [1, 2, 4, 8]:
                     print("[*] Maybe missed an access: %s -- %d" %
                           (instruction, acsz))
                     continue
 
-                args = dict()
+                #if included and instruction.address not in included:
+                    #continue
 
-                # XXX: Bug in capstone?
-                if any([
-                        instruction.mnemonic.startswith(x) for x in
-                    ["sar", "shl", "shl", "stos", "shr", "rep stos"]
-                ]):
-                    midx = 1
+                #rand_skip = np.random.randint(2, size=1)
+                #if rand_skip == 1:
+                    #excluded_new.add(instruction.address)
+                    #continue
 
-                if len(instruction.cs.operands) == 1:
-                    lexp = instruction.op_str
-                elif len(instruction.cs.operands) > 2:
-                    print("[*] Found op len > 2: %s" % (instruction))
-                    lexp = instruction.op_str.split(",", 2)[1]
-                elif midx == 0:
-                    lexp = instruction.op_str.rsplit(",", 1)[0]
-                else:
-                    lexp = instruction.op_str.split(",", 1)[1]
+                free_registers = fn.analysis['free_registers'][idx]
 
-                if lexp.startswith("*"):
-                    lexp = lexp[1:]
+                iinstr = self.get_mem_instrumentation(
+                    acsz, instruction, midx, free_registers)
 
-                args["lexp"] = lexp
-                args["acsz"] = acsz
-                args["acsz_1"] = acsz - 1
-                # TODO: Can we be more intelligent and not hardcode?
-                args["clob1"] = "%rdi"
-                args["clob1_32"] = "%edi"
-                # args["clob2"] = "%rdx"
-                args["tgt"] = "%rax"
-                args["tgt_8"] = "%al"
-                args["tgt_32"] = "%eax"
-                args["addr"] = instruction.address
-
-                enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
-
-                iinstr = InstrumentedInstruction(instrument.format(**args),
-                                                 enter_lbl, str(instruction))
+                # Save some stats
+                self.memcheck_sites[fn.start].append(idx)
 
                 # TODO: Replace original instruction for efficiency
                 inserts.append((idx, iinstr))
 
             for idx, code in enumerate(inserts):
                 fn.cache.insert(idx + code[0], code[1])
+
+        #print("[-] Excluded: {}".format(len(excluded_new)))
+        #with open("debug/incl", "w") as fd:
+            #key = len(debug_data)
+            #debug_data[key] = list(excluded_new)
+            #json.dump(debug_data, fd, indent=4)
 
     def instrument_globals(self):
         gmap = list()
@@ -355,6 +507,45 @@ class Instrument():
         #self.instrument_stack()
         self.instrument_mem_accesses()
         self.instrument_init_array()
+
+    def dump_stats(self):
+        count = 0
+        free_reg_sz = list()
+        free_reg_cnt = defaultdict(lambda: 0)
+        rflags_stats = [0, 0, 0, 0]
+
+        for addr, sites in self.memcheck_sites.items():
+            count += len(sites)
+            fn = self.rewriter.container.functions[addr]
+            for site in sites:
+                regs = fn.analysis['free_registers'][site]
+
+                if "rflags" in regs:
+                    free_reg_sz.append(len(regs) - 1)
+                else:
+                    free_reg_sz.append(len(regs))
+
+                for reg in regs:
+                    free_reg_cnt[reg] += 1
+
+                if "rflags" in regs:
+                    rflags_stats[0] += 1
+                elif len(regs) == 0:
+                    rflags_stats[1] += 1
+                elif "rax" in regs:
+                    rflags_stats[2] += 1
+                elif len(regs) > 0:
+                    rflags_stats[3] += 1
+
+        rflags_stats[0] = count - rflags_stats[0]
+
+        print("[*] Instrumented: {} locations".format(count))
+        print(np.bincount(free_reg_sz))
+        print(json.dumps(free_reg_cnt))
+        print(
+            "rflags live: {}, rflags + 0 regs: {}, rflags + rax: {},".format(
+                rflags_stats[0], rflags_stats[1], rflags_stats[2]),
+            "rflags + >= 1 reg: {}".format(rflags_stats[3]))
 
 
 class GlobalMetaData():

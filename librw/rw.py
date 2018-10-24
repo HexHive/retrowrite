@@ -401,10 +401,10 @@ if __name__ == "__main__":
     rw = Rewriter(loader.container, args.outfile)
     rw.symbolize()
 
+    register.RegisterAnalysis.analyze(loader.container)
+
     for f, func in loader.container.functions.items():
-        ra = register.RegisterAnalysis()
-        ra.analyze_function(func)
         print("===== FREE REGS:", func.name)
         for idx, instruction in enumerate(func.cache):
-            print(instruction, ra.free_regs[idx])
+            print(instruction, func.analysis['free_registers'][idx])
     #rw.dump()

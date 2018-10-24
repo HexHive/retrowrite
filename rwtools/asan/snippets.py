@@ -56,27 +56,44 @@ MEM_LOAD_SZ = [
 
 MEM_REG_SAVE = [
     # Save Regs
-    "\tpushq {clob1}",
-    "\tpushq {tgt}",
+    "\tpushq {reg}",
+]
+
+MEM_REG_REG_SAVE_RESTORE = [
+    "\tmov {src}, {dst}",
+]
+
+MEM_FLAG_SAVE = [
+    "\tpushf",
+]
+
+MEM_FLAG_SAVE_OPT = [
     # Save Flags
-    "\tpushq %rax",
     "\tlahf",
     "\tseto %al",
     "\txchg %ah, %al",
-    "\txchg %rax, 0(%rsp)",
+    "\tpushq %rax",
 ]
 
-MEM_REG_RESTORE = [
-    "{0}_{{addr}}:".format(ASAN_MEM_EXIT),
+MEM_FLAG_RESTORE = [
+    "\tpopf",
+]
+
+MEM_FLAG_RESTORE_OPT = [
     # Restore Flags
-    "\txchg %rax, 0(%rsp)",
+    "\tpopq %rax",
     "\txchg %ah, %al",
     "\tadd $0x7f, %al",
     "\tsahf",
-    "\tpopq %rax",
-    # Restore others
-    "\tpopq {tgt}",
-    "\tpopq {clob1}",
+]
+
+MEM_EXIT_LABEL = [
+    "{0}_{{addr}}:".format(ASAN_MEM_EXIT),
+]
+
+MEM_REG_RESTORE = [
+    # Restore Regs
+    "\tpopq {reg}",
 ]
 
 STACK_POISON_BASE = [

@@ -1,7 +1,11 @@
 import argparse
 
+#import numpy as np
+import json
+
 from librw.loader import Loader
 from librw.rw import Rewriter
+from librw.analysis.register import RegisterAnalysis
 
 from .instrument import Instrument
 
@@ -25,6 +29,35 @@ def do_symbolization(input, outfile):
 
     rw = Rewriter(loader.container, outfile + ".s")
     rw.symbolize()
+
+    try:
+        with open(outfile + ".analysis_cache") as fd:
+            analysis = json.load(fd)
+
+        print("[*] Loading analysis cache")
+        for func, info in analysis.items():
+            for key, finfo in info.items():
+                loader.container.functions[int(func)].analysis[key] = dict()
+                for k, v in finfo.items():
+                    try:
+                        addr = int(k)
+                    except ValueError:
+                        addr = k
+                    loader.container.functions[int(func)].analysis[key][addr] = v
+    except IOError:
+        print("[*] Analyzing free registers")
+        RegisterAnalysis.analyze(loader.container)
+        analysis = dict()
+
+        for addr, func in loader.container.functions.items():
+            analysis[addr] = dict()
+            for key, info in func.analysis.items():
+                analysis[addr][key] = dict()
+                for k, v in info.items():
+                    analysis[addr][key][k] = list(v)
+
+        with open(outfile + ".analysis_cache", "w") as fd:
+            json.dump(analysis, fd)
 
     return rw
 
@@ -50,5 +83,6 @@ if __name__ == "__main__":
 
     instrumenter = Instrument(rewriter)
     instrumenter.do_instrument()
+    instrumenter.dump_stats()
 
     rewriter.dump()
