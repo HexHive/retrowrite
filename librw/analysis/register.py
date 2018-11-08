@@ -26,7 +26,7 @@ class RegisterAnalysis(object):
         # clobbered and therefore are 'used'.
         self.used_regs['ret'] = set([
             "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
-            "rax", "rdx"])
+            "rax", "rdx", "r10", "r11"])
         self.used_regs['call'] = set([
             "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
             "rdi", "rsi", "rdx", "rcx", "r8", "r9"])
@@ -123,7 +123,6 @@ class RegisterAnalysis(object):
             ra.analyze_function(function)
             function.analysis[RegisterAnalysis.KEY] = ra.free_regs
 
-    # TODO: Assert that the function is already symbolized.
     def analyze_function(self, function):
         change = True
         iter = 0
@@ -134,7 +133,6 @@ class RegisterAnalysis(object):
             iter += 1
         self.finalize()
 
-    # Possible opt: intersect only in the end
     def analyze_instruction(self, function, instruction_idx):
         current_instruction = function.cache[instruction_idx]
         nexts = function.next_of(instruction_idx)

@@ -154,14 +154,18 @@ class Symbolizer():
             for inst_idx, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
+                
 
                 if not (is_jmp or is_call):
                     # Simple, next is idx + 1
                     if instruction.mnemonic.startswith('ret'):
                         function.nexts[inst_idx].append("ret")
+                        instruction.cf_leaves_fn = True
                     else:
                         function.nexts[inst_idx].append(inst_idx + 1)
                     continue
+
+                instruction.cf_leaves_fn = False
 
                 if is_jmp and not instruction.mnemonic.startswith("jmp"):
                     if inst_idx + 1 < len(function.cache):
@@ -171,7 +175,13 @@ class Symbolizer():
                         # Out of function bounds, no idea what to do!
                         function.nexts[inst_idx].append("undef")
                 elif is_call:
+                    instruction.cf_leaves_fn = True
                     function.nexts[inst_idx].append("call")
+                    if inst_idx + 1 < len(function.cache):
+                        function.nexts[inst_idx].append(inst_idx + 1)
+                    else:
+                        # Out of function bounds, no idea what to do!
+                        function.nexts[inst_idx].append("undef")
 
                 if instruction.cs.operands[0].type == CS_OP_IMM:
                     target = instruction.cs.operands[0].imm
@@ -202,6 +212,7 @@ class Symbolizer():
                             idx = addr_to_idx[target]
                             function.nexts[inst_idx].append(idx)
                         else:
+                            instruction.cf_leaves_fn = True
                             function.nexts[inst_idx].append("undef")
                 elif is_jmp:
                     function.nexts[inst_idx].append("undef")
@@ -401,10 +412,10 @@ if __name__ == "__main__":
     rw = Rewriter(loader.container, args.outfile)
     rw.symbolize()
 
-    register.RegisterAnalysis.analyze(loader.container)
+    #register.RegisterAnalysis.analyze(loader.container)
 
-    for f, func in loader.container.functions.items():
-        print("===== FREE REGS:", func.name)
-        for idx, instruction in enumerate(func.cache):
-            print(instruction, func.analysis['free_registers'][idx])
-    #rw.dump()
+    #for f, func in loader.container.functions.items():
+        #print("===== FREE REGS:", func.name)
+        #for idx, instruction in enumerate(func.cache):
+            #print(instruction, func.analysis['free_registers'][idx])
+    rw.dump()

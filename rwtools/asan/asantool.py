@@ -1,11 +1,10 @@
 import argparse
-
-#import numpy as np
 import json
 
 from librw.loader import Loader
 from librw.rw import Rewriter
 from librw.analysis.register import RegisterAnalysis
+from librw.analysis.stackframe import StackFrameAnalysis
 
 from .instrument import Instrument
 
@@ -30,6 +29,8 @@ def do_symbolization(input, outfile):
     rw = Rewriter(loader.container, outfile + ".s")
     rw.symbolize()
 
+    StackFrameAnalysis.analyze(loader.container)
+
     try:
         with open(outfile + ".analysis_cache") as fd:
             analysis = json.load(fd)
@@ -51,10 +52,9 @@ def do_symbolization(input, outfile):
 
         for addr, func in loader.container.functions.items():
             analysis[addr] = dict()
-            for key, info in func.analysis.items():
-                analysis[addr][key] = dict()
-                for k, v in info.items():
-                    analysis[addr][key][k] = list(v)
+            analysis[addr]["free_registers"] = dict()
+            for k, info in func.analysis["free_registers"].items():
+                analysis[addr]["free_registers"][k] = list(info)
 
         with open(outfile + ".analysis_cache", "w") as fd:
             json.dump(analysis, fd)
@@ -83,6 +83,6 @@ if __name__ == "__main__":
 
     instrumenter = Instrument(rewriter)
     instrumenter.do_instrument()
-    instrumenter.dump_stats()
+    #instrumenter.dump_stats()
 
     rewriter.dump()

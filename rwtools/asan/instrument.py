@@ -12,6 +12,7 @@ from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
 from . import snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
+from librw.analysis.stackframe import StackFrameAnalysis
 
 ASAN_SHADOW_OFF = 2147450880
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
@@ -20,6 +21,8 @@ ASAN_DEINIT_LOC = 0x2000000000000000
 
 
 class Instrument():
+    CANARY_ANALYSIS_KEY = 'stack_canary_expression'
+
     def __init__(self, rewriter, stackrz_sz=32, globalrz_sz=64):
         self.rewriter = rewriter
         self.stackrz_sz = stackrz_sz
@@ -47,6 +50,10 @@ class Instrument():
 
         # Some stats
         self.memcheck_sites = defaultdict(list)
+
+        # Skip instrumentation: Set of offsets (addresses) to skip memcheck
+        # instrumentation for.
+        self.skip_instrument = set()
 
     def _get_subreg32(self, regname):
         return self.regmap[regname][0][32]
@@ -76,6 +83,7 @@ class Instrument():
         fini.cache.append(destructor)
 
         initfn = Function(sp.ASAN_INIT_FN, ASAN_INIT_LOC, 0, "")
+        initfn.set_instrumented()
         initcode = InstrumentedInstruction(
             '\n'.join(sp.MODULE_INIT).format(global_count=self.global_count),
             None, None)
@@ -83,6 +91,7 @@ class Instrument():
         self.rewriter.container.add_function(initfn)
 
         finifn = Function(sp.ASAN_DEINIT_FN, ASAN_DEINIT_LOC, 0, "")
+        finifn.set_instrumented()
         finicode = InstrumentedInstruction(
             '\n'.join(sp.MODULE_DEINIT).format(global_count=self.global_count),
             None, None)
@@ -93,7 +102,7 @@ class Instrument():
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        del ac1[2]
+        del ac1[1]
 
         return "\n".join(common + ac1)
 
@@ -126,7 +135,7 @@ class Instrument():
     def _access16(self):
         raise NotImplementedError
 
-    def get_mem_instrumentation(self, acsz, instruction, midx, free):
+    def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf):
         affinity = ["rdi", "rsi", "rcx", "rdx", "rbx", "r8", "r9", "r10",
                     "r11", "r12", "r13", "r14", "r15", "rax", "rbp"]
 
@@ -154,13 +163,20 @@ class Instrument():
             if len(free) > 1:
                 r1 = [False, "%{}".format(free[1])]
 
+            if r2[1] == r1[1]:
+                r1 = [True, "%rsi"]
+
             if save_rflags:
                 save_rflags = "opt"
                 save_rax = "rax" not in free
 
+        if is_leaf and (r1[0] or r2[0] or save_rflags):
+            save.append(sp.LEAF_STACK_ADJUST)
+            restore.append(sp.LEAF_STACK_UNADJUST)
+
         if r1[0]:
             save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r1[1]))
-            restore.append(copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r1[1]))
+            restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r1[1]))
 
         if r2[0]:
             save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r2[1]))
@@ -173,23 +189,23 @@ class Instrument():
             if save_rax:
                 save.append(copy.copy(
                     sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
-                                                           dst=r1[1]))
+                                                           dst=r2[1]))
                 save.extend(copy.copy(
                     sp.MEM_FLAG_SAVE_OPT))
 
                 save.append(copy.copy(
                     sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
-                                                           src=r1[1]))
+                                                           src=r2[1]))
 
                 restore.insert(0, copy.copy(
                     sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
-                                                           src=r1[1]))
+                                                           src=r2[1]))
 
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
                 restore.insert(0, copy.copy(
                     sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
-                                                           dst=r1[1]))
+                                                           dst=r2[1]))
             else:
                 save.extend(copy.copy(
                     sp.MEM_FLAG_SAVE_OPT))
@@ -223,7 +239,8 @@ class Instrument():
             lexp = instruction.op_str
         elif len(instruction.cs.operands) > 2:
             print("[*] Found op len > 2: %s" % (instruction))
-            lexp = instruction.op_str.split(",", 2)[1]
+            op1 = instruction.op_str.split(",", 1)[1]
+            lexp = op1.rsplit(",", 1)[0]
         elif midx == 0:
             lexp = instruction.op_str.rsplit(",", 1)[0]
         else:
@@ -254,37 +271,23 @@ class Instrument():
                                        enter_lbl, comment)
 
     def instrument_mem_accesses(self):
-        #included = set()
-        #excluded = set()
-        #excluded_new = set()
-        #debug_data = None
-
-        #with open("debug/incl") as fd:
-            #debug_data = json.load(fd)
-            #for key in debug_data:
-                #if key == "included":
-                    #included.update(debug_data[key])
-                #else:
-                    #excluded.update(debug_data[key])
-
-        #print("[*] Excluded: {}".format(len(excluded)))
-
         for _, fn in self.rewriter.container.functions.items():
-            inserts = list()
+            is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):
+                # Do not instrument instrumented instructions
                 if isinstance(instruction, InstrumentedInstruction):
                     continue
-
                 # Do not instrument nops
                 if instruction.mnemonic.startswith("nop"):
                     continue
-
                 # Do not instrument lea
                 if instruction.mnemonic.startswith("lea"):
                     continue
-
-                #if instruction.address in excluded:
-                    #continue
+                if instruction.address in self.skip_instrument:
+                    continue
+                # Do not instrument stack canaries
+                if instruction.op_str.startswith(sp.CANARY_CHECK):
+                    continue
 
                 # XXX: THIS IS A TODO.
                 if instruction.mnemonic.startswith("rep stos"):
@@ -303,33 +306,18 @@ class Instrument():
                           (instruction, acsz))
                     continue
 
-                #if included and instruction.address not in included:
-                    #continue
-
-                #rand_skip = np.random.randint(2, size=1)
-                #if rand_skip == 1:
-                    #excluded_new.add(instruction.address)
-                    #continue
-
-                free_registers = fn.analysis['free_registers'][idx]
+                if idx in fn.analysis['free_registers']:
+                    free_registers = fn.analysis['free_registers'][idx]
+                else:
+                    print("[x] Missing free reglist in cache. Regenerate!")
+                    free_registers = list()
 
                 iinstr = self.get_mem_instrumentation(
-                    acsz, instruction, midx, free_registers)
+                    acsz, instruction, midx, free_registers, is_leaf)
 
                 # Save some stats
                 self.memcheck_sites[fn.start].append(idx)
-
-                # TODO: Replace original instruction for efficiency
-                inserts.append((idx, iinstr))
-
-            for idx, code in enumerate(inserts):
-                fn.cache.insert(idx + code[0], code[1])
-
-        #print("[-] Excluded: {}".format(len(excluded_new)))
-        #with open("debug/incl", "w") as fd:
-            #key = len(debug_data)
-            #debug_data[key] = list(excluded_new)
-            #json.dump(debug_data, fd, indent=4)
+                instruction.instrument_before(iinstr)
 
     def instrument_globals(self):
         gmap = list()
@@ -343,12 +331,9 @@ class Instrument():
                 if location in sec.named_globals:
                     self.global_count += 1
                     gobj = sec.named_globals[location][0]
-                    #print("[*] Instrumenting: %s" % (gobj))
                     asan_global_meta = self.new_global_metadata(gobj)
                     gmap.append(asan_global_meta)
                     # Need to add padding.
-                    # Redzone above the global
-                    appends[location].append(asan_global_meta.pad_up)
                     # Redzone below the global
                     appends[location + gobj["sz"]].append(
                         asan_global_meta.pad_down)
@@ -357,7 +342,6 @@ class Instrument():
 
             location = sec.base
             oldcache = copy.copy(sec.cache)
-            icount = 0
 
             for idx, cell in enumerate(oldcache):
                 if cell.is_instrumented or cell.ignored:
@@ -366,15 +350,12 @@ class Instrument():
                     for pad in appends[location]:
                         instrumented = DataCell.instrumented(
                             ".zero {}".format(pad), pad)
-                        sec.cache.insert(idx + icount, instrumented)
-                        icount += 1
+                        cell.instrument_after(instrumented)
                 location += cell.sz
 
         ds = DataSection(".data.asan", ASAN_GLOBAL_DS_BASE, 0, None)
         ds.cache.append(
             DataCell.instrumented("{}:".format(sp.ASAN_GLOBAL_DS), 0))
-        #ds.add_global(ASAN_GLOBAL_DS_BASE,
-        #self.global_count * GlobalMetaData.ENT_SZ)
         for meta in gmap:
             ds.cache.extend(meta.to_instrumented())
         self.rewriter.container.add_section(ds)
@@ -395,36 +376,73 @@ class Instrument():
                               has_dynamic_init)
 
         diff = sz_with_rz - sz
-        if diff % 2 > 0:
-            meta.pad_up += 1
-        meta.pad_up += int(diff / 2)
-        meta.pad_down += int(diff / 2)
+        meta.pad_up = 0
+        meta.pad_down = diff
 
         return meta
 
-    def poison_stack(self, poison_extent, args):
-        assert poison_extent % 32 == 0
-        instrumentation = copy.copy(sp.STACK_POISON_BASE)
+    def poison_stack(self, args, need_save):
+        instrumentation = list()
 
-        for idx in range(0, int(poison_extent / 32)):
-            args["off"] = ASAN_SHADOW_OFF + idx
+        # Save the register we're about to clobber
+        if need_save:
             instrumentation.append(
-                copy.copy(sp.STACK_POISON_SLOT).format(**args))
+                copy.copy(sp.MEM_REG_SAVE)[0])
 
-        instrumentation.append("popq {clob1}")
-        return "\n".join(instrumentation).format(**args)
+        # Add instrumentation to poison
+        instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
 
-    def unpoison_stack(self, poison_extent, args):
-        assert poison_extent % 32 == 0
-        instrumentation = copy.copy(sp.STACK_POISON_BASE)
+        args["off"] = ASAN_SHADOW_OFF
+        instrumentation.append(
+            copy.copy(sp.STACK_POISON_SLOT))
 
-        for idx in range(0, int(poison_extent / 32)):
-            args["off"] = ASAN_SHADOW_OFF + idx
+        # Restore clobbered register
+        if need_save:
             instrumentation.append(
-                copy.copy(sp.STACK_UNPOISON_SLOT).format(**args))
+                copy.copy(sp.MEM_REG_RESTORE)[0])
 
-        instrumentation.append("popq {clob1}")
-        return "\n".join(instrumentation).format(**args)
+        code_str = "\n".join(instrumentation).format(**args)
+        return InstrumentedInstruction(
+            code_str, sp.STACK_ENTER_LBL.format(**args), None)
+
+    def unpoison_stack(self, args, need_save):
+        instrumentation = list()
+
+        # Save the register we're about to clobber
+        if need_save:
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_SAVE)[0])
+
+        # Add instrumentation to poison
+        instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
+
+        args["off"] = ASAN_SHADOW_OFF
+        instrumentation.append(
+            copy.copy(sp.STACK_UNPOISON_SLOT))
+
+        # Restore clobbered register
+        if need_save:
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_RESTORE)[0])
+
+        code_str = "\n".join(instrumentation).format(**args)
+        return InstrumentedInstruction(
+            code_str, sp.STACK_EXIT_LBL.format(**args), None)
+
+    def get_free_regs(self, fn, idx):
+        free = copy.copy(fn.analysis['free_registers'][idx])
+        free = list(free)
+        affinity = ["rdi", "rsi", "rcx", "rdx", "rbx", "r8", "r9", "r10",
+                    "r11", "r12", "r13", "r14", "r15", "rax", "rbp"]
+
+        free = sorted(
+            list(free),
+            key=lambda x: affinity.index(x) if x in affinity else len(affinity))
+
+        if "rflags" in free:
+            free.remove("rflags")
+
+        return ["%"+x for x in free]
 
     def instrument_stack(self):
         # Detect stack canary and insert red zones only for functions with
@@ -437,67 +455,85 @@ class Instrument():
             # Check if there is a set to canary in the first 20 instructions.
             for idx, instruction in enumerate(fn.cache[:20]):
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
-                    need_red.append(addr)
+                    need_red.append((addr, idx))
                     break
 
-        for addr in need_red:
+        for addr, cidx in need_red:
             fn = self.rewriter.container.functions[addr]
             print("[*] %s needs redzone stack" % (fn.name))
             is_poisoned = False
             inserts = list()
+
             for idx, instruction in enumerate(fn.cache):
                 if not is_poisoned:
-                    if instruction.mnemonic != "subq":
-                        continue
-                    if instruction.cs.operands[1].reg != X86_REG_RSP:
-                        continue
-                    if instruction.cs.operands[0].type != CS_OP_IMM:
+                    if idx != cidx:
                         continue
 
-                    # Ok, now we have the instruction that sets up the stack
-                    # "sub $<const>, %rsp"
-                    # Instrument our redzone here.
-                    redzone_sz = self.stackrz_sz
-                    instruction = "sub ${0}, %rsp".format(redzone_sz)
+                    # This is now the canary load instruction.
+                    # The next instruction moves the canary into the current
+                    # stack frame, get the address.
+                    nexti = fn.cache[idx + 1]
+                    if nexti.mnemonic != "movq":
+                        continue
+
+                    store_exp = nexti.op_str.split(",", 1)[1].strip()
+                    fn.analysis[Instrument.CANARY_ANALYSIS_KEY] = store_exp
+                    # Do not instrument this instruction as it will cause a
+                    # violation.
+                    self.skip_instrument.add(nexti.address)
+                    # Do not instrument canary load from fs: as well.
+                    self.skip_instrument.add(instruction.address)
+                    # Poison the canary location.
+                    pbase = store_exp
+
+                    free_registers = self.get_free_regs(fn, idx)
+                    need_save = True
+                    clob1 = "%rbx"
+                    if len(free_registers) > 0:
+                        clob1 = free_registers[0]
+                        need_save = False
 
                     args = dict(
-                        clob1="%rbx", pbase="{0}(%rsp)".format(redzone_sz))
+                        reg=clob1, pbase=pbase,
+                        addr=instruction.address)
 
-                    poisoni = self.poison_stack(redzone_sz, args)
-                    poisoni = instruction + "\n" + poisoni
-                    icode = InstrumentedInstruction(poisoni, None, None)
-                    inserts.append((idx, icode))
+                    poisoni = self.poison_stack(args, need_save)
+                    instruction.instrument_before(poisoni)
                     is_poisoned = True
                 else:
-                    # Look for all returns and jmps that exit this function
-                    # and unpoison the stack before them.
-                    # **ASSUMPTION:** At exit, we assume the stack is balanced,
-                    # i.e., rsp has the same value as it did when we entered.
-                    escapes_fn = False
-                    if (CS_GRP_JUMP not in instruction.cs.groups
-                            and CS_GRP_RET not in instruction.cs.groups):
+                    # Look for all reads from the canary and unposion before read.
+                    mem, midx = instruction.get_mem_access_op()
+                    if not mem:
                         continue
-
-                    if CS_GRP_JUMP in instruction.cs.groups:
-                        if instruction.cs.operands[0].type == CS_OP_IMM:
-                            target = instruction.cs.operands[0].type
-                            if not fn.start <= target < fn.start + fn.sz:
-                                escapes_fn = True
-                    else:
-                        escapes_fn = True
-
-                    if not escapes_fn:
+                    # Check if the next instruction is a xor with the canary
+                    nexti = fn.cache[idx + 1]
+                    if nexti.mnemonic != "xorq":
                         continue
+                    # Check if we're xor'ing with the canary
+                    op0 = nexti.op_str.split(",", 1)[0]
+                    if op0 != "%fs:0x28":
+                        continue
+                    # Ok, now we're sure to be loading from the canary, unpoison.
+                    canary_loc = instruction.op_str.split(",", 1)[0]
+                    if fn.analysis[Instrument.CANARY_ANALYSIS_KEY] != canary_loc:
+                        print("[x] Canary read different from canary write loc")
 
-                    redzone_sz = self.stackrz_sz
-                    instruction = "add ${0}, %rsp".format(redzone_sz)
+                    self.skip_instrument.add(instruction.address)
+                    pbase = canary_loc
+
+                    free_registers = self.get_free_regs(fn, idx)
+                    need_save = True
+                    clob1 = "%rbx"
+                    if len(free_registers) > 0:
+                        clob1 = free_registers[0]
+                        need_save = False
+
                     args = dict(
-                        clob1="%rbx", pbase="{0}(%rsp)".format(redzone_sz))
+                        reg=clob1, pbase=pbase,
+                        addr=instruction.address)
 
-                    unpoisoni = self.unpoison_stack(redzone_sz, args)
-                    unpoisoni = unpoisoni + "\n" + instruction
-                    icode = InstrumentedInstruction(unpoisoni, None, None)
-                    inserts.append((idx, icode))
+                    unpoisoni = self.unpoison_stack(args, need_save)
+                    instruction.instrument_before(unpoisoni)
 
             for idx, code in enumerate(inserts):
                 fn.cache.insert(idx + code[0], code[1])
@@ -549,7 +585,7 @@ class Instrument():
 
 
 class GlobalMetaData():
-    ENT_SZ = 48
+    ENT_SZ = 56
 
     def __init__(self, location, sz, sz_with_rz, name, mod_name,
                  has_dynamic_init):
@@ -571,6 +607,7 @@ class GlobalMetaData():
             ".quad {}".format(self.name),
             ".quad {}".format(self.mod_name),
             ".quad {}".format(self.has_dynamic_init),
+            ".quad {}".format(0),
         ]
 
         return "\n".join(results)
@@ -583,6 +620,7 @@ class GlobalMetaData():
             ".quad {}".format(self.name),
             ".quad {}".format(self.mod_name),
             ".quad {}".format(self.has_dynamic_init),
+            ".quad {}".format(0),
         ]
 
         return list(map(lambda x: DataCell.instrumented(x, 8), results))

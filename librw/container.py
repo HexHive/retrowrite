@@ -137,7 +137,13 @@ class Function():
         self.bbstarts.add(start)
 
         # Dict to save function analysis results
-        self.analysis = dict()
+        self.analysis = defaultdict(lambda: None)
+
+        # Is this an instrumented function?
+        self.instrumented = False
+
+    def set_instrumented(self):
+        self.instrumented = True
 
     def disasm(self):
         assert not self.cache
@@ -173,19 +179,29 @@ class Function():
             results.append(".local %s" % (self.name))
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
+
         for instruction in self.cache:
             if isinstance(instruction, InstrumentedInstruction):
+                if not self.instrumented:
+                    print("[x] Old style instrumentation detected:", self.name)
                 results.append("%s" % (instruction))
                 continue
 
             if instruction.address in self.bbstarts:
                 results.append(".L%x:" % (instruction.address))
-                # XXX: This is a hack!
                 results.append(".LC%x:" % (instruction.address))
             else:
                 results.append(".LC%x:" % (instruction.address))
+
+            for iinstr in instruction.before:
+                results.append("{}".format(iinstr))
+
             results.append(
                 "\t%s %s" % (instruction.mnemonic, instruction.op_str))
+
+            for iinstr in instruction.after:
+                results.append("{}".format(iinstr))
+
         results.append(".size %s,.-%s" % (self.name, self.name))
 
         return "\n".join(results)
@@ -207,6 +223,13 @@ class InstructionWrapper():
         self.mnemonic = instruction.mnemonic
         self.op_str = instruction.op_str
         self.sz = instruction.size
+
+        # Instrumentation cache for this instruction
+        self.before = list()
+        self.after = list()
+
+        # CF Leaves function?
+        self.cf_leaves_fn = None
 
     def __str__(self):
         return "%x: %s %s" % (self.address, self.mnemonic, self.op_str)
@@ -230,6 +253,22 @@ class InstructionWrapper():
             return []
         regs = self.cs.regs_access()[1]
         return [self.cs.reg_name(x) for x in regs]
+
+    def instrument_before(self, iinstr, order=None):
+        #assert isinstance(iinstr, InstrumentedInstruction)
+
+        if order:
+            self.before.insert(order, iinstr)
+        else:
+            self.before.append(iinstr)
+
+    def instrument_after(self, iinstr, order=None):
+        #assert isinstance(iinstr, InstrumentedInstruction)
+
+        if order:
+            self.after.insert(order, iinstr)
+        else:
+            self.after.append(iinstr)
 
 
 class InstrumentedInstruction():
@@ -311,9 +350,11 @@ class DataSection():
 
         results = []
         results.append(".section {}".format(self.name))
-        results.append(".align {}".format(self.align))
-        location = self.base
 
+        if self.name != ".fini_array":
+            results.append(".align {}".format(self.align))
+
+        location = self.base
         valid_cells = False
 
         for cell in self.cache:
@@ -334,11 +375,19 @@ class DataSection():
                         gobj["label"], location, location + gobj["sz"])
 
                     results.append(symdef)
+                    #results.append(".align 32")
                     results.append(lblstr)
 
             results.append(".LC%x:" % (location))
             location += cell.sz
+
+            for before in cell.before:
+                results.append("\t%s" % (before))
+
             results.append("\t%s" % (cell))
+
+            for after in cell.after:
+                results.append("\t%s" % (after))
 
         if valid_cells:
             return "\n".join(results)
@@ -352,6 +401,10 @@ class DataCell():
         self.sz = sz
         self.ignored = False
         self.is_instrumented = False
+
+        # Instrumentation
+        self.before = list()
+        self.after = list()
 
     @staticmethod
     def instrumented(value, sz):
@@ -372,3 +425,13 @@ class DataCell():
             return "%s %s" % (SzPfx.pfx(self.sz), self.value)
         else:
             return ""
+
+    def instrument_before(self, idata):
+        assert idata.is_instrumented
+
+        self.before.append(idata)
+
+    def instrument_after(self, idata):
+        assert idata.is_instrumented
+
+        self.after.append(idata)

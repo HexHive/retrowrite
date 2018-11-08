@@ -4,7 +4,7 @@ import subprocess
 import os
 
 
-def do_test(tests, filter, asan, outdir):
+def do_test(tests, filter, asan, ddbg, outdir):
     for test in tests:
         if not filter(test):
             continue
@@ -15,7 +15,14 @@ def do_test(tests, filter, asan, outdir):
 
         print("[!] Running on {}".format(test["name"]))
 
-        if not asan:
+        if ddbg:
+            try:
+                outp = os.path.join(outdir, test["name"] + "_asan")
+                subprocess.check_call(
+                    "python -m debug.ddbg {} {}".format(binp, outp), shell=True)
+            except subprocess.CalledProcessError:
+                print("[x] Failed DDBG ASAN: {}".format(test["name"]))
+        elif not asan:
             try:
                 subprocess.check_call(
                     "python -m librw.rw {} {}".format(binp, outp), shell=True)
@@ -42,6 +49,10 @@ if __name__ == "__main__":
         "--asan",
         action='store_true',
         help="Instrument with asan")
+    argp.add_argument(
+        "--ddbg",
+        action='store_true',
+        help="Do delta debugging")
 
     args = argp.parse_args()
 
@@ -53,4 +64,4 @@ if __name__ == "__main__":
     outdir = os.path.dirname(args.test_file)
 
     with open(args.test_file) as tfd:
-        do_test(json.load(tfd), filter, args.asan, outdir)
+        do_test(json.load(tfd), filter, args.asan, args.ddbg, outdir)

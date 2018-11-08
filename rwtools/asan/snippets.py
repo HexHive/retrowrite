@@ -71,7 +71,7 @@ MEM_FLAG_SAVE_OPT = [
     # Save Flags
     "\tlahf",
     "\tseto %al",
-    "\txchg %ah, %al",
+    #"\txchg %ah, %al",
     "\tpushq %rax",
 ]
 
@@ -82,7 +82,7 @@ MEM_FLAG_RESTORE = [
 MEM_FLAG_RESTORE_OPT = [
     # Restore Flags
     "\tpopq %rax",
-    "\txchg %ah, %al",
+    #"\txchg %ah, %al",
     "\tadd $0x7f, %al",
     "\tsahf",
 ]
@@ -97,12 +97,15 @@ MEM_REG_RESTORE = [
 ]
 
 STACK_POISON_BASE = [
-    "\tpushq {clob1}",
-    "\tleaq {pbase}, {clob1}",
-    "\tshrq $3, {clob1}",
+    "\tleaq {pbase}, {reg}",
+    "\tshrq $3, {reg}",
 ]
 
-STACK_POISON_SLOT = "\tmovl $0xffffffff, {off}({clob1})"
-STACK_UNPOISON_SLOT = "\tmovl $0x0, {off}({clob1})"
+STACK_POISON_SLOT = "\tmovl $0xffffffff, {off}({reg})"
+STACK_UNPOISON_SLOT = "\tmovl $0x0, {off}({reg})"
+STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
+STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
 
 CANARY_CHECK = "%fs:0x28"
+LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
+LEAF_STACK_UNADJUST = "\tleaq 256(%rsp), %rsp"
