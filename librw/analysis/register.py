@@ -26,10 +26,10 @@ class RegisterAnalysis(object):
         # clobbered and therefore are 'used'.
         self.used_regs['ret'] = set([
             "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
-            "rax", "rdx", "r10", "r11"])
+            "rax", "rdx", "r10", "r11", "r8", "r9", "rcx", "rdi", "rsi"])
         self.used_regs['call'] = set([
             "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
-            "rdi", "rsi", "rdx", "rcx", "r8", "r9"])
+            "rdi", "rsi", "rdx", "rcx", "r8", "r9", "rax"])
 
     def _init_reg_pool(self):
         # Possible extension: add xmm registers into the pool

@@ -69,6 +69,7 @@ def do_symbolization(input, outfile):
 def delta_debug(args):
     excluded = set()
     all_locations = set()
+    safe_set = set()
 
     verified = False
     err_locs = set()
@@ -83,7 +84,7 @@ def delta_debug(args):
             all_locations.add(addr.address)
 
     while not verified:
-        instrument_sites = all_locations.difference(excluded)
+        instrument_sites = all_locations.difference(excluded).difference(safe_set)
         while len(instrument_sites) > 1:
             rewriter = do_symbolization(args.binary, args.outfile)
             instrumenter = Instrument(rewriter)
@@ -102,6 +103,8 @@ def delta_debug(args):
             # True case, test case passed. Therefore, something in round_skip is
             # causing the error.
             if result:
+                safe_set = safe_set.union(
+                    all_locations.difference(instrumenter.skip_instrument))
                 excluded = all_locations.difference(round_skip)
             else:
                 # Ok, we failed again, add round skip to excluded to safely exclude
@@ -110,7 +113,7 @@ def delta_debug(args):
             print(len(all_locations), len(instrument_sites),
                   len(excluded), len(round_skip))
 
-            instrument_sites = all_locations.difference(excluded)
+            instrument_sites = all_locations.difference(excluded).difference(safe_set)
 
         print("[*] Localized Error to:", instrument_sites)
 
@@ -150,7 +153,8 @@ def test_function(args):
     except sp.CalledProcessError:
         return False
 
-    err_str = "****************************************"
+    #err_str = "****************************************"
+    err_str = "*** Miscompare of su3imp.out;"
     output = output.decode('utf-8').split("\n")
     print("\n".join(output))
     if any([x.strip().startswith(err_str) for x in output]):

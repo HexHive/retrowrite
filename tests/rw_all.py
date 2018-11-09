@@ -2,9 +2,20 @@ import argparse
 import json
 import subprocess
 import os
+from multiprocessing import Pool
 
 
-def do_test(tests, filter, asan, ddbg, outdir):
+def do_test(cmd):
+    print("[!] Running on {}".format(cmd))
+    try:
+        subprocess.check_call(cmd, shell=True)
+    except subprocess.CalledProcessError:
+        print("[x] Failed {}".format(cmd))
+
+
+def do_tests(tests, filter, args, outdir):
+    assert not (args.ddbg and args.parallel)
+    pool = Pool()
     for test in tests:
         if not filter(test):
             continue
@@ -13,28 +24,22 @@ def do_test(tests, filter, asan, ddbg, outdir):
         binp = os.path.join(path, test["name"])
         outp = os.path.join(outdir, test["name"] + ".s")
 
-        print("[!] Running on {}".format(test["name"]))
-
-        if ddbg:
-            try:
-                outp = os.path.join(outdir, test["name"] + "_asan")
-                subprocess.check_call(
-                    "python -m debug.ddbg {} {}".format(binp, outp), shell=True)
-            except subprocess.CalledProcessError:
-                print("[x] Failed DDBG ASAN: {}".format(test["name"]))
-        elif not asan:
-            try:
-                subprocess.check_call(
-                    "python -m librw.rw {} {}".format(binp, outp), shell=True)
-            except subprocess.CalledProcessError:
-                print("[x] Failed: {}".format(test["name"]))
+        if args.ddbg:
+            outp = os.path.join(outdir, test["name"] + "_asan")
+            cmd = "python -m debug.ddbg {} {}".format(binp, outp)
+        elif args.asan:
+            outp = os.path.join(outdir, test["name"] + "_asan")
+            cmd = "python -m rwtools.asan.asantool {} {}".format(binp, outp)
         else:
-            try:
-                outp = os.path.join(outdir, test["name"] + "_asan")
-                subprocess.check_call(
-                    "python -m rwtools.asan.asantool {} {}".format(binp, outp), shell=True)
-            except subprocess.CalledProcessError:
-                print("[x] Failed ASAN: {}".format(test["name"]))
+            cmd = "python -m librw.rw {} {}".format(binp, outp)
+
+        if args.parallel:
+            pool.apply_async(do_test, args=(cmd, ))
+        else:
+            do_test(cmd)
+
+    pool.close()
+    pool.join()
 
 
 if __name__ == "__main__":
@@ -53,6 +58,10 @@ if __name__ == "__main__":
         "--ddbg",
         action='store_true',
         help="Do delta debugging")
+    argp.add_argument(
+        "--parallel",
+        action='store_true',
+        help="Do multiple tests in parallel")
 
     args = argp.parse_args()
 
@@ -64,4 +73,4 @@ if __name__ == "__main__":
     outdir = os.path.dirname(args.test_file)
 
     with open(args.test_file) as tfd:
-        do_test(json.load(tfd), filter, args.asan, args.ddbg, outdir)
+        do_tests(json.load(tfd), filter, args, outdir)

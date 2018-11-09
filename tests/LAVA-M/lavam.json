@@ -1,0 +1,22 @@
+[
+    {
+        "name": "base64",
+        "path": "/home/number_four/projects/lava_corpus/LAVA-M/built-lavam-pie",
+        "checksum": "0653e25fd9ab9459b22ef592ada76914"
+    },
+    {
+        "name": "md5sum",
+        "path": "/home/number_four/projects/lava_corpus/LAVA-M/built-lavam-pie",
+        "checksum": "631853e4a7adb6ae94ce7906ba7bd8f9"
+    },
+    {
+        "name": "uniq",
+        "path": "/home/number_four/projects/lava_corpus/LAVA-M/built-lavam-pie",
+        "checksum": "932b54a646a8e0c4c6f9861b741faa79"
+    },
+    {
+        "name": "who",
+        "path": "/home/number_four/projects/lava_corpus/LAVA-M/built-lavam-pie",
+        "checksum": "ceac2b1d980ee48762811e5c86a4e2b8"
+    }
+]
