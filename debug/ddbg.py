@@ -153,8 +153,8 @@ def test_function(args):
     except sp.CalledProcessError:
         return False
 
-    #err_str = "****************************************"
-    err_str = "*** Miscompare of su3imp.out;"
+    err_str = "****************************************"
+    #err_str = "*** Miscompare of su3imp.out;"
     output = output.decode('utf-8').split("\n")
     print("\n".join(output))
     if any([x.strip().startswith(err_str) for x in output]):

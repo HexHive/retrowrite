@@ -60,7 +60,7 @@ def plot(csvf):
     csvf = csvf + ".csv"
     df = pandas.read_csv(csvf)
     df = df.set_index("benchmark")
-    ax = df.plot.bar()
+    ax = df.plot.bar(rot=30, figsize=(8, 6))
 
     plot = csvf + ".pdf"
 

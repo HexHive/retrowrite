@@ -101,8 +101,8 @@ STACK_POISON_BASE = [
     "\tshrq $3, {reg}",
 ]
 
-STACK_POISON_SLOT = "\tmovl $0xffffffff, {off}({reg})"
-STACK_UNPOISON_SLOT = "\tmovl $0x0, {off}({reg})"
+STACK_POISON_SLOT = "\tmovb $0xff, {off}({reg})"
+STACK_UNPOISON_SLOT = "\tmovb $0x0, {off}({reg})"
 STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
 STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
 

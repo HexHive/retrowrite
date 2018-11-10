@@ -110,7 +110,7 @@ class Instrument():
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        ac1[2] = "\tincl {clob1_32}"
+        ac1[1] = "\tincl {clob1_32}"
 
         return "\n".join(common + ac1)
 
@@ -150,6 +150,7 @@ class Instrument():
         save_rax = True
         r1 = [True, "%rdi"]
         r2 = [True, "%rsi"]
+        push_cnt = 0
 
         if "rflags" in free:
             save_rflags = False
@@ -173,19 +174,24 @@ class Instrument():
         if is_leaf and (r1[0] or r2[0] or save_rflags):
             save.append(sp.LEAF_STACK_ADJUST)
             restore.append(sp.LEAF_STACK_UNADJUST)
+            push_cnt += 32
 
         if r1[0]:
             save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r1[1]))
             restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r1[1]))
+            push_cnt += 1
 
         if r2[0]:
             save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r2[1]))
             restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r2[1]))
+            push_cnt += 1
 
         if save_rflags == "unopt":
             save.append(copy.copy(sp.MEM_FLAG_SAVE)[0])
             restore.insert(0, copy.copy(sp.MEM_FLAG_RESTORE)[0])
+            push_cnt += 1
         elif save_rflags == "opt":
+            push_cnt += 1
             if save_rax:
                 save.append(copy.copy(
                     sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
@@ -210,6 +216,10 @@ class Instrument():
                 save.extend(copy.copy(
                     sp.MEM_FLAG_SAVE_OPT))
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
+
+        if push_cnt > 0:
+            save.append("leaq {}(%rsp), %rsp".format(push_cnt * 8))
+            restore.insert(0, "leaq -{}(%rsp), %rsp".format(push_cnt * 8))
 
         if acsz == 1:
             memcheck = self._access1()
@@ -430,7 +440,12 @@ class Instrument():
             code_str, sp.STACK_EXIT_LBL.format(**args), None)
 
     def get_free_regs(self, fn, idx):
-        free = copy.copy(fn.analysis['free_registers'][idx])
+
+        if idx in fn.analysis['free_registers']:
+            free = copy.copy(fn.analysis['free_registers'][idx])
+        else:
+            return []
+
         free = list(free)
         affinity = ["rdi", "rsi", "rcx", "rdx", "rbx", "r8", "r9", "r10",
                     "r11", "r12", "r13", "r14", "r15", "rax", "rbp"]
@@ -540,7 +555,7 @@ class Instrument():
 
     def do_instrument(self):
         #self.instrument_globals()
-        #self.instrument_stack()
+        self.instrument_stack()
         self.instrument_mem_accesses()
         self.instrument_init_array()
 
