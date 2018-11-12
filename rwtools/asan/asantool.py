@@ -83,6 +83,7 @@ if __name__ == "__main__":
 
     instrumenter = Instrument(rewriter)
     instrumenter.do_instrument()
-    #instrumenter.dump_stats()
+
+    instrumenter.dump_stats()
 
     rewriter.dump()

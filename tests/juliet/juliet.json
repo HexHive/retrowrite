@@ -1,0 +1,22 @@
+[
+    {
+        "name": "cwe-121-src",
+        "path": "/home/number_four/projects/juliet-src/C/juliet-bins"
+    },
+    {
+        "name": "cwe-122-src",
+        "path": "/home/number_four/projects/juliet-src/C/juliet-bins"
+    },
+    {
+        "name": "cwe-124-src",
+        "path": "/home/number_four/projects/juliet-src/C/juliet-bins"
+    },
+    {
+        "name": "cwe-126-src",
+        "path": "/home/number_four/projects/juliet-src/C/juliet-bins"
+    },
+    {
+        "name": "cwe-127-src",
+        "path": "/home/number_four/projects/juliet-src/C/juliet-bins"
+    }
+]

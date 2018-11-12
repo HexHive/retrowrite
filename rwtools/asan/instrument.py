@@ -569,7 +569,11 @@ class Instrument():
             count += len(sites)
             fn = self.rewriter.container.functions[addr]
             for site in sites:
-                regs = fn.analysis['free_registers'][site]
+
+                if site in fn.analysis['free_registers']:
+                    regs = fn.analysis['free_registers'][site]
+                else:
+                    regs = []
 
                 if "rflags" in regs:
                     free_reg_sz.append(len(regs) - 1)
@@ -591,7 +595,7 @@ class Instrument():
         rflags_stats[0] = count - rflags_stats[0]
 
         print("[*] Instrumented: {} locations".format(count))
-        print(np.bincount(free_reg_sz))
+        print("Stats:", np.bincount(free_reg_sz))
         print(json.dumps(free_reg_cnt))
         print(
             "rflags live: {}, rflags + 0 regs: {}, rflags + rax: {},".format(
