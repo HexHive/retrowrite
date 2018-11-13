@@ -38,7 +38,19 @@ def results_to_csv(results_dir, out):
                       "Timeout Vuln", "Timeout Safe"])
 
     df = df.sort_values('index').set_index('index').rename_axis(None)
-    print(df)
+
+    csvf = out + ".csv"
+    with open(csvf, 'w') as fd:
+        fd.write(df.to_csv())
+
+
+def results_to_latex(out):
+    csvf = out + ".csv"
+    df = pandas.read_csv(csvf)
+    latexf = out + ".tex"
+
+    with open(latexf, 'w') as fd:
+        fd.write(df.to_latex())
 
 
 if __name__ == '__main__':
@@ -49,6 +61,12 @@ if __name__ == '__main__':
 
     argp.add_argument(
         "out", type=str, help="Prefix name for outfile")
-    
+
+    argp.add_argument(
+        "--latex", action='store_true', help="Generate latex tables")
+
     args = argp.parse_args()
     results_to_csv(args.results, args.out)
+
+    if args.latex:
+        results_to_latex(args.out)
