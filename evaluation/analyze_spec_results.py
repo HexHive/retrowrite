@@ -48,24 +48,26 @@ def ascii_pp(csvf):
     print(df)
 
 
-def to_latex(csvf):
-    csvf = csvf + ".csv"
+def to_latex(outf):
+    csvf = outf + ".csv"
     df = pandas.read_csv(csvf)
-    latexf = csvf + ".tex"
+    latexf = outf + ".tex"
     with open(latexf, "w") as fd:
         fd.write(df.to_latex())
 
 
-def plot(csvf):
-    csvf = csvf + ".csv"
+def plot(outf):
+    csvf = outf + ".csv"
     df = pandas.read_csv(csvf)
     df = df.set_index("benchmark")
-    ax = df.plot.bar(rot=30, figsize=(8, 6))
 
-    plot = csvf + ".pdf"
+    ax = df.plot.bar(rot=30, figsize=(8, 6))
+    ax.set_xlabel("Benchmark")
+    ax.set_ylabel("Runtime (s)")
+
+    plot = outf + ".pdf"
 
     fig = ax.get_figure()
-    #plt.plot(ax)
     fig.savefig(plot)
 
 
