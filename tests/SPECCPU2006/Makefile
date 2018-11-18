@@ -22,6 +22,7 @@ $(PREFIX)%: %.s
 
 .PHONY: install
 install:
+	install -m 557 $(PREFIX)perlbench* --target-directory $(INSTALL_DIR)/400.perlbench/exe/
 	install -m 557 $(PREFIX)bzip2* --target-directory $(INSTALL_DIR)/401.bzip2/exe/
 	install -m 557 $(PREFIX)gcc* --target-directory $(INSTALL_DIR)/403.gcc/exe/
 	install -m 557 $(PREFIX)mcf* --target-directory $(INSTALL_DIR)/429.mcf/exe/
@@ -36,6 +37,7 @@ install:
 
 .PHONY: asan_install
 asan_install:
+	-install -m 557 $(ASAN_PREFIX)perlbench* $(INSTALL_DIR)/400.perlbench/exe/perlbench_base.gcc-asan
 	-install -m 557 $(ASAN_PREFIX)bzip2* $(INSTALL_DIR)/401.bzip2/exe/bzip2_base.gcc-asan
 	-install -m 556 $(ASAN_PREFIX)gcc*  $(INSTALL_DIR)/403.gcc/exe/gcc_base.gcc-asan
 	-install -m 557 $(ASAN_PREFIX)mcf*  $(INSTALL_DIR)/429.mcf/exe/mcf_base.gcc-asan

@@ -1,8 +1,13 @@
 import argparse
 import os
 from collections import defaultdict
+import re
+import itertools
 
 import pandas
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
 
 
 def results_to_csv(results_dir, out):
@@ -44,6 +49,34 @@ def results_to_csv(results_dir, out):
         fd.write(df.to_csv())
 
 
+def deep_analyze(results_dir, out):
+    results = defaultdict(set)
+
+    for filename in os.listdir(results_dir):
+        if filename.endswith(".asan.log"):
+            key = "Source ASAN"
+        elif filename.endswith(".binary-asan.log"):
+            key = "Binary ASAN"
+        else:
+            key = "Valgrind Memcheck"
+
+        fullpath = os.path.join(results_dir, filename)
+        with open(fullpath, encoding="ISO-8859-1") as fd:
+            data = fd.read().split("\n")
+
+        for line in data:
+            if "failed" in line and "bad" in line:
+                line = re.split(r'[_\s]', line)
+                results[key].update(line)
+
+    for k1, k2 in itertools.combinations(results.keys(), 2):
+        print(
+            "{} & {}".format(k1, k2),
+            results[k1].intersection(results[k2])
+            )
+
+
+
 def results_to_latex(out):
     csvf = out + ".csv"
     df = pandas.read_csv(csvf)
@@ -67,6 +100,8 @@ if __name__ == '__main__':
 
     args = argp.parse_args()
     results_to_csv(args.results, args.out)
+    deep_analyze(args.results, args.out)
 
     if args.latex:
         results_to_latex(args.out)
+

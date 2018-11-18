@@ -109,3 +109,22 @@ STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
 CANARY_CHECK = "%fs:0x28"
 LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
 LEAF_STACK_UNADJUST = "\tleaq 256(%rsp), %rsp"
+
+LONGJMP_UNPOISON = [
+    "\tpushq %r8",
+    "\tpushq {reg}",
+    "\tleaq 16(%rsp), %rsp",
+    "\tmov 0x30(%rdi), %r8",
+    "\tror $0x11, %r8",
+    "\txor %fs:0x30, %r8",
+    ".ASAN_LONGJMP_{addr}:",
+    "\tmovq %r8, {reg}",
+    "\tshrq $3, {reg}",
+    "\tmovb $0, {off}({reg})",
+    "\tsubq $8, %r8",
+    "\tcmp %r8, %rsp",
+    "\tjne .ASAN_LONGJMP_{addr}",
+    "\tleaq -16(%rsp), %rsp",
+    "\tpopq {reg}",
+    "\tpopq %r8",
+]

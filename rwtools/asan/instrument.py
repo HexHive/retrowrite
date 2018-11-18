@@ -459,6 +459,16 @@ class Instrument():
 
         return ["%"+x for x in free]
 
+    def handle_longjmp(self, instruction):
+        args = dict(
+            reg="%r9",
+            addr=instruction.address,
+            off=ASAN_SHADOW_OFF)
+        unpoison = ("\n".join(copy.copy(sp.LONGJMP_UNPOISON))).format(**args)
+        instrument = InstrumentedInstruction(
+            unpoison, None, None)
+        instruction.instrument_before(instrument)
+
     def instrument_stack(self):
         # Detect stack canary and insert red zones only for functions with
         # stack canaries.
@@ -472,6 +482,12 @@ class Instrument():
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
                     need_red.append((addr, idx))
                     break
+
+        for addr, fn in self.rewriter.container.functions.items():
+            for idx, instruction in enumerate(fn.cache):
+                if instruction.mnemonic.startswith("callq"):
+                    if instruction.op_str.startswith("__longjmp"):
+                        self.handle_longjmp(instruction)
 
         for addr, cidx in need_red:
             fn = self.rewriter.container.functions[addr]
