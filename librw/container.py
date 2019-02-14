@@ -349,7 +349,11 @@ class DataSection():
             return ""
 
         results = []
-        results.append(".section {}".format(self.name))
+        # XXX: THIS IS A HACK (MOSTLY?)
+        if self.name == ".bss":
+            results.append(".section .data")
+        else:
+            results.append(".section {}".format(self.name))
 
         if self.name != ".fini_array":
             results.append(".align {}".format(self.align))
