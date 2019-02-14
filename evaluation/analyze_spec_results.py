@@ -17,6 +17,7 @@ def results_to_csv(inputs, out):
         data = data.split("\n")
         start = False
         key = os.path.basename(fname)
+        key = key.split(".")[0].replace("-", " ").title()
         keys.append(key)
 
         for line in data:
@@ -61,14 +62,31 @@ def plot(outf):
     df = pandas.read_csv(csvf)
     df = df.set_index("benchmark")
 
-    ax = df.plot.bar(rot=30, figsize=(8, 6))
-    ax.set_xlabel("Benchmark")
+    ax = df.plot.bar(rot=30, figsize=(12, 7))
     ax.set_ylabel("Runtime (s)")
 
     plot = outf + ".pdf"
 
     fig = ax.get_figure()
     fig.savefig(plot)
+
+
+def plot_diff(outf):
+    csvf = outf + ".csv"
+    df = pandas.read_csv(csvf)
+    df = df.set_index("benchmark")
+    heads = list(df.columns.values)
+    sidx = heads.index("Source Asan")
+    bidx = heads.index("Binary Asan")
+    vidx = heads.index("Valgrind")
+
+    val = df.values
+    bin_vs_src = 100.0 * ((val[:, bidx] - val[:, sidx]) / val[:, sidx])
+    bin_vs_vgrind = 100.0 * ((val[:, bidx] - val[:, vidx]) / val[:, bidx])
+    print(val)
+    print(heads)
+    print(bin_vs_src)
+    print(bin_vs_vgrind)
 
 
 if __name__ == "__main__":
@@ -98,3 +116,4 @@ if __name__ == "__main__":
         ascii_pp(args.out)
     if args.plot:
         plot(args.out)
+        plot_diff(args.out)

@@ -8,6 +8,8 @@ import pandas
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 def results_to_csv(results_dir, out):
@@ -50,13 +52,17 @@ def results_to_csv(results_dir, out):
 
 
 def deep_analyze(results_dir, out):
+    #plt.rcParams['font.size'] = 1
     results = defaultdict(set)
+    counts = defaultdict(lambda: defaultdict(lambda: 0))
+
+    all_cwes = set()
 
     for filename in os.listdir(results_dir):
         if filename.endswith(".asan.log"):
-            key = "Source ASAN"
+            key = "Source ASan"
         elif filename.endswith(".binary-asan.log"):
-            key = "Binary ASAN"
+            key = "Binary ASan"
         else:
             key = "Valgrind Memcheck"
 
@@ -64,16 +70,123 @@ def deep_analyze(results_dir, out):
         with open(fullpath, encoding="ISO-8859-1") as fd:
             data = fd.read().split("\n")
 
-        for line in data:
-            if "failed" in line and "bad" in line:
-                line = re.split(r'[_\s]', line)
-                results[key].update(line)
+        data = set(data)
 
-    for k1, k2 in itertools.combinations(results.keys(), 2):
-        print(
-            "{} & {}".format(k1, k2),
-            results[k1].intersection(results[k2])
-            )
+        for line in data:
+            if not line.startswith("CWE"):
+                continue
+            if "failed" in line and "bad" in line:
+                cwes = tuple(re.findall(r"(CWE[0-9]+)", line))
+                results[key].add(cwes)
+                counts[key][cwes] += 1
+                all_cwes.update(cwes)
+
+    print(all_cwes)
+
+    xlabels = ["CWE121", "CWE122", "CWE124", "CWE126", "CWE127"]
+    ylabels = list(sorted(all_cwes.difference(xlabels)))
+
+
+    all_cwes = list(sorted(all_cwes))
+    points = defaultdict(lambda: [[], []])
+    annotations = defaultdict(list)
+
+    keyys = {'Source ASan': +0.1, 'Binary ASan': -0.1, 'Valgrind Memcheck': 0}
+    keyxs = {'Source ASan': -0.1, 'Binary ASan': -0.1, 'Valgrind Memcheck': 0.1}
+
+    for key, failed in results.items():
+        for tags in failed:
+            if not tags:
+                continue
+            tag0 = xlabels.index(tags[0])
+            if len(tags) > 1:
+                tag1 = ylabels.index(tags[1]) + 1
+            else:
+                tag1 = 0
+
+            x = tag0 + keyxs[key]
+            y = tag1 + keyys[key]
+
+            #x = 0.20 * np.random.random() + (tag0)
+            #y = 0.20 * np.random.random() + (tag1)
+
+            points[key][0].append(x)
+            points[key][1].append(y)
+            annotations[key].append(counts[key][tags])
+
+    colors = {
+        'Source ASan': '#1b9e77',
+        'Binary ASan': '#d95f02',
+        'Valgrind Memcheck': '#7570b3'}
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    print(annotations)
+
+    plt.scatter(
+        points["Source ASan"][1],
+        points["Source ASan"][0],
+        c=colors["Source ASan"],
+        alpha=1.0,
+        marker="+")
+
+    plt.scatter(
+        points["Binary ASan"][1],
+        points["Binary ASan"][0],
+        c=colors["Binary ASan"],
+        alpha=1.0,
+        marker="x")
+
+    plt.scatter(
+        points["Valgrind Memcheck"][1],
+        points["Valgrind Memcheck"][0],
+        c=colors["Valgrind Memcheck"],
+        alpha=1.0,
+        marker="^")
+
+    plt.plot([], c=colors["Source ASan"], marker="+", label="Source ASan")
+    plt.plot([], c=colors["Binary ASan"], marker="x", label="Binary ASan")
+    plt.plot([], c=colors["Valgrind Memcheck"], marker="^", label="Valgrind Memcheck")
+    plt.legend()
+    
+    for key, values in points.items():
+        for idx in range(len(values[0])):
+            tx = values[1][idx] + keyys[key]
+            ty = values[0][idx] + keyxs[key]
+
+            if keyys[key] < 0:
+                tx -= 0.1
+            else:
+                tx -= 0.04
+
+            if keyxs[key] < 0:
+                ty -= 0.05
+
+            plt.annotate(
+                annotations[key][idx], (values[1][idx], values[0][idx]),
+                xytext=(tx, ty),
+                fontsize=6,
+                color=colors[key])
+
+    xlabels = [x[3:] for x in xlabels]
+    ylabels = [y[3:] for y in ylabels]
+    plt.yticks(range(0, len(xlabels)), xlabels, rotation=0)
+    plt.xticks(range(0, len(ylabels) + 1), [''] + ylabels)
+    plt.ylim(-0.5, len(xlabels))
+    plt.xlim(-1, len(ylabels) + 1.5)
+
+    ax.set_ylabel("Primary CWE-ID")
+    ax.set_xlabel("Secondary CWE-ID")
+
+    plt.tight_layout()
+    plt.savefig(out + "-scatter.pdf")
+
+    #for k1, k2 in itertools.combinations(results.keys(), 2):
+        #print(
+            #"{} & {}".format(k1, k2),
+            #results[k1].intersection(results[k2])
+            #)
 
 
 
@@ -104,4 +217,3 @@ if __name__ == '__main__':
 
     if args.latex:
         results_to_latex(args.out)
-

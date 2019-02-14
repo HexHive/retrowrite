@@ -8,6 +8,14 @@ import json
 import pandas
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats
+
+
+def set_box_color(bp, color):
+    plt.setp(bp['boxes'], color=color)
+    plt.setp(bp['whiskers'], color=color)
+    plt.setp(bp['caps'], color=color)
+    plt.setp(bp['medians'], color=color)
 
 
 def results_to_json(input, out):
@@ -49,9 +57,12 @@ def results_to_csv(input, out):
     with open(jsonf) as fd:
         data = json.load(fd)
 
-    results = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))
-    execs_per_s = defaultdict(lambda: defaultdict(lambda: [[], [], []]))
-    crashes = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))
+    results = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
+    execs_per_s = defaultdict(lambda: defaultdict(lambda: [[], [], [], [], []]))
+    crashes = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
+
+    #box = [[], [], []]
+    bidx = dict(src=0, binary=1, qemu=2)
 
     for kind, values in data.items():
         for bench, infos in values.items():
@@ -61,17 +72,19 @@ def results_to_csv(input, out):
                 crashes[kind][bench][trial] += int(info["unique_crashes"])
                 execs_per_s[kind][bench][trial].append(
                     float(info["execs_per_sec"]))
+
+                #box[bidx[kind]].append(float(info["execs_per_sec"]))
+
         execs_per_s[kind + "-mean"][bench] = 0.0
-        execs_per_s[kind + "-var"][bench] = 0.0
+        #execs_per_s[kind + "-var"][bench] = 0.0
         execs_per_s[kind + "-std"][bench] = 0.0
 
     df = pandas.DataFrame.from_dict(results)
-    print(df)
+    pandas.set_option('display.max_colwidth', -1)
+    #print(df)
 
     for kind, values in execs_per_s.items():
         if kind.endswith("-mean"):
-            continue
-        if kind.endswith("-var"):
             continue
         if kind.endswith("-std"):
             continue
@@ -80,22 +93,87 @@ def results_to_csv(input, out):
                 execs_per_s[kind][bench][idx] = round(sum(exs) / len(exs), 2)
             execs_per_s[kind + "-mean"][bench] = round(
                 np.mean(execs_per_s[kind][bench]), 2)
-            execs_per_s[kind + "-var"][bench] = round(
-                np.var(execs_per_s[kind][bench]), 2)
             execs_per_s[kind + "-std"][bench] = round(
                 np.std(execs_per_s[kind][bench]), 2)
 
     edf = pandas.DataFrame.from_dict(execs_per_s)
-    print(edf)
-    print(edf.to_csv())
+    #print(edf)
+    with open(out + "-execs-table.tex", "w") as fd:
+        fd.write(edf.to_latex())
 
     cdf = pandas.DataFrame.from_dict(crashes)
-    print(cdf)
+    #print(cdf)
+
+    # Make a boxplot
+    box = defaultdict(list)
+    boxx = list()
+    pvalues = {"Binary-AFL v/s Source-AFL": dict(), 
+           "Binary-AFL v/s QEMU": dict()}
+
+    for benchname in execs_per_s["binary"]:
+        bchar = execs_per_s["binary"][benchname]
+        qchar = execs_per_s["qemu"][benchname]
+        schar = execs_per_s["src"][benchname]
+        pvalues["Binary-AFL v/s QEMU"][benchname] = scipy.stats.mannwhitneyu(bchar, qchar)[1]
+        pvalues["Binary-AFL v/s Source-AFL"][benchname] = scipy.stats.mannwhitneyu(bchar, schar)[1]
+
+    manndf = pandas.DataFrame.from_dict(pvalues)
+    print(manndf)
+
+    with open(out + '-mann-whitney.tex', 'w') as fd:
+        fd.write(manndf.to_latex())
+
+    for kind, benchmarks in execs_per_s.items():
+        if kind.endswith("-mean"):
+            continue
+        if kind.endswith("-std"):
+            continue
+
+        for benchname in sorted(benchmarks):
+            if benchname not in boxx:
+                boxx.append(benchname)
+            box[kind].append(benchmarks[benchname])
+
+    print(box)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    src = plt.boxplot(
+        box['src'],
+        positions=np.array(range(len(box['src'])))*3.0-0.7, sym='',
+        widths=0.6)
+
+    binary = plt.boxplot(
+        box['binary'],
+        positions=np.array(range(len(box['binary'])))*3.0, sym='',
+        widths=0.6)
+
+    qemu = plt.boxplot(
+        box['qemu'],
+        positions=np.array(range(len(box['qemu'])))*3.0+0.7, sym='',
+        widths=0.6)
+
+    set_box_color(src, "#e41a1c")
+    set_box_color(binary, "#377eb8")
+    set_box_color(qemu, "#4daf4a")
+
+    plt.plot([], c="#e41a1c", label="Source-AFL")
+    plt.plot([], c="#377eb8", label="Binary-AFL")
+    plt.plot([], c="#4daf4a", label="QEMU")
+    plt.legend()
+
+    plt.xticks(range(0, len(boxx) * 3, 3), boxx)
+    plt.xlim(-2, len(boxx)*3)
+    ax.set_ylabel("Executions / s")
+
+    plt.tight_layout()
+    plt.savefig(out + "-boxplot.pdf")
 
 
 def analyze_unique_bugs(logd, outf):
     logfiles = os.listdir(logd)
-    results = defaultdict(lambda: defaultdict(lambda: [[], [], []]))
+    results = defaultdict(lambda: defaultdict(lambda: [[], [], [], [], []]))
+    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
 
     for file in logfiles:
         components = file.split("-")
@@ -111,6 +189,7 @@ def analyze_unique_bugs(logd, outf):
             if not bug:
                 continue
             results[kind][bench][trial].append(int(bug))
+            counts[kind][bench][trial] += 1
 
     for kind, values in results.items():
         for bench, infos in values.items():
@@ -118,11 +197,16 @@ def analyze_unique_bugs(logd, outf):
                 if not results[kind][bench][idx]:
                     results[kind][bench][idx] = '-'
                     continue
-                results[kind][bench][idx] = ', '.join([
+                results[kind][bench][idx] = ':'.join([
                     str(x) for x in results[kind][bench][idx]])
 
     bugs = pandas.DataFrame.from_dict(results)
-    print(bugs)
+    cdf = pandas.DataFrame.from_dict(counts)
+    print(cdf)
+
+    with open(outf + "-unique-bugs.tex", "w") as fd:
+        fd.write(cdf.to_latex())
+    #print(bugs)
 
 
 if __name__ == "__main__":

@@ -245,12 +245,24 @@ def test_regression_leaf_function_1():
     print()
     print(str(func))
 
+
 def test_regression_leaf_function_2():
     rw = get_instrumented(
         [],
         ["rax", 'r8', 'r9', 'r11', 'rcx', "r10"],
         "leaq -8(%rsp), %rsi\nmovq 0(%rsi), %rdi",
         False)
+    func = rw.container.functions[0x1000]
+    print()
+    print(str(func))
+
+
+def test_rep_stosq_1():
+    code = """ 
+    rep stosq
+        """
+
+    rw = get_instrumented([], [], code, False, True)
     func = rw.container.functions[0x1000]
     print()
     print(str(func))

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PFX=/home/number_four/projects/retrowrite-afl-evaluation/results
+PFX=/home/number_four/projects/retrowrite-afl-evaluation-latest/results
 LAVA=/home/number_four/projects/lava_corpus/LAVA-M/built-lavam-pie
 
 BASE=$PFX/base64/*.tar.gz

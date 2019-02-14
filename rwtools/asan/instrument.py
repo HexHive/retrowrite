@@ -245,7 +245,11 @@ class Instrument():
         ]):
             midx = 1
 
-        if len(instruction.cs.operands) == 1:
+        is_rep_stos = False
+        if instruction.mnemonic.startswith("rep stos"):
+            is_rep_stos = True
+            lexp = instruction.op_str.split(",", 1)[1]
+        elif len(instruction.cs.operands) == 1:
             lexp = instruction.op_str
         elif len(instruction.cs.operands) > 2:
             print("[*] Found op len > 2: %s" % (instruction))
@@ -275,8 +279,22 @@ class Instrument():
         enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
 
         codecache = '\n'.join(codecache)
-
         comment = "{}: {}".format(str(instruction), str(free))
+
+        if is_rep_stos:
+            copycache = copy.copy(codecache)
+            extend_args_check = copy.copy(args)
+            extend_args_check["lexp"] = "(%rdi, %rcx)"
+            extend_args_check["addr"] = "%d_2" % (instruction.address)
+            copycache = copycache.format(**extend_args_check)
+            original_exit = copy.copy(
+                sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address)
+
+            new_exit = copy.copy(sp.MEM_EXIT_LABEL)[0].format(
+                addr="%d_2" % (instruction.address))
+            copycache = copycache.replace(original_exit, new_exit)
+            codecache = codecache + "\n" + copycache
+
         return InstrumentedInstruction(codecache.format(**args),
                                        enter_lbl, comment)
 
@@ -301,8 +319,9 @@ class Instrument():
 
                 # XXX: THIS IS A TODO.
                 if instruction.mnemonic.startswith("rep stos"):
-                    print("[*] Skipping: {}".format(instruction))
-                    continue
+                    pass
+                    #print("[*] Skipping: {}".format(instruction))
+                    #continue
 
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
