@@ -350,10 +350,10 @@ class DataSection():
 
         results = []
         # XXX: THIS IS A HACK (MOSTLY?)
-        if self.name == ".bss":
-            results.append(".section .data")
-        else:
-            results.append(".section {}".format(self.name))
+        #if self.name == ".bss":
+            #results.append(".section .data")
+        #else:
+        results.append(".section {}".format(self.name))
 
         if self.name != ".fini_array":
             results.append(".align {}".format(self.align))
@@ -388,6 +388,8 @@ class DataSection():
             for before in cell.before:
                 results.append("\t%s" % (before))
 
+            if self.name == '.bss':
+                cell.value = 0
             results.append("\t%s" % (cell))
 
             for after in cell.after:
