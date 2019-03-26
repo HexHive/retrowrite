@@ -11,6 +11,15 @@ import numpy as np
 import scipy.stats
 
 
+TARGETS = dict(
+    qemu=dict(color="#003f5c", name="gcc", rename="qemu"),
+    retrowrite=dict(color="#58508d", name="afl-retrowrite", rename="retrowrite"),
+    afl_gcc=dict(color="#bc5090", name="afl-gcc", rename="afl-gcc"),
+    afl_dyninst=dict(color="#ff6361", name="afl-dyninst", rename="dyninst"),
+    afl_clang_fast=dict(color="#ffa600", name="afl-clang-fast", rename="afl-clang-fast")
+)
+
+
 def set_box_color(bp, color):
     plt.setp(bp['boxes'], color=color)
     plt.setp(bp['whiskers'], color=color)
@@ -18,95 +27,7 @@ def set_box_color(bp, color):
     plt.setp(bp['medians'], color=color)
 
 
-def results_to_json(input, out):
-    results = defaultdict(lambda: defaultdict(list))
-
-    for filename in glob.glob(input + "/**/*.tar.gz", recursive=True):
-        path = os.path.abspath(filename)
-        result_tar = path
-
-        benchmark = os.path.basename(os.path.dirname(path))
-        mode = os.path.basename(path).split("-")[0]
-        trial = int(os.path.basename(path).split("-")[1].split(".")[0][-1])
-
-        tf = tarfile.open(result_tar, "r:*")
-        path_template = "sync_dir/{}-fuzzer0{}/fuzzer_stats"
-        for i in range(1, 9):
-            tpath = path_template.format(benchmark, i)
-            try:
-                contents = tf.extractfile(tpath).read().decode('utf-8')
-            except KeyError:
-                break
-
-            data = dict()
-            for line in contents.split("\n"):
-                if not line:
-                    continue
-                line = line.split(":")
-                data[line[0].strip()] = line[1].strip()
-
-            data["trial"] = trial
-            results[mode][benchmark].append(data)
-
-    with open(out + ".json", "w") as fd:
-        json.dump(results, fd, indent=2)
-
-
-def results_to_csv(input, out):
-    jsonf = out + ".json"
-    with open(jsonf) as fd:
-        data = json.load(fd)
-
-    results = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
-    execs_per_s = defaultdict(lambda: defaultdict(lambda: [[], [], [], [], []]))
-    crashes = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
-
-    #box = [[], [], []]
-    bidx = dict(src=0, binary=1, qemu=2)
-
-    for kind, values in data.items():
-        for bench, infos in values.items():
-            for info in infos:
-                trial = info["trial"] - 1
-                results[kind][bench][trial] += int(info["execs_done"])
-                crashes[kind][bench][trial] += int(info["unique_crashes"])
-                execs_per_s[kind][bench][trial].append(
-                    float(info["execs_per_sec"]))
-
-                #box[bidx[kind]].append(float(info["execs_per_sec"]))
-
-        execs_per_s[kind + "-mean"][bench] = 0.0
-        #execs_per_s[kind + "-var"][bench] = 0.0
-        execs_per_s[kind + "-std"][bench] = 0.0
-
-    df = pandas.DataFrame.from_dict(results)
-    pandas.set_option('display.max_colwidth', -1)
-    #print(df)
-
-    for kind, values in execs_per_s.items():
-        if kind.endswith("-mean"):
-            continue
-        if kind.endswith("-std"):
-            continue
-        for bench, infos in values.items():
-            for idx, exs in enumerate(infos):
-                execs_per_s[kind][bench][idx] = round(sum(exs) / len(exs), 2)
-            execs_per_s[kind + "-mean"][bench] = round(
-                np.mean(execs_per_s[kind][bench]), 2)
-            execs_per_s[kind + "-std"][bench] = round(
-                np.std(execs_per_s[kind][bench]), 2)
-
-    edf = pandas.DataFrame.from_dict(execs_per_s)
-    #print(edf)
-    with open(out + "-execs-table.tex", "w") as fd:
-        fd.write(edf.to_latex())
-
-    cdf = pandas.DataFrame.from_dict(crashes)
-    #print(cdf)
-
-    # Make a boxplot
-    box = defaultdict(list)
-    boxx = list()
+def compute_p_values(execs_per_s):
     pvalues = {"Binary-AFL v/s Source-AFL": dict(), 
            "Binary-AFL v/s QEMU": dict()}
 
@@ -117,53 +38,216 @@ def results_to_csv(input, out):
         pvalues["Binary-AFL v/s QEMU"][benchname] = scipy.stats.mannwhitneyu(bchar, qchar)[1]
         pvalues["Binary-AFL v/s Source-AFL"][benchname] = scipy.stats.mannwhitneyu(bchar, schar)[1]
 
-    manndf = pandas.DataFrame.from_dict(pvalues)
-    print(manndf)
+    return pvalues
 
-    with open(out + '-mann-whitney.tex', 'w') as fd:
-        fd.write(manndf.to_latex())
 
+def results_to_json(input, out):
+    results = defaultdict(lambda: defaultdict(list))
+
+    for filename in glob.glob(input + "*.tar.gz", recursive=True):
+        path = os.path.abspath(filename)
+
+        basename = os.path.basename(filename)
+        benchmark = basename.split("-")[0]
+        system = '-'.join(basename.split("trial")[0].split("-")[1:])[:-1]
+        trial = int(filename.split("-")[-1][0])
+        result_tar = path
+
+        # fuzz/libtiff-afl-gcc/1/fuzz-out/fuzzer5/plot_data
+        tf = tarfile.open(result_tar, "r:*")
+        path_template = "fuzz/{}/{}/fuzz-out/fuzzer{}/fuzzer_stats"
+        for i in range(0, 8):
+            tpath = path_template.format(basename.split("-trial")[0], trial, i)
+            try:
+                contents = tf.extractfile(tpath).read().decode('utf-8')
+            except KeyError:
+                print("Failed: %s: %s" % (basename, path))
+                data = dict()
+                data["trial"] = trial
+                results[system][benchmark].append(data)
+                continue
+
+            data = dict()
+            for line in contents.split("\n"):
+                if not line:
+                    continue
+                line = line.split(":")
+                data[line[0].strip()] = line[1].strip()
+
+            data["trial"] = trial
+            results[system][benchmark].append(data)
+
+    with open(out + ".json", "w") as fd:
+        json.dump(results, fd, indent=2)
+
+
+def results_to_csv(input, out):
+    jsonf = out + ".json"
+    with open(jsonf) as fd:
+        data = json.load(fd)
+
+    systemsn = len(data)
+
+    results = defaultdict(lambda: defaultdict(lambda: [0 for _ in range(0, systemsn)]))
+    execs_per_s = defaultdict(lambda: defaultdict(lambda: [[] for _ in range(systemsn)]))
+    crashes = defaultdict(lambda: defaultdict(lambda: [0 for _ in range(0, systemsn)]))
+
+    for kind, values in data.items():
+        for bench, infos in values.items():
+            for info in infos:
+                trial = info["trial"] - 1
+
+                if "execs_done" in info:
+                    results[kind][bench][trial] += int(info["execs_done"])
+                else:
+                    results[kind][bench][trial] += 0
+
+                if "unique_crashes" in info:
+                    crashes[kind][bench][trial] += int(info["unique_crashes"])
+                else:
+                    crashes[kind][bench][trial] += 0
+
+                if "execs_per_sec" in info:
+                    execs_per_s[kind][bench][trial].append(
+                        float(info["execs_per_sec"]))
+                else:
+                    execs_per_s[kind][bench][trial].append(0.0)
+                        
+        execs_per_s[kind + "-mean"][bench] = 0.0
+        execs_per_s[kind + "-std"][bench] = 0.0
+
+    df = pandas.DataFrame.from_dict(results)
+    pandas.set_option('display.max_colwidth', -1)
+    #print(df)
+
+    ignore = ['-mean', '-std']
+    for kind, values in execs_per_s.items():
+        print(kind)
+        if any([kind.endswith(x) for x in ignore]):
+            continue
+
+        for bench, infos in values.items():
+            for idx, exs in enumerate(infos):
+                execs_per_s[kind][bench][idx] = round(sum(exs) / len(exs), 2)
+            execs_per_s[kind + "-mean"][bench] = round(
+                np.mean(execs_per_s[kind][bench]), 2)
+            execs_per_s[kind + "-std"][bench] = round(
+                np.std(execs_per_s[kind][bench]), 2)
+
+    edf = pandas.DataFrame.from_dict(execs_per_s)
+    print(edf)
+    with open(out + "-execs-table.tex", "w") as fd:
+        fd.write(edf.to_latex())
+    with open(out + "-execs-table.csv", "w") as fd:
+        fd.write(edf.to_csv())
+
+    cdf = pandas.DataFrame.from_dict(crashes)
+    #print(cdf)
+
+    # Calculate p-values.
+    # TODO: This may need to be changed. Not sure how to compare against
+    # multiple systems to show that the differences may not be statistically
+    # significant. This was brought up by some reviewer.
+    #pvalues = compute_p_values(execs_per_s)
+    #manndf = pandas.DataFrame.from_dict(pvalues)
+    #print(manndf)
+    #with open(out + '-mann-whitney.tex', 'w') as fd:
+    #    fd.write(manndf.to_latex())
+
+    ### BOX PLOT
+    # Make a boxplot for the executions per second computation.
+    box = defaultdict(list)
+    boxx = list()
     for kind, benchmarks in execs_per_s.items():
-        if kind.endswith("-mean"):
+        if any([kind.endswith(x) for x in ignore]):
             continue
-        if kind.endswith("-std"):
-            continue
-
         for benchname in sorted(benchmarks):
             if benchname not in boxx:
                 boxx.append(benchname)
             box[kind].append(benchmarks[benchname])
 
     print(box)
+    keys = execs_per_s.keys()
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    src = plt.boxplot(
-        box['src'],
-        positions=np.array(range(len(box['src'])))*3.0-0.7, sym='',
-        widths=0.6)
 
-    binary = plt.boxplot(
-        box['binary'],
-        positions=np.array(range(len(box['binary'])))*3.0, sym='',
-        widths=0.6)
+    wd = 0.4
+    db = 0.1
+    lb = 0.9
+    cstep = (len(box) - 1) * (wd + db) + lb
+    base = 2 * (wd + db)
+    centers = None
 
-    qemu = plt.boxplot(
-        box['qemu'],
-        positions=np.array(range(len(box['qemu'])))*3.0+0.7, sym='',
-        widths=0.6)
+    valid_keys = -1
 
-    set_box_color(src, "#e41a1c")
-    set_box_color(binary, "#377eb8")
-    set_box_color(qemu, "#4daf4a")
+    for key in keys:
+        props = None
+        for bench, value in TARGETS.items():
+            if value['name'] == key:
+                props = value
+                break
 
-    plt.plot([], c="#e41a1c", label="Source-AFL")
-    plt.plot([], c="#377eb8", label="Binary-AFL")
-    plt.plot([], c="#4daf4a", label="QEMU")
+        if not props:
+            continue
+
+        valid_keys += 1
+
+    count = 0
+    for key in keys:
+        props = None
+        for bench, value in TARGETS.items():
+            if value['name'] == key:
+                props = value
+                break
+
+        if not props:
+            print("[X] Unknown key %s! Skipping." % (key))
+            continue
+
+        centers = np.array(np.arange(base, base + cstep * len(box[key]), cstep))
+        positions = centers + ((count - ((valid_keys) / 2)) * (db + wd))
+        print(centers)
+        print(positions)
+        print(count , (count - ((valid_keys) / 2)))
+        print((count - (((valid_keys) / 2)) * (db + wd)))
+
+        plot = plt.boxplot(
+                box[key],
+                positions=positions, sym='',
+                widths=wd)
+
+        set_box_color(plot, props['color'])
+        plt.plot([], c=props['color'], label=props['rename'])
+        count += 1
+
+    #src = plt.boxplot(
+        #box['src'],
+        #positions=np.array(range(len(box['src'])))*3.0-0.7, sym='',
+        #widths=0.6)
+
+    #binary = plt.boxplot(
+        #box['binary'],
+        #positions=np.array(range(len(box['binary'])))*3.0, sym='',
+        #widths=0.6)
+
+    #qemu = plt.boxplot(
+        #box['qemu'],
+        #positions=np.array(range(len(box['qemu'])))*3.0+0.7, sym='',
+        #widths=0.6)
+
+    #set_box_color(src, "#e41a1c")
+    #set_box_color(binary, "#377eb8")
+    #set_box_color(qemu, "#4daf4a")
+
+    #plt.plot([], c="#e41a1c", label="Source-AFL")
+    #plt.plot([], c="#377eb8", label="Binary-AFL")
+    #plt.plot([], c="#4daf4a", label="QEMU")
     plt.legend()
 
-    plt.xticks(range(0, len(boxx) * 3, 3), boxx)
-    plt.xlim(-2, len(boxx)*3)
+    plt.xticks(centers, boxx)
+    print(centers)
+    plt.xlim(-2, centers[-1] + 2 * (db + wd) + wd)
     ax.set_ylabel("Executions / s")
 
     plt.tight_layout()
@@ -176,15 +260,21 @@ def analyze_unique_bugs(logd, outf):
     counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
 
     for file in logfiles:
-        components = file.split("-")
-        bench = components[0]
-        kind = components[1]
-        trial = int(components[2][-5]) - 1
+        bench, components = file.split("-", 1)
+        kind, _, trial = components.rsplit("-", 2)
+        trial = int(trial[0]) - 1
 
         path = os.path.abspath(os.path.join(logd, file))
         with open(path) as fd:
             data = fd.read()
+
         lines = data.split("\n")
+
+        if not lines[0]:
+            results[kind][bench][trial].append(0)
+            counts[kind][bench][trial] += 0
+            continue
+
         for bug in lines:
             if not bug:
                 continue
@@ -202,11 +292,11 @@ def analyze_unique_bugs(logd, outf):
 
     bugs = pandas.DataFrame.from_dict(results)
     cdf = pandas.DataFrame.from_dict(counts)
-    print(cdf)
 
     with open(outf + "-unique-bugs.tex", "w") as fd:
         fd.write(cdf.to_latex())
-    #print(bugs)
+    with open(outf + "-unique-bugs.csv", "w") as fd:
+        fd.write(cdf.to_csv())
 
 
 if __name__ == "__main__":
@@ -229,8 +319,8 @@ if __name__ == "__main__":
 
     args = argp.parse_args()
 
-    results_to_json(args.inputs, args.out)
-    results_to_csv(args.inputs, args.out)
+    #results_to_json(args.inputs, args.out)
+    #results_to_csv(args.inputs, args.out)
 
     if args.unique:
         analyze_unique_bugs(args.unique, args.out)

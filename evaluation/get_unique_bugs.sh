@@ -14,15 +14,19 @@ xbase=${TARF##*/}
 xpref=${xbase%.*}
 xpref=${xpref%.*}
 
+
 tmpf=$(mktemp)
 
-LOGF="$2-$xpref.log"
+LOGF="$2/$xpref.log"
 echo "" > $LOGF
 
 tar -xf $TARF -C $TDIR
 
-INPUTS=$TDIR/sync_dir/**/crashes/id:*
-for inp in $INPUTS; do
+shopt -s nullglob
+shopt -s globstar
+
+INPUTS=$TDIR/**/crashes/id:*
+for inp in "$TDIR"/**/crashes/id:*; do
     echo "[*] Running $inp"
     { $CMD $inp >> $tmpf 2> /dev/null ;}
     echo "" >> $tmpf
