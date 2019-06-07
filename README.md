@@ -3,7 +3,7 @@
 TODO
 
 
-## Usage Instructions
+## Setup
 
 * python3 -m virtualenv retro
 
