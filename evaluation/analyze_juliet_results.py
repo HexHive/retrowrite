@@ -17,9 +17,9 @@ def results_to_csv(results_dir, out):
 
     for filename in os.listdir(results_dir):
         if filename.endswith(".asan.log"):
-            key = "Source ASAN"
+            key = "ASan"
         elif filename.endswith(".binary-asan.log"):
-            key = "Binary ASAN"
+            key = "BASan"
         else:
             key = "Valgrind Memcheck"
 
@@ -60,9 +60,9 @@ def deep_analyze(results_dir, out):
 
     for filename in os.listdir(results_dir):
         if filename.endswith(".asan.log"):
-            key = "Source ASan"
+            key = "ASan"
         elif filename.endswith(".binary-asan.log"):
-            key = "Binary ASan"
+            key = "BASan"
         else:
             key = "Valgrind Memcheck"
 
@@ -91,8 +91,8 @@ def deep_analyze(results_dir, out):
     points = defaultdict(lambda: [[], []])
     annotations = defaultdict(list)
 
-    keyys = {'Source ASan': +0.1, 'Binary ASan': -0.1, 'Valgrind Memcheck': 0}
-    keyxs = {'Source ASan': -0.1, 'Binary ASan': -0.1, 'Valgrind Memcheck': 0.1}
+    keyys = {'ASan': +0.1, 'BASan': -0.1, 'Valgrind Memcheck': 0}
+    keyxs = {'ASan': -0.1, 'BASan': -0.1, 'Valgrind Memcheck': 0.1}
 
     for key, failed in results.items():
         for tags in failed:
@@ -115,8 +115,8 @@ def deep_analyze(results_dir, out):
             annotations[key].append(counts[key][tags])
 
     colors = {
-        'Source ASan': '#1b9e77',
-        'Binary ASan': '#d95f02',
+        'ASan': '#1b9e77',
+        'BASan': '#d95f02',
         'Valgrind Memcheck': '#7570b3'}
 
     fig = plt.figure()
@@ -125,16 +125,16 @@ def deep_analyze(results_dir, out):
     print(annotations)
 
     plt.scatter(
-        points["Source ASan"][1],
-        points["Source ASan"][0],
-        c=colors["Source ASan"],
+        points["ASan"][1],
+        points["ASan"][0],
+        c=colors["ASan"],
         alpha=1.0,
         marker="+")
 
     plt.scatter(
-        points["Binary ASan"][1],
-        points["Binary ASan"][0],
-        c=colors["Binary ASan"],
+        points["BASan"][1],
+        points["BASan"][0],
+        c=colors["BASan"],
         alpha=1.0,
         marker="x")
 
@@ -145,8 +145,8 @@ def deep_analyze(results_dir, out):
         alpha=1.0,
         marker="^")
 
-    plt.plot([], c=colors["Source ASan"], marker="+", label="Source ASan")
-    plt.plot([], c=colors["Binary ASan"], marker="x", label="Binary ASan")
+    plt.plot([], c=colors["ASan"], marker="+", label="ASan")
+    plt.plot([], c=colors["BASan"], marker="x", label="BASan")
     plt.plot([], c=colors["Valgrind Memcheck"], marker="^", label="Valgrind Memcheck")
     plt.legend()
     
@@ -172,7 +172,7 @@ def deep_analyze(results_dir, out):
     xlabels = [x[3:] for x in xlabels]
     ylabels = [y[3:] for y in ylabels]
     plt.yticks(range(0, len(xlabels)), xlabels, rotation=0)
-    plt.xticks(range(0, len(ylabels) + 1), [''] + ylabels)
+    plt.xticks(range(0, len(ylabels) + 1), ['N/A'] + ylabels)
     plt.ylim(-0.5, len(xlabels))
     plt.xlim(-1, len(ylabels) + 1.5)
 

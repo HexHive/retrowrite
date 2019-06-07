@@ -12,11 +12,11 @@ import scipy.stats
 
 
 TARGETS = dict(
-    qemu=dict(color="#003f5c", name="gcc", rename="qemu"),
-    retrowrite=dict(color="#58508d", name="afl-retrowrite", rename="retrowrite"),
-    afl_gcc=dict(color="#bc5090", name="afl-gcc", rename="afl-gcc"),
-    afl_dyninst=dict(color="#ff6361", name="afl-dyninst", rename="dyninst"),
-    afl_clang_fast=dict(color="#ffa600", name="afl-clang-fast", rename="afl-clang-fast")
+    qemu=dict(color="#003f5c", name="gcc", rename="Q"),
+    retrowrite=dict(color="#58508d", name="afl-retrowrite", rename="RW"),
+    afl_gcc=dict(color="#bc5090", name="afl-gcc", rename="G"),
+    afl_dyninst=dict(color="#ff6361", name="afl-dyninst", rename="DI"),
+    afl_clang_fast=dict(color="#ffa600", name="afl-clang-fast", rename="CF")
 )
 
 
@@ -28,16 +28,17 @@ def set_box_color(bp, color):
 
 
 def compute_p_values(execs_per_s):
-    pvalues = {"Binary-AFL v/s Source-AFL": dict(), 
-           "Binary-AFL v/s QEMU": dict()}
+    pvalues = {"RW v/s Q": dict(), 
+           "RW v/s G": dict()}
 
-    for benchname in execs_per_s["binary"]:
-        bchar = execs_per_s["binary"][benchname]
-        qchar = execs_per_s["qemu"][benchname]
-        schar = execs_per_s["src"][benchname]
-        pvalues["Binary-AFL v/s QEMU"][benchname] = scipy.stats.mannwhitneyu(bchar, qchar)[1]
-        pvalues["Binary-AFL v/s Source-AFL"][benchname] = scipy.stats.mannwhitneyu(bchar, schar)[1]
+    for benchname in execs_per_s["afl-retrowrite"]:
+        bchar = execs_per_s["afl-retrowrite"][benchname]
+        qchar = execs_per_s["gcc"][benchname]
+        schar = execs_per_s["afl-gcc"][benchname]
+        pvalues["RW v/s Q"][benchname] = scipy.stats.mannwhitneyu(bchar, qchar)[1]
+        pvalues["RW v/s G"][benchname] = scipy.stats.mannwhitneyu(bchar, schar)[1]
 
+    print(pvalues)
     return pvalues
 
 
@@ -92,10 +93,18 @@ def results_to_csv(input, out):
     execs_per_s = defaultdict(lambda: defaultdict(lambda: [[] for _ in range(systemsn)]))
     crashes = defaultdict(lambda: defaultdict(lambda: [0 for _ in range(0, systemsn)]))
 
+    benchcount = 0
+    trialcount = 0
+
     for kind, values in data.items():
+
+        if benchcount == 0:
+            benchcount = len(values)
+
         for bench, infos in values.items():
             for info in infos:
                 trial = info["trial"] - 1
+                trialcount = max(trialcount, trial + 1)
 
                 if "execs_done" in info:
                     results[kind][bench][trial] += int(info["execs_done"])
@@ -118,7 +127,6 @@ def results_to_csv(input, out):
 
     df = pandas.DataFrame.from_dict(results)
     pandas.set_option('display.max_colwidth', -1)
-    #print(df)
 
     ignore = ['-mean', '-std']
     for kind, values in execs_per_s.items():
@@ -148,107 +156,74 @@ def results_to_csv(input, out):
     # TODO: This may need to be changed. Not sure how to compare against
     # multiple systems to show that the differences may not be statistically
     # significant. This was brought up by some reviewer.
-    #pvalues = compute_p_values(execs_per_s)
-    #manndf = pandas.DataFrame.from_dict(pvalues)
-    #print(manndf)
-    #with open(out + '-mann-whitney.tex', 'w') as fd:
-    #    fd.write(manndf.to_latex())
+    pvalues = compute_p_values(execs_per_s)
+    manndf = pandas.DataFrame.from_dict(pvalues)
+    print(manndf)
+    with open(out + '-mann-whitney.tex', 'w') as fd:
+        fd.write(manndf.to_latex())
 
     ### BOX PLOT
     # Make a boxplot for the executions per second computation.
+    result_matrix = np.zeros((benchcount, systemsn, trialcount))
+
     box = defaultdict(list)
     boxx = list()
-    for kind, benchmarks in execs_per_s.items():
+    kinds = list()
+
+    for kind, benchmarks in sorted(execs_per_s.items()):
         if any([kind.endswith(x) for x in ignore]):
             continue
+        kinds.append(kind)
         for benchname in sorted(benchmarks):
             if benchname not in boxx:
                 boxx.append(benchname)
             box[kind].append(benchmarks[benchname])
 
-    print(box)
-    keys = execs_per_s.keys()
+            y = kinds.index(kind)
+            x = boxx.index(benchname)
+            result_matrix[x, y, :] = benchmarks[benchname]
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
 
-    wd = 0.4
-    db = 0.1
-    lb = 0.9
-    cstep = (len(box) - 1) * (wd + db) + lb
-    base = 2 * (wd + db)
-    centers = None
+    if benchcount == 4:
+        gridx = 2
+        gridy = 2
+    else:
+        gridx = 4
+        gridy = 2
 
-    valid_keys = -1
+    fig, axes = plt.subplots(nrows=gridx, ncols=gridy)
 
-    for key in keys:
-        props = None
-        for bench, value in TARGETS.items():
-            if value['name'] == key:
-                props = value
-                break
+    for idx in range(benchcount, gridx * gridy, 1):
+        x, y = divmod(idx, gridy)
+        fig.delaxes(axes[x, y])
 
-        if not props:
-            continue
 
-        valid_keys += 1
+    for idx in range(benchcount):
+        x, y = divmod(idx, gridy)
 
-    count = 0
-    for key in keys:
-        props = None
-        for bench, value in TARGETS.items():
-            if value['name'] == key:
-                props = value
-                break
+        print(x, y)
+        plot = axes[x, y].boxplot(
+            np.transpose(result_matrix[idx, :, :]),
+            patch_artist=True,
+            sym='',
+            widths=0.4)
 
-        if not props:
-            print("[X] Unknown key %s! Skipping." % (key))
-            continue
+        axes[x, y].set_title(boxx[idx])
+        labels = list()
 
-        centers = np.array(np.arange(base, base + cstep * len(box[key]), cstep))
-        positions = centers + ((count - ((valid_keys) / 2)) * (db + wd))
-        print(centers)
-        print(positions)
-        print(count , (count - ((valid_keys) / 2)))
-        print((count - (((valid_keys) / 2)) * (db + wd)))
+        for idx, abox in enumerate(plot['boxes']):
+            name = kinds[idx]
+            for b, v in TARGETS.items():
+                if v['name'] == name:
+                    abox.set_facecolor(v['color'])
+                    labels.append(v['rename'])
 
-        plot = plt.boxplot(
-                box[key],
-                positions=positions, sym='',
-                widths=wd)
+        axes[x, y].set_xticklabels(labels)
 
-        set_box_color(plot, props['color'])
-        plt.plot([], c=props['color'], label=props['rename'])
-        count += 1
+        if y == 0:
+            axes[x, y].set_ylabel("Executions / s")
 
-    #src = plt.boxplot(
-        #box['src'],
-        #positions=np.array(range(len(box['src'])))*3.0-0.7, sym='',
-        #widths=0.6)
-
-    #binary = plt.boxplot(
-        #box['binary'],
-        #positions=np.array(range(len(box['binary'])))*3.0, sym='',
-        #widths=0.6)
-
-    #qemu = plt.boxplot(
-        #box['qemu'],
-        #positions=np.array(range(len(box['qemu'])))*3.0+0.7, sym='',
-        #widths=0.6)
-
-    #set_box_color(src, "#e41a1c")
-    #set_box_color(binary, "#377eb8")
-    #set_box_color(qemu, "#4daf4a")
-
-    #plt.plot([], c="#e41a1c", label="Source-AFL")
-    #plt.plot([], c="#377eb8", label="Binary-AFL")
-    #plt.plot([], c="#4daf4a", label="QEMU")
-    plt.legend()
-
-    plt.xticks(centers, boxx)
-    print(centers)
-    plt.xlim(-2, centers[-1] + 2 * (db + wd) + wd)
-    ax.set_ylabel("Executions / s")
+        axes[x, y].set_yticks(np.arange(500, 5000, 2000))
 
     plt.tight_layout()
     plt.savefig(out + "-boxplot.pdf")
@@ -320,7 +295,7 @@ if __name__ == "__main__":
     args = argp.parse_args()
 
     #results_to_json(args.inputs, args.out)
-    #results_to_csv(args.inputs, args.out)
+    results_to_csv(args.inputs, args.out)
 
     if args.unique:
         analyze_unique_bugs(args.unique, args.out)
