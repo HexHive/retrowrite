@@ -5,9 +5,9 @@ Fuzzing and Sanitization" (to appear in *IEEE S&P'20*). Please refer to the
 paper for technical details: [paper]().
 
 Retrowrite ships with three utilities to support binary rewriting:
-* *librw.rw :* Generate symbolized assembly files from binaries
-* *rwtools.asan.asantool:* Instrument binary with binary-ony Address Sanitizer (BASan).
-* *rwtools.afl:* TODO
+* **librw.rw :** Generate symbolized assembly files from binaries
+* **rwtools.asan.asantool:** Instrument binary with binary-ony Address Sanitizer (BASan).
+* **rwtools.afl:** TODO
 
 
 # Quick Usage Guide
@@ -28,13 +28,16 @@ Activate the virtualenv:
 
 * `source retro/bin/activate`
 
+(Bonus) To exit virtualenv when you're done with retrowrite:
+* `deactivate`
+
 ## Usage
 
 The individual tools also have commandline help which describes all the
 options, and may be accessed with `-h`. The below steps should quickly get you
 started with using retrowrite.
 
-#### a. Instrument Binary with BASan
+#### a. Instrument Binary with Binary-Address Sanitizer (BASan)
 
 `python3 -m rwtools.asan.asantool </path/to/binary/> </path/to/output/binary>`
 
@@ -61,7 +64,7 @@ described above.
 
 While retrowrite is interoperable with other tools, we
 strongly encourage researchers to use retrowrite API for their binary
-instrumentation / modification needs! This saves you the additional effort of
+instrumentation / modification needs! This saves the additional effort of
 having to load and parse binaries or assembly files. Check the developer
 sections for more details on getting started.
 
@@ -75,3 +78,30 @@ tools in `rwtools/`.
 
 
 ## Cite
+
+
+
+
+## License -- MIT
+The MIT License
+
+Copyright (c) 2019 HexHive Group, Sushant Dinesh <sushant.dinesh94@gmail.com>.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
