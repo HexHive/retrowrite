@@ -76,6 +76,12 @@ Individual transformation passes that build on top this rewriting framework,
 such as our binary-only Address Sanitizer (BASan) is contained as individual
 tools in `rwtools/`.
 
+
+# Docker / Reproducing Results
+
+See [docker](docker) for more information on building a docker image for
+fuzzing and reproducing results.
+
 ## Cite
 
 
