@@ -1,14 +1,13 @@
-# RetroWrite
+# Retrowrite
 
 Code repository for "Retrowrite: Statically Instrumenting COTS Binaries for
 Fuzzing and Sanitization" (to appear in *IEEE S&P'20*). Please refer to the
 paper for technical details: [paper]().
 
 Retrowrite ships with three utilities to support binary rewriting:
-* **librw.rw :** Generate symbolized assembly files from binaries
-* **rwtools.asan.asantool:** Instrument binary with binary-ony Address Sanitizer (BASan).
+* **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
 * **rwtools.afl:** TODO
-
+* **librw.rw :** Generate symbolized assembly files from binaries
 
 # Quick Usage Guide
 
@@ -24,7 +23,7 @@ Run `setup.sh`:
 
 * `./setup.sh`
 
-Activate the virtualenv:
+Activate the virtualenv (from root of the repository):
 
 * `source retro/bin/activate`
 
@@ -41,9 +40,10 @@ started with using retrowrite.
 
 `python3 -m rwtools.asan.asantool </path/to/binary/> </path/to/output/binary>`
 
-Example, create an instrumented version of `/bin/ls`:
 Note: Make sure that the binary is position-independent. This can be checked
 using `file` command (the output should say `ELF shared object`).
+
+Example, create an instrumented version of `/bin/ls`:
 
 `python3 -m rwtools.asan.asantool /bin/ls ls-basan-instrumented`
 
@@ -54,8 +54,8 @@ using any compiler, example:
 
 #### b. Generate Symbolized Assembly
 
-To generate symbolized assmebly that may be modified by hand or post-processed
-by exisiting tools:
+To generate symbolized assembly that may be modified by hand or post-processed
+by existing tools:
 
 `python3 -m librw.rw </path/to/binary> <path/to/output/asm/files>`
 
@@ -76,9 +76,7 @@ Individual transformation passes that build on top this rewriting framework,
 such as our binary-only Address Sanitizer (BASan) is contained as individual
 tools in `rwtools/`.
 
-
 ## Cite
-
 
 
 
@@ -104,4 +102,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-

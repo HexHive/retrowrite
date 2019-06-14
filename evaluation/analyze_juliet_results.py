@@ -176,8 +176,8 @@ def deep_analyze(results_dir, out):
     plt.ylim(-0.5, len(xlabels))
     plt.xlim(-1, len(ylabels) + 1.5)
 
-    ax.set_ylabel("Primary CWE-ID")
-    ax.set_xlabel("Secondary CWE-ID")
+    ax.set_ylabel("What/Where")
+    ax.set_xlabel("How")
 
     plt.tight_layout()
     plt.savefig(out + "-scatter.pdf")

@@ -1,0 +1,260 @@
+systems:
+    - gcc
+    #- afl-gcc
+    #- afl-clang-fast
+
+vars:
+    install: /tmp/install
+    save: /targets
+    fuzz-workdir: /fuzz
+    seeds: /seeds
+
+gcc:
+    vars:
+        cc: gcc
+        cxx: g++
+    suffix: gcc
+    fuzz_cmd: afl-fuzz -Q -i $fuzz_in -o $fuzz_out
+    post:
+    #    - afl-dyninst
+        - afl-retrowrite
+
+afl-gcc:
+    vars:
+        cc: afl-gcc
+        cxx: afl-g++
+    suffix: afl-gcc
+    fuzz_cmd: afl-fuzz -i $fuzz_in -o $fuzz_out
+
+afl-clang-fast:
+    vars:
+        cc: afl-clang-fast
+        cxx: afl-clang-fast++
+    suffix: afl-clang-fast
+    fuzz_cmd: afl-fuzz -i $fuzz_in -o $fuzz_out
+
+afl-dyninst:
+    suffix: dyninst
+    fuzz_cmd: afl-fuzz-dyninst.sh -i $fuzz_in -o $fuzz_out
+    cmd: 
+        - afl-dyninst -i $target_in -o $target_save -l $target_lib
+
+afl-retrowrite:
+    suffix: retrowrite
+    target-flags:
+        file: -lz
+        libpng: -lz -lm
+        tcpdump: -lpcap -lcrypto
+        libtiff: -lz -lm -llzma
+        libarchive: -llzma -lcrypto -lz -lxml2 -lbz2 -lacl -llz4
+        bzip2: ""
+        binutils: ""
+        base64: ""
+        md5sum: ""
+        uniq: ""
+        who: ""
+    fuzz_cmd: afl-fuzz -i $fuzz_in -o $fuzz_out
+    cmd:
+        - source /retrowrite/retro/bin/activate
+        - python -m librw.rw $target_in $target_save.s
+        - afl-gcc $target_save.s -o $target_save $target_flags
+        - deactivate
+
+targets:
+    - file
+    - libpng
+    - tcpdump
+    - libtiff
+    - libarchive
+    - bzip2
+    - binutils
+    - base64 
+    - md5sum
+    - uniq
+    - who
+
+file:
+    clone: git clone --depth 1 https://github.com/file/file.git
+    setup:
+        - autoreconf -i
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    binaries: 
+        - bin/file
+
+libpng:
+    clone: git clone --depth 1 https://github.com/glennrp/libpng.git
+    setup:
+        - autoreconf -f -i
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    binaries: 
+        - bin/pngfix
+
+tcpdump:
+    clone: git clone --depth 1 https://github.com/the-tcpdump-group/tcpdump.git
+    setup: []
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    binaries: 
+        - sbin/tcpdump
+
+libtiff:
+    clone: git clone --depth 1 https://gitlab.com/libtiff/libtiff
+    setup:
+        - ./autogen.sh
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    binaries: 
+        - bin/tiff2rgba
+
+libarchive:
+    clone: git clone --depth 1 https://github.com/libarchive/libarchive.git
+    setup:
+        - ./build/autogen.sh
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    binaries: 
+        - bin/bsdtar
+
+bzip2:
+    clone: wget https://fossies.org/linux/misc/bzip2-1.0.6.tar.gz && tar -xvf bzip2-1.0.6.tar.gz && mv bzip2-1.0.6 bzip2
+    setup: []
+    env:
+        FOO: foo
+    build_flags:
+        CC: cc
+        PREFIX: install
+    build:
+        - make install
+    binaries: 
+        - bin/bzip2
+
+binutils:
+    clone: git clone git://sourceware.org/git/binutils-gdb.git && mv binutils-gdb binutils
+    setup: []
+    env:
+        CC: cc
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    cleanup: make distclean
+    binaries: 
+        - bin/readelf
+
+base64:
+    clone: cp -r /src/base64/coreutils-8.24-lava-safe base64
+    setup: []
+    env:
+        CC: cc
+        FORCE_UNSAFE_CONFIGURE: 1
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    cleanup: make clean 
+    binaries: 
+        - bin/base64
+
+md5sum:
+    clone: cp -r /src/md5sum/coreutils-8.24-lava-safe md5sum
+    setup: []
+    env:
+        CC: cc
+        FORCE_UNSAFE_CONFIGURE: 1
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    cleanup: make clean 
+    binaries: 
+        - bin/md5sum
+
+uniq:
+    clone: cp -r /src/uniq/coreutils-8.24-lava-safe uniq
+    setup: []
+    env:
+        CC: cc
+        FORCE_UNSAFE_CONFIGURE: 1
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    cleanup: make clean 
+    binaries: 
+        - bin/uniq
+
+who:
+    clone: cp -r /src/who/coreutils-8.24-lava-safe who
+    setup: []
+    env:
+        CC: cc
+        FORCE_UNSAFE_CONFIGURE: 1
+    build_flags:
+        --prefix: install
+        --enable-static: 'yes'
+        --enable-shared: 'no'
+    build:
+        - ./configure
+        - make
+        - make install
+    cleanup: make clean 
+    binaries:
+        - bin/who

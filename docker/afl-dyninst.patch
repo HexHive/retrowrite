@@ -1,0 +1,24 @@
+diff --git a/Makefile b/Makefile
+index f48af58..8a70587 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,7 +2,7 @@
+ DYNINST_ROOT = /usr/local
+ 
+ # path to afl src 
+-AFL_ROOT = ./afl 
++AFL_ROOT = /afl
+ 
+ # path to libelf and libdwarf
+ DEPS_ROOT = /usr/local
+@@ -26,7 +26,9 @@ afl-dyninst: afl-dyninst.o
+ 		-o afl-dyninst afl-dyninst.o \
+ 		-lcommon \
+ 		-liberty \
+-		-ldyninstAPI 
++		-ldyninstAPI \
++		-lboost_system
++
+ 
+ libAflDyninst.so: libAflDyninst.cpp
+ 	$(CXX) $(CXXFLAGS) $(LIBFLAGS) -I$(AFL_ROOT) -I$(DEPS_ROOT)/include libAflDyninst.cpp -o libAflDyninst.so

@@ -1,0 +1,66 @@
+vars:
+    workdir: /fuzz
+    seeds: /seeds
+    save: /results
+    trials: 5
+    time: 24h
+    jobs: 8
+    ncores: 8
+    queue: hexfuzz-node01:11300
+
+targets:
+    - file
+    - libpng
+    - tcpdump
+    - libtiff
+    - libarchive
+    - bzip2
+    - binutils
+    - base64
+    - md5sum
+    - uniq
+    - who
+
+file:
+    cmd: bin @@
+    seed: file-fuzz.zip
+
+libpng:
+    cmd: bin @@
+    seed: png-fuzz.zip
+
+tcpdump:
+    cmd: bin -ee -vv -nnr @@
+    seed: tcpdump-fuzz.zip
+
+libtiff:
+    cmd: bin @@
+    seed: tiff-fuzz.zip
+
+libarchive:
+    cmd: bin -O -xf @@
+    seed: libarchive-fuzz.zip
+
+bzip2:
+    cmd: bin -c @@
+    seed: bzip2-fuzz.zip
+
+binutils:
+    cmd: bin -a @@
+    seed: binutils-fuzz.zip
+
+base64:
+    cmd: bin -d
+    seed: base64-fuzz.zip
+
+md5sum:
+    cmd: bin -c
+    seed: md5sum-fuzz.zip
+
+uniq:
+    cmd: bin
+    seed: uniq-fuzz.zip
+
+who:
+    cmd: bin
+    seed: who-fuzz.zip

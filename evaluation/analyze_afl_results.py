@@ -35,10 +35,11 @@ def compute_p_values(execs_per_s):
         bchar = execs_per_s["afl-retrowrite"][benchname]
         qchar = execs_per_s["gcc"][benchname]
         schar = execs_per_s["afl-gcc"][benchname]
+        print(bchar, qchar, schar)
         pvalues["RW v/s Q"][benchname] = scipy.stats.mannwhitneyu(bchar, qchar)[1]
         pvalues["RW v/s G"][benchname] = scipy.stats.mannwhitneyu(bchar, schar)[1]
 
-    print(pvalues)
+    print(json.dumps(pvalues, indent=2))
     return pvalues
 
 
@@ -136,11 +137,11 @@ def results_to_csv(input, out):
 
         for bench, infos in values.items():
             for idx, exs in enumerate(infos):
-                execs_per_s[kind][bench][idx] = round(sum(exs) / len(exs), 2)
+                execs_per_s[kind][bench][idx] = round(sum(exs) / len(exs), 8)
             execs_per_s[kind + "-mean"][bench] = round(
-                np.mean(execs_per_s[kind][bench]), 2)
+                np.mean(execs_per_s[kind][bench]), 8)
             execs_per_s[kind + "-std"][bench] = round(
-                np.std(execs_per_s[kind][bench]), 2)
+                np.std(execs_per_s[kind][bench]), 8)
 
     edf = pandas.DataFrame.from_dict(execs_per_s)
     print(edf)
@@ -294,7 +295,7 @@ if __name__ == "__main__":
 
     args = argp.parse_args()
 
-    #results_to_json(args.inputs, args.out)
+    results_to_json(args.inputs, args.out)
     results_to_csv(args.inputs, args.out)
 
     if args.unique:
