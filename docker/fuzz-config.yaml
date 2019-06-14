@@ -6,7 +6,7 @@ vars:
     time: 24h
     jobs: 8
     ncores: 8
-    queue: hexfuzz-node01:11300
+    queue: localhost
 
 targets:
     - file

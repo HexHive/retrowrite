@@ -1,7 +1,7 @@
 systems:
     - gcc
-    #- afl-gcc
-    #- afl-clang-fast
+    - afl-gcc
+    - afl-clang-fast
 
 vars:
     install: /tmp/install
@@ -16,7 +16,7 @@ gcc:
     suffix: gcc
     fuzz_cmd: afl-fuzz -Q -i $fuzz_in -o $fuzz_out
     post:
-    #    - afl-dyninst
+        - afl-dyninst
         - afl-retrowrite
 
 afl-gcc:
