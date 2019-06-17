@@ -37,7 +37,6 @@ class StackFrameAnalysis(object):
             if mem.disp >= 0:
                 continue
 
-            print("[*] {} is a leaf!".format(function.name))
             self.analysis[function.start][
                 StackFrameAnalysis.KEY_IS_LEAF] = True
 

@@ -25,7 +25,6 @@ class Rewriter():
         "__gmon_start",
         "frame_dummy",
         "__do_global_ctors_aux",
-        #"atexit",
         "__register_frame_info",
         "deregister_tm_clones",
         "register_tm_clones",
@@ -154,7 +153,6 @@ class Symbolizer():
             for inst_idx, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
-                
 
                 if not (is_jmp or is_call):
                     # Simple, next is idx + 1
@@ -411,11 +409,3 @@ if __name__ == "__main__":
 
     rw = Rewriter(loader.container, args.outfile)
     rw.symbolize()
-
-    #register.RegisterAnalysis.analyze(loader.container)
-
-    #for f, func in loader.container.functions.items():
-        #print("===== FREE REGS:", func.name)
-        #for idx, instruction in enumerate(func.cache):
-            #print(instruction, func.analysis['free_registers'][idx])
-    rw.dump()

@@ -317,11 +317,9 @@ class Instrument():
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
                     continue
 
-                # XXX: THIS IS A TODO.
+                # XXX: THIS IS A TODO for more accurate check.
                 if instruction.mnemonic.startswith("rep stos"):
                     pass
-                    #print("[*] Skipping: {}".format(instruction))
-                    #continue
 
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access

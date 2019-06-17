@@ -255,16 +255,12 @@ class InstructionWrapper():
         return [self.cs.reg_name(x) for x in regs]
 
     def instrument_before(self, iinstr, order=None):
-        #assert isinstance(iinstr, InstrumentedInstruction)
-
         if order:
             self.before.insert(order, iinstr)
         else:
             self.before.append(iinstr)
 
     def instrument_after(self, iinstr, order=None):
-        #assert isinstance(iinstr, InstrumentedInstruction)
-
         if order:
             self.after.insert(order, iinstr)
         else:
@@ -349,10 +345,6 @@ class DataSection():
             return ""
 
         results = []
-        # XXX: THIS IS A HACK (MOSTLY?)
-        #if self.name == ".bss":
-            #results.append(".section .data")
-        #else:
         results.append(".section {}".format(self.name))
 
         if self.name != ".fini_array":
@@ -379,7 +371,6 @@ class DataSection():
                         gobj["label"], location, location + gobj["sz"])
 
                     results.append(symdef)
-                    #results.append(".align 32")
                     results.append(lblstr)
 
             results.append(".LC%x:" % (location))

@@ -213,8 +213,6 @@ if __name__ == "__main__":
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
 
-    #print(flist)
-
     slist = loader.slist_from_symtab()
     loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
 
@@ -223,14 +221,3 @@ if __name__ == "__main__":
 
     global_list = loader.global_data_list_from_symtab()
     loader.load_globals_from_glist(global_list)
-
-    #print(hex(loader.container.plt_base))
-    #for ent, v in loader.container.plt.items():
-    #print(hex(ent), v)
-
-    #for addr, function in loader.container.functions.items():
-    #print(hex(addr), function.name)
-
-    #for addr, datas in loader.container.globals.items():
-    #for data in datas:
-    #print(hex(addr), data["name"], hex(data["sz"]))

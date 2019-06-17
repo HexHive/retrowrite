@@ -4,9 +4,8 @@ Code repository for "Retrowrite: Statically Instrumenting COTS Binaries for
 Fuzzing and Sanitization" (to appear in *IEEE S&P'20*). Please refer to the
 paper for technical details: [paper]().
 
-Retrowrite ships with three utilities to support binary rewriting:
+Retrowrite ships with two utilities to support binary rewriting:
 * **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
-* **rwtools.afl:** TODO
 * **librw.rw :** Generate symbolized assembly files from binaries
 
 # Quick Usage Guide
@@ -17,7 +16,11 @@ rewriting PIC binaries.
 ## Setup
 
 Retrowrite is implemented in python3 (3.6). Make sure python3 and python3-venv
-is installed on system.
+is installed on system. Retrowrite depends on
+[capstone](https://github.com/aquynh/capstone). The capstone
+shipped with distribution is not compatible with this version. The setup
+script pulls the latest version of capstone from the repository and builds it.
+Make sure that your system meets the requirements to build capstone.
 
 Run `setup.sh`:
 
@@ -67,6 +70,12 @@ strongly encourage researchers to use retrowrite API for their binary
 instrumentation / modification needs! This saves the additional effort of
 having to load and parse binaries or assembly files. Check the developer
 sections for more details on getting started.
+
+#### c. Instrument Binary with AFL
+
+To generate an AFL instrumented binary, first generate the symbolized assembly
+as described above. Then, recompile the symbolized assembly with `afl-gcc` or
+`afl-clang`.
 
 # Developer Guide
 

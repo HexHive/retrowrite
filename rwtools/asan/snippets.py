@@ -14,11 +14,6 @@ MODULE_INIT = [
     "    pushq    %rax",
     ".Ltmp11:",
     "    callq    {}@PLT".format(ASAN_LIB_INIT),
-    #"    callq    %s@PLT" % (ASAN_VERSION_CHECK),
-    #"    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
-    #"    movl    ${global_count}, %eax",
-    #"    movl    %eax, %esi",
-    #"    callq    __asan_register_globals@PLT",
     "    popq    %rax",
     "    retq",
 ]
@@ -28,10 +23,6 @@ MODULE_DEINIT = [
     "# BB#0:",
     "    pushq    %rax",
     ".Ltmp12:",
-    #"    leaq    {0}(%rip), %rdi".format(ASAN_GLOBAL_DS),
-    #"    movl    ${global_count}, %eax",
-    #"    movl    %eax, %esi",
-    #"    callq    __asan_unregister_globals@PLT",
     "    popq    %rax",
     "    retq",
 ]
@@ -71,7 +62,6 @@ MEM_FLAG_SAVE_OPT = [
     # Save Flags
     "\tlahf",
     "\tseto %al",
-    #"\txchg %ah, %al",
     "\tpushq %rax",
 ]
 
@@ -82,7 +72,6 @@ MEM_FLAG_RESTORE = [
 MEM_FLAG_RESTORE_OPT = [
     # Restore Flags
     "\tpopq %rax",
-    #"\txchg %ah, %al",
     "\tadd $0x7f, %al",
     "\tsahf",
 ]

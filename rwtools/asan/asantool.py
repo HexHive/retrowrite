@@ -32,6 +32,7 @@ def do_symbolization(input, outfile):
     StackFrameAnalysis.analyze(loader.container)
 
     try:
+        # Try to find a cache of analysis results.
         with open(outfile + ".analysis_cache") as fd:
             analysis = json.load(fd)
 
