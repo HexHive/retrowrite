@@ -9,14 +9,20 @@ remove, or modify the fuzz targets.
 
 Requirements to build docker container:
 
-    * (Included) fuzz-seeds.zip: Fuzzing seeds for all benchmarks
-    * (Included) afl-dyninst.patch: Build patch for afl-dyninst
-    * (Included) afl-2.52b-patched.tar.gz: Patched version of AFL
-    * (Required) clang-built.tar.gz: Prebuilt clang-6.0 binaries, required
-      for afl-clang-fast (there seems to be a bug with afl-clang-fast and
-      ubuntu included clang).
-    * (Required) retrowrite.bundle: Bundled version of retrowrite. Created
-      using `git bundle create`.
+* (Included) fuzz-seeds.zip: Fuzzing seeds for all benchmarks. unzip
+before building the docker image.
+
+* (Included) afl-dyninst.patch: Build patch for afl-dyninst
+
+* (Included) afl-2.52b-patched.tar.gz: Patched version of AFL
+
+* (Required) clang-built.tar.gz: Prebuilt clang-8.0 binaries, required
+for afl-clang-fast (there seems to be a bug with afl-clang-fast and
+ubuntu included clang. It is recommended to compile LLVM yourself as
+release version for ubuntu does not seem to work).
+
+* (Required) retrowrite.bundle: Bundled version of retrowrite. Created
+using `git bundle create`.
 
 
 Once these files are in the docker directory, build using: 
