@@ -21,6 +21,10 @@ for afl-clang-fast (there seems to be a bug with afl-clang-fast and
 ubuntu included clang. It is recommended to compile LLVM yourself as
 release version for ubuntu does not seem to work).
 
+    - To build clang, follow [build steps](https://llvm.org/docs/CMake.html) from official documentation.
+      In the build step, configure to install to a local directory.
+    - Create a tar of the install directory
+
 * (Required) retrowrite.bundle: Bundled version of retrowrite. Created
 using `git bundle create`.
 
