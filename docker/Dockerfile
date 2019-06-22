@@ -36,6 +36,8 @@ RUN tar -xvf /afl-2.52b-patched.tar.gz \
     && cd $afl \
     && rm Makefile \
     && wget https://raw.githubusercontent.com/mirrorer/afl/master/Makefile \
+    && make clean \
+    && make clean -C llvm_mode \
     && make install \
     && make -C llvm_mode \
     && cd ./qemu_mode && ./build_qemu_support.sh && cd ../ \
