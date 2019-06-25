@@ -2,7 +2,7 @@
 
 Code repository for "Retrowrite: Statically Instrumenting COTS Binaries for
 Fuzzing and Sanitization" (to appear in *IEEE S&P'20*). Please refer to the
-paper for technical details: [paper]().
+paper for technical details: [paper](https://nebelwelt.net/publications/files/20Oakland.pdf).
 
 Retrowrite ships with two utilities to support binary rewriting:
 * **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
