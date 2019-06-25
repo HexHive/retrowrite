@@ -6,7 +6,7 @@ vars:
     time: 24h
     jobs: 8
     ncores: 8
-    queue: localhost
+    queue: localhost:11300
 
 targets:
     - file
