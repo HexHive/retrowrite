@@ -43,8 +43,8 @@ started with using retrowrite.
 
 `python3 -m rwtools.asan.asantool </path/to/binary/> </path/to/output/binary>`
 
-Note: Make sure that the binary is position-independent. This can be checked
-using `file` command (the output should say `ELF shared object`).
+Note: Make sure that the binary is position-independent and is not stripped.
+This can be checked using `file` command (the output should say `ELF shared object`).
 
 Example, create an instrumented version of `/bin/ls`:
 
@@ -53,7 +53,7 @@ Example, create an instrumented version of `/bin/ls`:
 This will generate an assembly (`.s`) file that can be assembled and linked
 using any compiler, example:
 
-`gcc ls-basan-instrumented.s -o ls-basan-instrumented`
+`gcc ls-basan-instrumented.s -lasan -o ls-basan-instrumented`
 
 #### b. Generate Symbolized Assembly
 
