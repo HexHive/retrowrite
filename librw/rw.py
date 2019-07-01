@@ -409,3 +409,4 @@ if __name__ == "__main__":
 
     rw = Rewriter(loader.container, args.outfile)
     rw.symbolize()
+    rw.dump()

@@ -1,4 +1,4 @@
-CC=clang
+CC=gcc
 CDIR=$(shell pwd)
 BUILD=$(CDIR)/build/
 
