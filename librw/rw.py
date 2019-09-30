@@ -6,6 +6,7 @@ from capstone.x86_const import X86_REG_RIP
 
 from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
+from elftools.elf.constants import SH_FLAGS
 
 
 class Rewriter():
@@ -38,7 +39,8 @@ class Rewriter():
         "__cxa_finalize",
     ]
 
-    DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
+    DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array",
+    ".gnu.linkonce.this_module", ".modinfo", ".rodata.str1.1", ".note.Linux"]
 
     def __init__(self, container, outfile):
         self.container = container
@@ -47,10 +49,12 @@ class Rewriter():
         for sec, section in self.container.sections.items():
             section.load()
 
-        for _, function in self.container.functions.items():
-            if function.name in Rewriter.GCC_FUNCTIONS:
-                continue
-            function.disasm()
+        for _, sec_functions in self.container.functions_by_section.items():
+            for _, function in sec_functions.items():
+                if function.name in Rewriter.GCC_FUNCTIONS:
+                    continue
+                print('Disassembling %s' % function.name)
+                function.disasm()
 
     def symbolize(self):
         symb = Symbolizer()
@@ -63,16 +67,18 @@ class Rewriter():
                 self.container.sections.items(), key=lambda x: x[1].base):
             results.append("%s" % (section))
 
-        results.append(".section .text")
-        results.append(".align 16")
 
-        for _, function in sorted(self.container.functions.items()):
-            if function.name in Rewriter.GCC_FUNCTIONS:
-                continue
-            results.append("\t.text\n%s" % (function))
+        for section_name, section_functions in self.container.functions_by_section.items():
+            results.append('.section %s,"ax",@progbits' % section_name)
+            results.append(".align 16")
 
-        with open(self.outfile, 'w') as outfd:
-            outfd.write("\n".join(results + ['']))
+            for _, function in sorted(section_functions.items()):
+                if function.name in Rewriter.GCC_FUNCTIONS:
+                    continue
+                results.append("%s" % function)
+
+            with open(self.outfile, 'w') as outfd:
+                outfd.write("\n".join(results + ['']))
 
 
 class Symbolizer():
@@ -85,59 +91,71 @@ class Symbolizer():
     # TODO: Replace generic call labels with function names instead
     def symbolize_text_section(self, container, context):
         # Symbolize using relocation information.
-        for rel in container.relocations[".text"]:
-            fn = container.function_of_address(rel['offset'])
-            if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
+        for section in container.loader.elffile.iter_sections():
+            # Only look for functions in sections that contain code
+            if (section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR) == 0:
                 continue
 
-            inst = fn.instruction_of_address(rel['offset'])
-            if not inst:
-                continue
+            print('Relocations for section %s: %s' % (section.name, container.relocations[section.name]))
 
-            # Fix up imports
-            if "@" in rel['name']:
-                suffix = ""
-                if rel['st_value'] == 0:
-                    suffix = "@PLT"
-
-                if len(inst.cs.operands) == 1:
-                    inst.op_str = "%s%s" % (rel['name'].split("@")[0], suffix)
-                else:
-                    # Figure out which argument needs to be
-                    # converted to a symbol.
-                    if suffix:
-                        suffix = "@PLT"
-                    mem_access, _ = inst.get_mem_access_op()
-                    if not mem_access:
-                        continue
-                    value = hex(mem_access.disp)
-                    inst.op_str = inst.op_str.replace(
-                        value, "%s%s" % (rel['name'].split("@")[0], suffix))
-            else:
-                mem_access, _ = inst.get_mem_access_op()
-                if not mem_access:
-                    # These are probably calls?
+            for rel in container.relocations[section.name]:
+                fn = container.function_of_address_and_section(rel['offset'], section.name)
+                if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
+                    print('No function')
                     continue
 
-                if (rel['type'] in [
-                        ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
-                        ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]
-                ]):
+                print('Symbolizing function ', fn.name)
 
-                    value = mem_access.disp
-                    ripbase = inst.address + inst.sz
-                    inst.op_str = inst.op_str.replace(
-                        hex(value), ".LC%x" % (ripbase + value))
-                    if ".rodata" in rel["name"]:
-                        self.bases.add(ripbase + value)
-                        self.pot_sw_bases[fn.start].add(ripbase + value)
+                inst = fn.instruction_of_address(rel['offset'])
+                if not inst:
+                    print('No instruction')
+                    continue
+
+                # Fix up imports
+                if "@" in rel['name']:
+                    suffix = ""
+                    if rel['st_value'] == 0:
+                        suffix = "@PLT"
+
+                    if len(inst.cs.operands) == 1:
+                        inst.op_str = "%s%s" % (rel['name'].split("@")[0], suffix)
+                    else:
+                        # Figure out which argument needs to be
+                        # converted to a symbol.
+                        if suffix:
+                            suffix = "@PLT"
+                        mem_access, _ = inst.get_mem_access_op()
+                        if not mem_access:
+                            continue
+                        value = hex(mem_access.disp)
+                        inst.op_str = inst.op_str.replace(
+                            value, "%s%s" % (rel['name'].split("@")[0], suffix))
                 else:
-                    print("[*] Possible incorrect handling of relocation!")
-                    value = mem_access.disp
-                    inst.op_str = inst.op_str.replace(
-                        hex(value), ".LC%x" % (rel['st_value']))
+                    mem_access, _ = inst.get_mem_access_op()
+                    if not mem_access:
+                        # Function call
+                        inst.op_str = rel['name']
+                        continue
 
-            self.symbolized.add(inst.address)
+                    if (rel['type'] in [
+                            ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
+                            ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]
+                    ]):
+
+                        value = mem_access.disp
+                        ripbase = inst.address + inst.sz
+                        inst.op_str = inst.op_str.replace(
+                            hex(value), ".LC%x" % (ripbase + value))
+                        if ".rodata" in rel["name"]:
+                            self.bases.add(ripbase + value)
+                            self.pot_sw_bases[fn.start].add(ripbase + value)
+                    else:
+                        print("[*] Possible incorrect handling of relocation! %s" % inst)
+                        value = mem_access.disp
+                        inst.op_str = inst.op_str.replace(
+                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value']))
+
+                self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
         # Symbolize remaining memory accesses
@@ -350,7 +368,7 @@ class Symbolizer():
             section.replace(rel['offset'], 4, swlbl)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             value = rel['st_value'] + rel['addend']
-            label = ".LC%x" % value
+            label = ".LC%s%x" % (rel['target_section'].name, value)
             section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
             value = rel['addend']
@@ -380,6 +398,10 @@ class Symbolizer():
                     rel['offset']))
 
 
+def is_data_section(sname):
+    pass
+
+
 if __name__ == "__main__":
     from .loader import Loader
     from .analysis import register
@@ -394,6 +416,7 @@ if __name__ == "__main__":
     loader = Loader(args.bin)
 
     flist = loader.flist_from_symtab()
+    print('Function list: ', flist)
     loader.load_functions(flist)
 
     slist = loader.slist_from_symtab()

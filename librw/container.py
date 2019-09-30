@@ -23,6 +23,7 @@ class SzPfx():
 class Container():
     def __init__(self):
         self.functions = dict()
+        self.functions_by_section = defaultdict(dict)
         self.function_names = set()
         self.sections = dict()
         self.globals = None
@@ -36,38 +37,25 @@ class Container():
         self.gotplt_sz = None
         self.gotplt_entries = list()
 
-    def add_function(self, function):
+    def add_function(self, function, section):
         if function.name in self.function_names:
             function.name = "%s_%x" % (function.name, function.start)
         self.functions[function.start] = function
         self.function_names.add(function.name)
+        self.functions_by_section[section.name][function.start] = function
 
     def add_section(self, section):
         self.sections[section.name] = section
 
     def add_globals(self, globals):
         self.globals = globals
-        done = set()
+        for gobj in globals:
+            self.sections[gobj['section'].name].add_global(gobj['offset'], gobj['name'], gobj['sz'])
 
-        for location, gobjs in globals.items():
-            found = None
-            for sec, section in self.sections.items():
-                if section.base <= location < section.base + section.sz:
-                    found = sec
-                    break
-
-            if not found:
-                continue
-
-            for gobj in gobjs:
-                if gobj['name'] in done:
-                    continue
-                self.sections[found].add_global(location, gobj['name'],
-                                                gobj['sz'])
-                done.add(gobj['name'])
 
     def is_target_gotplt(self, target):
-        assert self.gotplt_base and self.gotplt_sz
+        if not self.gotplt_base or not self.gotplt_sz:
+            return False
 
         if not (self.gotplt_base <= target <
                 self.gotplt_base + self.gotplt_sz):
@@ -110,6 +98,15 @@ class Container():
                 return function
         return None
 
+    def function_of_address_and_section(self, offset, section_name):
+        for _, function in self.functions_by_section[section_name].items():
+            if function.start <= offset < function.start + function.sz:
+                return function
+        print(section_name)
+        # print(self.functions_by_section[section_name])
+        return None
+
+
     def add_plt_information(self, relocinfo):
         plt_base = self.plt_base
         for idx, relocation in enumerate(relocinfo, 1):
@@ -121,9 +118,10 @@ class Container():
 
 
 class Function():
-    def __init__(self, name, start, sz, bytes, bind="STB_LOCAL"):
+    def __init__(self, name, section, start, sz, bytes, bind="STB_LOCAL"):
         self.name = name
         self.cache = list()
+        self.section = section
         self.start = start
         self.sz = sz
         self.bytes = bytes
@@ -188,10 +186,10 @@ class Function():
                 continue
 
             if instruction.address in self.bbstarts:
-                results.append(".L%x:" % (instruction.address))
-                results.append(".LC%x:" % (instruction.address))
+                results.append(".L%s%x:" % (self.section.name, instruction.address))
+                results.append(".LC%s%x:" % (self.section.name, instruction.address))
             else:
-                results.append(".LC%x:" % (instruction.address))
+                results.append(".LC%s%x:" % (self.section.name, instruction.address))
 
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
@@ -345,12 +343,17 @@ class DataSection():
             return ""
 
         results = []
-        results.append(".section {}".format(self.name))
+        # fixme: this is a hack, should check section flags in the original binary
+        if '.rodata' in self.name or self.name == '.note.Linux':
+            results.append('.section {},"a",@progbits'.format(self.name))
+        else:
+            results.append('.section {},"aw",@progbits'.format(self.name))
 
         if self.name != ".fini_array":
             results.append(".align {}".format(self.align))
 
-        location = self.base
+        # location = self.base
+        location = 0
         valid_cells = False
 
         for cell in self.cache:
@@ -373,7 +376,7 @@ class DataSection():
                     results.append(symdef)
                     results.append(lblstr)
 
-            results.append(".LC%x:" % (location))
+            results.append(".LC%s%x:" % (self.name, location))
             location += cell.sz
 
             for before in cell.before:

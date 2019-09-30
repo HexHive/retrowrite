@@ -6,6 +6,8 @@ from collections import defaultdict
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
+from elftools.elf.constants import SH_FLAGS
+from elftools.elf.enums import ENUM_E_TYPE
 
 from .container import Container, Function, DataSection
 from .disasm import disasm_bytes
@@ -18,16 +20,15 @@ class Loader():
         self.container = Container()
 
     def load_functions(self, fnlist):
-        section = self.elffile.get_section_by_name(".text")
-        data = section.data()
-        base = section['sh_addr']
-        for faddr, fvalue in fnlist.items():
-            section_offset = faddr - base
-            bytes = data[section_offset:section_offset + fvalue["sz"]]
+        for fn in fnlist:
+            section = fn['section']
+            bytes = section.data()[fn['offset']:fn['offset'] + fn['sz']]
+            function = Function(fn['name'], section, fn['offset'],
+                fn['sz'], bytes, fn['bind'])
 
-            function = Function(fvalue["name"], faddr, fvalue["sz"], bytes,
-                                fvalue["bind"])
-            self.container.add_function(function)
+            print('Added function ', fn['name'])
+
+            self.container.add_function(function, section)
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
         for sec in [sec for sec in seclist if section_filter(sec)]:
@@ -51,6 +52,7 @@ class Loader():
             ds = DataSection(sec, sval["base"], sval["sz"], bytes,
                              sval['align'])
 
+            print('Loaded data section %s' % sec)
             self.container.add_section(ds)
 
         # Find if there is a plt section
@@ -112,6 +114,11 @@ class Loader():
                     'type': rel['r_info_type'],
                 }
 
+                if symbol and symbol['st_shndx'] != 'SHN_UNDEF':
+                    print(symbol['st_shndx'])
+                    reloc_i['target_section'] = self.elffile.get_section(symbol['st_shndx'])
+
+
                 relocs[section.name].append(reloc_i)
 
         return relocs
@@ -122,7 +129,7 @@ class Loader():
             if isinstance(sec, SymbolTableSection)
         ]
 
-        function_list = dict()
+        function_list = []
 
         for section in symbol_tables:
             if not isinstance(section, SymbolTableSection):
@@ -137,12 +144,24 @@ class Loader():
 
                 if (symbol['st_info']['type'] == 'STT_FUNC'
                         and symbol['st_shndx'] != 'SHN_UNDEF'):
-                    function_list[symbol['st_value']] = {
+
+                    fn_section = self.elffile.get_section(symbol['st_shndx'])
+
+                    if self.elffile['e_type'] == ENUM_E_TYPE['ET_REL']:
+                        fn_offset = symbol['st_value']
+                    else:
+                        fn_offset = symbol['st_value'] - fn_section['sh_addr']
+
+                    print('Adding function from symtable: ', symbol.name, fn_offset)
+
+                    function_list.append({
                         'name': symbol.name,
                         'sz': symbol['st_size'],
                         'visibility': symbol['st_other']['visibility'],
                         'bind': symbol['st_info']['bind'],
-                    }
+                        'section': fn_section,
+                        'offset': fn_offset,
+                    })
 
         return function_list
 
@@ -167,7 +186,7 @@ class Loader():
             if isinstance(sec, SymbolTableSection)
         ]
 
-        global_list = defaultdict(list)
+        global_list = []
 
         for section in symbol_tables:
             if not isinstance(section, SymbolTableSection):
@@ -187,11 +206,19 @@ class Loader():
 
                 if (symbol['st_info']['type'] == 'STT_OBJECT'
                         and symbol['st_shndx'] != 'SHN_UNDEF'):
-                    global_list[symbol['st_value']].append({
-                        'name':
-                        "{}_{:x}".format(symbol.name, symbol['st_value']),
-                        'sz':
-                        symbol['st_size'],
+
+                    global_section = self.elffile.get_section(symbol['st_shndx'])
+
+                    if self.elffile['e_type'] == ENUM_E_TYPE['ET_REL']:
+                        global_offset = symbol['st_value']
+                    else:
+                        global_offset = symbol['st_value'] - global_section['sh_addr']
+
+                    global_list.append({
+                        'name': "{}_{:x}".format(symbol.name, symbol['st_value']),
+                        'sz': symbol['st_size'],
+                        'section': global_section,
+                        'offset': global_offset,
                     })
 
         return global_list
