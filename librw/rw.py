@@ -150,10 +150,11 @@ class Symbolizer():
                             self.bases.add(ripbase + value)
                             self.pot_sw_bases[fn.start].add(ripbase + value)
                     else:
+                        # R_X86_64_32S which is used for lea reg, [address] falls under this
                         print("[*] Possible incorrect handling of relocation! %s" % inst)
                         value = mem_access.disp
                         inst.op_str = inst.op_str.replace(
-                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value']))
+                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend']))
 
                 self.symbolized.add(inst.address)
 
