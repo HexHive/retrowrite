@@ -2,6 +2,7 @@ from collections import defaultdict
 import struct
 
 from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
+from elftools.elf.constants import SH_FLAGS
 
 from . import disasm
 
@@ -187,9 +188,11 @@ class Function():
 
             if instruction.address in self.bbstarts:
                 results.append(".L%s%x:" % (self.section.name, instruction.address))
-                results.append(".LC%s%x:" % (self.section.name, instruction.address))
+                # GAS doesn't like '-' in section names
+                results.append(".LC%s%x:" % (self.section.name.replace('-', '_'), instruction.address))
             else:
-                results.append(".LC%s%x:" % (self.section.name, instruction.address))
+                # Same as above
+                results.append(".LC%s%x:" % (self.section.name.replace('-', '_'), instruction.address))
 
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
@@ -279,7 +282,7 @@ class InstrumentedInstruction():
 
 
 class DataSection():
-    def __init__(self, name, base, sz, bytes, align=16):
+    def __init__(self, name, base, sz, bytes, flags, type, align=16):
         self.name = name
         self.cache = list()
         self.base = base
@@ -287,6 +290,8 @@ class DataSection():
         self.bytes = bytes
         self.relocations = list()
         self.align = align
+        self.flags = flags
+        self.type = type
         self.named_globals = defaultdict(list)
 
     def load(self):
@@ -343,11 +348,16 @@ class DataSection():
             return ""
 
         results = []
-        # fixme: this is a hack, should check section flags in the original binary
-        if '.rodata' in self.name or self.name == '.note.Linux':
-            results.append('.section {},"a",@progbits'.format(self.name))
-        else:
-            results.append('.section {},"aw",@progbits'.format(self.name))
+
+        flags = ''
+        if (self.flags & SH_FLAGS.SHF_ALLOC) != 0:
+            flags += 'a'
+        if (self.flags & SH_FLAGS.SHF_WRITE) != 0:
+            flags += 'w'
+        if (self.flags & SH_FLAGS.SHF_EXECINSTR) != 0:
+            flags += 'x'
+
+        results.append('.section {},"{}",@{}'.format(self.name, flags, self.type[4:].lower()))
 
         if self.name != ".fini_array":
             results.append(".align {}".format(self.align))
@@ -376,7 +386,8 @@ class DataSection():
                     results.append(symdef)
                     results.append(lblstr)
 
-            results.append(".LC%s%x:" % (self.name, location))
+            # GAS doesn't like '-' in section names
+            results.append(".LC%s%x:" % (self.name.replace('-', '_'), location))
             location += cell.sz
 
             for before in cell.before:

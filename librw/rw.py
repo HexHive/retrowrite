@@ -39,16 +39,15 @@ class Rewriter():
         "__cxa_finalize",
     ]
 
-    DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array",
-    ".gnu.linkonce.this_module", ".modinfo", ".rodata.str1.1", ".note.Linux"]
-
     def __init__(self, container, outfile):
         self.container = container
         self.outfile = outfile
 
+        # Load data sections
         for sec, section in self.container.sections.items():
             section.load()
 
+        # Disassemble all functions
         for _, sec_functions in self.container.functions_by_section.items():
             for _, function in sec_functions.items():
                 if function.name in Rewriter.GCC_FUNCTIONS:
@@ -63,11 +62,14 @@ class Rewriter():
 
     def dump(self):
         results = list()
+
+        # Emit rewritten data sections
         for sec, section in sorted(
                 self.container.sections.items(), key=lambda x: x[1].base):
             results.append("%s" % (section))
 
 
+        # Emit rewritten functions
         for section_name, section_functions in self.container.functions_by_section.items():
             results.append('.section %s,"ax",@progbits' % section_name)
             results.append(".align 16")
@@ -77,8 +79,9 @@ class Rewriter():
                     continue
                 results.append("%s" % function)
 
-            with open(self.outfile, 'w') as outfd:
-                outfd.write("\n".join(results + ['']))
+        # Write the final output
+        with open(self.outfile, 'w') as outfd:
+            outfd.write("\n".join(results + ['']))
 
 
 class Symbolizer():
@@ -96,22 +99,21 @@ class Symbolizer():
             if (section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR) == 0:
                 continue
 
-            print('Relocations for section %s: %s' % (section.name, container.relocations[section.name]))
+            print('Symbolizing functions in section %s with relocations %s' % (section.name, container.relocations[section.name]))
 
             for rel in container.relocations[section.name]:
                 fn = container.function_of_address_and_section(rel['offset'], section.name)
                 if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
-                    print('No function')
+                    # Relocation doesn't point into a function
                     continue
-
-                print('Symbolizing function ', fn.name)
 
                 inst = fn.instruction_of_address(rel['offset'])
                 if not inst:
-                    print('No instruction')
+                    # Relocation doesn't point to an instruction
                     continue
 
-                # Fix up imports
+                # Fix up imports. If the symbol pointed to by the relocation
+                # contains '@', it's imported
                 if "@" in rel['name']:
                     suffix = ""
                     if rel['st_value'] == 0:
@@ -134,7 +136,10 @@ class Symbolizer():
                     mem_access, _ = inst.get_mem_access_op()
                     if not mem_access:
                         # Function call
-                        inst.op_str = rel['name']
+                        if inst.mnemonic.startswith('call'):
+                            inst.op_str = rel['name']
+                        else:
+                            inst.op_str = inst.op_str.replace('0', '.LC%s%x' % (rel['target_section'].name, rel['st_value'] + rel['addend']))
                         continue
 
                     if (rel['type'] in [
@@ -149,8 +154,14 @@ class Symbolizer():
                         if ".rodata" in rel["name"]:
                             self.bases.add(ripbase + value)
                             self.pot_sw_bases[fn.start].add(ripbase + value)
+                    elif rel['type'] == ENUM_RELOC_TYPE_x64['R_X86_64_32S']:
+                        # R_X86_64_32S is used for lea reg, [address] in the
+                        # kernel module when the address is a label in a
+                        # different section
+                        value = mem_access.disp
+                        inst.op_str = inst.op_str.replace(
+                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend']))
                     else:
-                        # R_X86_64_32S which is used for lea reg, [address] falls under this
                         print("[*] Possible incorrect handling of relocation! %s" % inst)
                         value = mem_access.disp
                         inst.op_str = inst.op_str.replace(
@@ -222,7 +233,7 @@ class Symbolizer():
                             if not found:
                                 print("[x] Missed GOT entry!")
                         else:
-                            print("[x] Missed call target: %x" % (target))
+                            print("[x] Missed call target: %x in section %s" % (target, function.section.name))
 
                     if is_jmp:
                         if target in addr_to_idx:
@@ -399,8 +410,10 @@ class Symbolizer():
                     rel['offset']))
 
 
-def is_data_section(sname):
-    pass
+def is_data_section(s):
+    return ((s['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and
+        (s['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 and
+        s['sz'] > 0)
 
 
 if __name__ == "__main__":
@@ -417,11 +430,10 @@ if __name__ == "__main__":
     loader = Loader(args.bin)
 
     flist = loader.flist_from_symtab()
-    print('Function list: ', flist)
     loader.load_functions(flist)
 
     slist = loader.slist_from_symtab()
-    loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
+    loader.load_data_sections(slist, is_data_section)
 
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)

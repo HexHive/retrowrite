@@ -26,12 +26,12 @@ class Loader():
             function = Function(fn['name'], section, fn['offset'],
                 fn['sz'], bytes, fn['bind'])
 
-            print('Added function ', fn['name'])
+            print('Added function %s' % fn['name'])
 
             self.container.add_function(function, section)
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
-        for sec in [sec for sec in seclist if section_filter(sec)]:
+        for sec in [sname for sname, sval in seclist.items() if section_filter(sval)]:
             sval = seclist[sec]
             section = self.elffile.get_section_by_name(sec)
             data = section.data()
@@ -49,8 +49,8 @@ class Loader():
                         [0x0 for _ in range(0, sval['sz'] - len(more))])
 
             bytes = more
-            ds = DataSection(sec, sval["base"], sval["sz"], bytes,
-                             sval['align'])
+            ds = DataSection(sec, sval["base"], sval["sz"], bytes, sval['flags'],
+                             sval['type'], sval['align'])
 
             print('Loaded data section %s' % sec)
             self.container.add_section(ds)
@@ -76,10 +76,10 @@ class Loader():
                 self.container.add_plt_information(relocations)
 
             if section in self.container.sections:
+                # Data section relocation
                 self.container.sections[section].add_relocations(relocations)
             else:
-                print("[*] Relocations for a section that's not loaded:",
-                      reloc_section)
+                # Code section relocation
                 self.container.add_relocations(section, relocations)
 
     def reloc_list_from_symtab(self):
@@ -115,7 +115,6 @@ class Loader():
                 }
 
                 if symbol and symbol['st_shndx'] != 'SHN_UNDEF':
-                    print(symbol['st_shndx'])
                     reloc_i['target_section'] = self.elffile.get_section(symbol['st_shndx'])
 
 
@@ -152,8 +151,6 @@ class Loader():
                     else:
                         fn_offset = symbol['st_value'] - fn_section['sh_addr']
 
-                    print('Adding function from symtable: ', symbol.name, fn_offset)
-
                     function_list.append({
                         'name': symbol.name,
                         'sz': symbol['st_size'],
@@ -173,6 +170,8 @@ class Loader():
                 'sz': section['sh_size'],
                 'offset': section['sh_offset'],
                 'align': section['sh_addralign'],
+                'flags': section['sh_flags'],
+                'type': section['sh_type'],
             }
 
         return sections
