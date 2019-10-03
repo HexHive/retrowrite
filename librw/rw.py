@@ -149,8 +149,15 @@ class Symbolizer():
 
                         value = mem_access.disp
                         ripbase = inst.address + inst.sz
-                        inst.op_str = inst.op_str.replace(
-                            hex(value), ".LC%x" % (ripbase + value))
+                        # problem: sometimes the offsets are represented as 0(%register), so trying to
+                        # search and replace for 0x0 won't work
+                        if '0x' in inst.op_str:
+                            inst.op_str = inst.op_str.replace(
+                                hex(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend'] + ripbase - rel['offset'] + value))
+                        else:
+                            inst.op_str = inst.op_str.replace(
+                                str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend'] + ripbase - rel['offset'] + value))
+
                         if ".rodata" in rel["name"]:
                             self.bases.add(ripbase + value)
                             self.pot_sw_bases[fn.start].add(ripbase + value)
