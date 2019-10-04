@@ -63,21 +63,24 @@ class Rewriter():
     def dump(self):
         results = list()
 
-        # Emit rewritten data sections
-        for sec, section in sorted(
-                self.container.sections.items(), key=lambda x: x[1].base):
-            results.append("%s" % (section))
-
-
         # Emit rewritten functions
         for section_name, section_functions in self.container.functions_by_section.items():
             results.append('.section %s,"ax",@progbits' % section_name)
             results.append(".align 16")
 
             for _, function in sorted(section_functions.items()):
+                if function.name == 'init_module':
+                    pass
+                    # import pdb; pdb.set_trace()
+
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
                 results.append("%s" % function)
+
+        # Emit rewritten data sections
+        for sec, section in sorted(
+                self.container.sections.items(), key=lambda x: x[1].base):
+            results.append("%s" % (section))
 
         # Write the final output
         with open(self.outfile, 'w') as outfd:
@@ -89,6 +92,61 @@ class Symbolizer():
         self.bases = set()
         self.pot_sw_bases = defaultdict(set)
         self.symbolized = set()
+
+    def apply_code_relocation(self, instruction, relocation):
+        if relocation['target_section'] is None:
+            # This relocation refers to an imported symbol
+            relocation_target = relocation['name']
+        else:
+            if (relocation['type'] in [
+                ENUM_RELOC_TYPE_x64['R_X86_64_64'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_GOT32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_32S'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_16'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_8'],
+             ]):
+                section_offset = relocation['st_value'] + relocation['addend']
+            elif (relocation['type'] in [
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC64'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PLT32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC16'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC8'],
+            ]):
+                section_offset = relocation['st_value'] + relocation['addend'] + \
+                    instruction.address + instruction.sz - relocation['offset']
+            else:
+                assert False, 'Unknown relocation type'
+
+            # The target symbol is in this binary
+            relocation_target = '.LC{}{:x}'.format(relocation['target_section'].name,
+                section_offset)
+
+        rel_offset_inside_instruction = relocation['offset'] - instruction.address
+
+        op_imm, op_imm_idx = instruction.get_imm_op()
+        op_mem, op_mem_idx = instruction.get_mem_access_op()
+
+        # We cannot just replace the value of the field with the target (e.g.
+        # '0' -> .LC.text.0) because what happens if we have movq $0, 0(%rdi)?
+        # both would be replaced which is wrong
+        if op_imm is not None and rel_offset_inside_instruction == instruction.cs.imm_offset:
+            # Relocation writes to immediate
+            is_jmp = CS_GRP_JUMP in instruction.cs.groups
+            is_call = CS_GRP_CALL in instruction.cs.groups
+            if is_jmp or is_call:
+                # Direct branch targets are not prefixed with $
+                instruction.op_str = relocation_target
+            else:
+                instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target)
+        elif op_mem is not None and rel_offset_inside_instruction == instruction.cs.disp_offset:
+            # Relocation writes to displacement
+            # import pdb; pdb.set_trace()
+            instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), relocation_target + '(')
+        else:
+            assert False, 'Relocation doesn\'t write to disp or imm'
+
 
     # TODO: Use named symbols instead of generic labels when possible.
     # TODO: Replace generic call labels with function names instead
@@ -112,68 +170,7 @@ class Symbolizer():
                     # Relocation doesn't point to an instruction
                     continue
 
-                # Fix up imports. If the symbol pointed to by the relocation
-                # contains '@', it's imported
-                if "@" in rel['name']:
-                    suffix = ""
-                    if rel['st_value'] == 0:
-                        suffix = "@PLT"
-
-                    if len(inst.cs.operands) == 1:
-                        inst.op_str = "%s%s" % (rel['name'].split("@")[0], suffix)
-                    else:
-                        # Figure out which argument needs to be
-                        # converted to a symbol.
-                        if suffix:
-                            suffix = "@PLT"
-                        mem_access, _ = inst.get_mem_access_op()
-                        if not mem_access:
-                            continue
-                        value = hex(mem_access.disp)
-                        inst.op_str = inst.op_str.replace(
-                            value, "%s%s" % (rel['name'].split("@")[0], suffix))
-                else:
-                    mem_access, _ = inst.get_mem_access_op()
-                    if not mem_access:
-                        # Function call
-                        if inst.mnemonic.startswith('call'):
-                            inst.op_str = rel['name']
-                        else:
-                            inst.op_str = inst.op_str.replace('0', '.LC%s%x' % (rel['target_section'].name, rel['st_value'] + rel['addend']))
-                        continue
-
-                    if (rel['type'] in [
-                            ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"],
-                            ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]
-                    ]):
-
-                        value = mem_access.disp
-                        ripbase = inst.address + inst.sz
-                        # problem: sometimes the offsets are represented as 0(%register), so trying to
-                        # search and replace for 0x0 won't work
-                        if '0x' in inst.op_str:
-                            inst.op_str = inst.op_str.replace(
-                                hex(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend'] + ripbase - rel['offset'] + value))
-                        else:
-                            inst.op_str = inst.op_str.replace(
-                                str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend'] + ripbase - rel['offset'] + value))
-
-                        if ".rodata" in rel["name"]:
-                            self.bases.add(ripbase + value)
-                            self.pot_sw_bases[fn.start].add(ripbase + value)
-                    elif rel['type'] == ENUM_RELOC_TYPE_x64['R_X86_64_32S']:
-                        # R_X86_64_32S is used for lea reg, [address] in the
-                        # kernel module when the address is a label in a
-                        # different section
-                        value = mem_access.disp
-                        inst.op_str = inst.op_str.replace(
-                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend']))
-                    else:
-                        print("[*] Possible incorrect handling of relocation! %s" % inst)
-                        value = mem_access.disp
-                        inst.op_str = inst.op_str.replace(
-                            str(value), ".LC%s%x" % (rel['target_section'].name, rel['st_value'] + rel['addend']))
-
+                self.apply_code_relocation(inst, rel)
                 self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
@@ -188,6 +185,9 @@ class Symbolizer():
                 addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
+                if instruction.address in self.symbolized:
+                    continue
+
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
 

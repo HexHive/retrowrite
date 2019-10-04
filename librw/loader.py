@@ -116,6 +116,8 @@ class Loader():
 
                 if symbol and symbol['st_shndx'] != 'SHN_UNDEF':
                     reloc_i['target_section'] = self.elffile.get_section(symbol['st_shndx'])
+                else:
+                    reloc_i['target_section'] = None
 
 
                 relocs[section.name].append(reloc_i)

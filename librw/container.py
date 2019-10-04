@@ -241,6 +241,12 @@ class InstructionWrapper():
                 return (op.mem, idx)
         return (None, None)
 
+    def get_imm_op(self):
+        for idx, op in enumerate(self.cs.operands):
+            if op.type == CS_OP_IMM:
+                return (op.imm, idx)
+        return (None, None)
+
     def reg_reads(self):
         # Handle nop
         if self.mnemonic.startswith("nop"):
