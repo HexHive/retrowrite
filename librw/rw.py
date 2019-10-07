@@ -52,7 +52,7 @@ class Rewriter():
             for _, function in sec_functions.items():
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
-                print('Disassembling %s' % function.name)
+                # print('Disassembling %s' % function.name)
                 function.disasm()
 
     def symbolize(self):
@@ -69,10 +69,6 @@ class Rewriter():
             results.append(".align 16")
 
             for _, function in sorted(section_functions.items()):
-                if function.name == 'init_module':
-                    pass
-                    # import pdb; pdb.set_trace()
-
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
                 results.append("%s" % function)
@@ -157,7 +153,7 @@ class Symbolizer():
             if (section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR) == 0:
                 continue
 
-            print('Symbolizing functions in section %s with relocations %s' % (section.name, container.relocations[section.name]))
+            # print('Symbolizing functions in section %s with relocations %s' % (section.name, container.relocations[section.name]))
 
             for rel in container.relocations[section.name]:
                 fn = container.function_of_address_and_section(rel['offset'], section.name)
@@ -171,7 +167,7 @@ class Symbolizer():
                     continue
 
                 self.apply_code_relocation(inst, rel)
-                self.symbolized.add(inst.address)
+                self.symbolized.add((section.name, inst.address))
 
         self.symbolize_cf_transfer(container, context)
         # Symbolize remaining memory accesses
@@ -185,8 +181,6 @@ class Symbolizer():
                 addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
-                if instruction.address in self.symbolized:
-                    continue
 
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
@@ -220,21 +214,27 @@ class Symbolizer():
 
                 if instruction.cs.operands[0].type == CS_OP_IMM:
                     target = instruction.cs.operands[0].imm
-                    # Check if the target is in .text section.
-                    if container.is_in_section(".text", target):
+                    # Check if the target is in the same section as the current function
+                    if container.is_in_section(function.section.name, target):
                         function.bbstarts.add(target)
-                        instruction.op_str = ".L%x" % (target)
+
+                        # If the control flow transfer was not already
+                        # symbolized because of relocations, do it
+                        if (function.section.name, instruction.address) not in self.symbolized:
+                            instruction.op_str = ".L%s%x" % (function.section.name, target)
                     elif target in container.plt:
-                        instruction.op_str = "{}@PLT".format(
-                            container.plt[target])
+                        if (function.section.name, instruction.address) not in self.symbolized:
+                            instruction.op_str = "{}@PLT".format(
+                                container.plt[target])
                     else:
                         gotent = container.is_target_gotplt(target)
                         if gotent:
                             found = False
                             for relocation in container.relocations[".dyn"]:
                                 if gotent == relocation['offset']:
-                                    instruction.op_str = "{}@PLT".format(
-                                        relocation['name'])
+                                    if (funciton.section.name, instruction.address) not in self.symbolized:
+                                        instruction.op_str = "{}@PLT".format(
+                                            relocation['name'])
                                     found = True
                                     break
                             if not found:
@@ -368,37 +368,62 @@ class Symbolizer():
                                 container, target)
                             inst.op_str = inst.op_str.replace(
                                 hex(value), "%d+.LC%x" % (adjust, target))
-                            print("[*] Adjusted: %x -- %d+.LC%x" %
+                            print("[*] Adjusted: %x --8%d+.LC%x" %
                                   (inst.address, adjust, target))
 
-                    if container.is_in_section(".rodata", target):
-                        self.pot_sw_bases[function.start].add(target)
+                    # if container.is_in_section(".rodata", target):
+                    #     self.pot_sw_bases[function.start].add(target)
 
     def _handle_relocation(self, container, section, rel):
         reloc_type = rel['type']
-        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
-            swbase = None
-            for base in sorted(self.bases):
-                if base > rel['offset']:
-                    break
-                swbase = base
-            value = rel['st_value'] + rel['addend'] - (rel['offset'] - swbase)
-            swlbl = ".LC%x-.LC%x" % (value, swbase)
-            section.replace(rel['offset'], 4, swlbl)
+        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
+            # NOP
+            return
+
+        relocation_target = ''
+        relocation_size = 0
+
+        if rel['target_section'] is None:
+            # This relocation refers to an imported symbol
+            relocation_target = rel['name']
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
+            # import pdb; pdb.set_trace()
+            # swbase = None
+            # for base in sorted(self.bases):
+            #     if base > rel['offset']:
+            #         break
+            #     swbase = base
+            # value = rel['st_value'] + rel['addend'] - (rel['offset'] - swbase)
+            value = rel['st_value'] + rel['addend']
+            # swlbl = ".LC%x-.LC%x" % (value, swbase)
+            # section.replace(rel['offset'], 4, swlbl)
+            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_size = 4
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
+            value = rel['st_value'] + rel['addend']
+            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_size = 8
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             value = rel['st_value'] + rel['addend']
-            label = ".LC%s%x" % (rel['target_section'].name, value)
-            section.replace(rel['offset'], 8, label)
+            # label = ".LC%s%x" % (rel['target_section'].name, value)
+            # section.replace(rel['offset'], 8, label)
+            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_size = 8
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
             value = rel['addend']
-            label = ".LC%x" % value
-            section.replace(rel['offset'], 8, label)
-        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
-            # NOP
-            pass
+            # label = ".LC%x" % value
+            # section.replace(rel['offset'], 8, label)
+            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_size = 8
         else:
             print("[*] Unhandled relocation {}".format(
                 describe_reloc_type(reloc_type, container.loader.elffile)))
+
+        if '-' in relocation_target:
+            import pdb; pdb.set_trace()
+
+        if relocation_size:
+            section.replace(rel['offset'], relocation_size, relocation_target)
 
     def symbolize_data_sections(self, container, context=None):
         # Section specific relocation
