@@ -3,3 +3,12 @@
 testbins/build/
 retrowrite.wiki/
 __pycache__/
+# Sublime Text files
+*.sublime-project
+*.sublime-workspace
+# Kernel modules
+*.ko
+# Disassembled programs
+*.S
+# Virtual environment
+retro/
