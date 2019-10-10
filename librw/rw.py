@@ -397,12 +397,16 @@ class Symbolizer():
             value = rel['st_value'] + rel['addend']
             # swlbl = ".LC%x-.LC%x" % (value, swbase)
             # section.replace(rel['offset'], 4, swlbl)
-            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_target = '.LC%s%x - .' % (rel['target_section'].name, value)
             relocation_size = 4
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
             value = rel['st_value'] + rel['addend']
-            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_target = '.LC%s%x - .' % (rel['target_section'].name, value)
             relocation_size = 8
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_32S"]:
+            value = rel['st_value'] + rel['addend']
+            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_size = 4
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             value = rel['st_value'] + rel['addend']
             # label = ".LC%s%x" % (rel['target_section'].name, value)
@@ -418,8 +422,6 @@ class Symbolizer():
         else:
             print("[*] Unhandled relocation {}".format(
                 describe_reloc_type(reloc_type, container.loader.elffile)))
-
-        if '-' in relocation_target:
             import pdb; pdb.set_trace()
 
         if relocation_size:
@@ -442,10 +444,18 @@ class Symbolizer():
                     rel['offset']))
 
 
-def is_data_section(s):
-    return ((s['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and
-        (s['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 and
-        s['sz'] > 0)
+def is_data_section(sname, sval, container):
+    # A data section should be present in memory (SHF_ALLOC), and its size should
+    # be greater than 0. There are some code sections in kernel modules that
+    # only contain short trampolines and don't have any function relocations
+    # in them. The easiest way to deal with them for now is to treat them as
+    # data sections but this is a bit of a hack because they could contain
+    # references that need to be symbolized
+    return (
+        (sval['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and (
+            (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 or sname not in container.functions_by_section
+        ) and sval['sz'] > 0
+    )
 
 
 if __name__ == "__main__":

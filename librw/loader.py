@@ -30,8 +30,8 @@ class Loader():
 
             self.container.add_function(function, section)
 
-    def load_data_sections(self, seclist, section_filter=lambda x: True):
-        for sec in [sname for sname, sval in seclist.items() if section_filter(sval)]:
+    def load_data_sections(self, seclist, section_filter=lambda x, y, z: True):
+        for sec in [sname for sname, sval in seclist.items() if section_filter(sname, sval, self.container)]:
             sval = seclist[sec]
             section = self.elffile.get_section_by_name(sec)
             data = section.data()
