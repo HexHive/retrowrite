@@ -84,6 +84,20 @@ class Rewriter():
 
 
 class Symbolizer():
+    RELOCATION_SIZES = {
+        ENUM_RELOC_TYPE_x64['R_X86_64_64']: 8,
+        ENUM_RELOC_TYPE_x64['R_X86_64_GOT32']: 4,
+        ENUM_RELOC_TYPE_x64['R_X86_64_32']: 4,
+        ENUM_RELOC_TYPE_x64['R_X86_64_32S']: 4,
+        ENUM_RELOC_TYPE_x64['R_X86_64_16']: 2,
+        ENUM_RELOC_TYPE_x64['R_X86_64_8']: 2,
+        ENUM_RELOC_TYPE_x64['R_X86_64_PC64']: 8,
+        ENUM_RELOC_TYPE_x64['R_X86_64_PC32']: 4,
+        ENUM_RELOC_TYPE_x64['R_X86_64_PLT32']: 4,
+        ENUM_RELOC_TYPE_x64['R_X86_64_PC16']: 2,
+        ENUM_RELOC_TYPE_x64['R_X86_64_PC8']: 1,
+    }
+
     def __init__(self):
         self.bases = set()
         self.pot_sw_bases = defaultdict(set)
@@ -92,7 +106,8 @@ class Symbolizer():
     def apply_code_relocation(self, instruction, relocation):
         if relocation['target_section'] is None:
             # This relocation refers to an imported symbol
-            relocation_target = relocation['name']
+            # relocation_target = relocation['name']
+            relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'] + Symbolizer.RELOCATION_SIZES[relocation['type']])
         else:
             if (relocation['type'] in [
                 ENUM_RELOC_TYPE_x64['R_X86_64_64'],
@@ -139,7 +154,12 @@ class Symbolizer():
         elif op_mem is not None and rel_offset_inside_instruction == instruction.cs.disp_offset:
             # Relocation writes to displacement
             # import pdb; pdb.set_trace()
-            instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), relocation_target + '(')
+            if op_mem.segment != 0:
+                # Segment offsets don't use this form, instead they are like %gs:offset
+                # import pdb; pdb.set_trace()
+                instruction.op_str = instruction.op_str.replace(':{}'.format(op_mem.disp), ':' + relocation_target.split('+')[0].strip())
+            else:
+                instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), relocation_target + '(')
         else:
             assert False, 'Relocation doesn\'t write to disp or imm'
 
@@ -385,39 +405,38 @@ class Symbolizer():
 
         if rel['target_section'] is None:
             # This relocation refers to an imported symbol
-            relocation_target = rel['name']
-        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
             # import pdb; pdb.set_trace()
-            # swbase = None
-            # for base in sorted(self.bases):
-            #     if base > rel['offset']:
-            #         break
-            #     swbase = base
-            # value = rel['st_value'] + rel['addend'] - (rel['offset'] - swbase)
+            relocation_target = '{} + {}'.format(rel['name'], rel['addend'])
+
+        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
             value = rel['st_value'] + rel['addend']
-            # swlbl = ".LC%x-.LC%x" % (value, swbase)
-            # section.replace(rel['offset'], 4, swlbl)
-            relocation_target = '.LC%s%x - .' % (rel['target_section'].name, value)
+
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_target += ' - .'
             relocation_size = 4
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
             value = rel['st_value'] + rel['addend']
-            relocation_target = '.LC%s%x - .' % (rel['target_section'].name, value)
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            relocation_target += ' - .'
             relocation_size = 8
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_32S"]:
             value = rel['st_value'] + rel['addend']
-            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
             relocation_size = 4
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             value = rel['st_value'] + rel['addend']
-            # label = ".LC%s%x" % (rel['target_section'].name, value)
-            # section.replace(rel['offset'], 8, label)
-            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
             relocation_size = 8
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
             value = rel['addend']
-            # label = ".LC%x" % value
-            # section.replace(rel['offset'], 8, label)
-            relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
             relocation_size = 8
         else:
             print("[*] Unhandled relocation {}".format(

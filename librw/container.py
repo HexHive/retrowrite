@@ -197,8 +197,13 @@ class Function():
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
 
-            results.append(
-                "\t%s %s" % (instruction.mnemonic, instruction.op_str))
+            # HACK: gas will assemble 'nopl 0(%rax, %rax, 1)' as a 4-byte NOP but
+            # in the original module it might be 5 bytes
+            if instruction.sz == 5 and instruction.mnemonic == 'nopl':
+                results.append("\t.byte 0x0f, 0x1f, 0x44, 0x00, 0x00")
+            else:
+                results.append(
+                    "\t%s %s" % (instruction.mnemonic, instruction.op_str))
 
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))
