@@ -138,26 +138,36 @@ class Symbolizer():
 
         op_imm, op_imm_idx = instruction.get_imm_op()
         op_mem, op_mem_idx = instruction.get_mem_access_op()
+        is_jmp = CS_GRP_JUMP in instruction.cs.groups
+        is_call = CS_GRP_CALL in instruction.cs.groups
 
         # We cannot just replace the value of the field with the target (e.g.
         # '0' -> .LC.text.0) because what happens if we have movq $0, 0(%rdi)?
         # both would be replaced which is wrong
         if op_imm is not None and rel_offset_inside_instruction == instruction.cs.imm_offset:
             # Relocation writes to immediate
-            is_jmp = CS_GRP_JUMP in instruction.cs.groups
-            is_call = CS_GRP_CALL in instruction.cs.groups
             if is_jmp or is_call:
                 # Direct branch targets are not prefixed with $
                 instruction.op_str = relocation_target
             else:
-                instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target)
+                instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target.split('+')[0].strip())
         elif op_mem is not None and rel_offset_inside_instruction == instruction.cs.disp_offset:
             # Relocation writes to displacement
-            # import pdb; pdb.set_trace()
             if op_mem.segment != 0:
                 # Segment offsets don't use this form, instead they are like %gs:offset
                 # import pdb; pdb.set_trace()
                 instruction.op_str = instruction.op_str.replace(':{}'.format(op_mem.disp), ':' + relocation_target.split('+')[0].strip())
+            elif op_mem.base == 0 and op_mem.index == 0:
+                # Absolute call ds:offset, or in at&t callq *addr. Yes this is a thing in the kernel
+                # if instruction.mnemonic == 'movq' and instruction.op_str == '$0, 0(, %rax, 8)':
+                # import pdb; pdb.set_trace()
+                instruction.op_str = instruction.op_str.replace(
+                    '*{}'.format(op_mem.disp),
+                    '*({} - {})'.format(
+                        relocation_target,
+                        Symbolizer.RELOCATION_SIZES[relocation['type']]
+                    )
+                )
             else:
                 instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), relocation_target + '(')
         else:
