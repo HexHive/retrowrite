@@ -10,5 +10,7 @@ __pycache__/
 *.ko
 # Disassembled programs
 *.S
+# Analysis cache
+*.analysis_cache
 # Virtual environment
 retro/
