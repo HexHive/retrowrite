@@ -8,6 +8,8 @@ from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 from elftools.elf.constants import SH_FLAGS
 
+from .container import Address
+
 
 class Rewriter():
     GCC_FUNCTIONS = [
@@ -48,30 +50,29 @@ class Rewriter():
             section.load()
 
         # Disassemble all functions
-        for _, sec_functions in self.container.functions_by_section.items():
-            for _, function in sec_functions.items():
-                if function.name in Rewriter.GCC_FUNCTIONS:
-                    continue
-                # print('Disassembling %s' % function.name)
-                function.disasm()
+        for _, function in container.functions.items():
+            if function.name in Rewriter.GCC_FUNCTIONS:
+                continue
+            # print('Disassembling %s' % function.name)
+            function.disasm()
 
     def symbolize(self):
         symb = Symbolizer()
-        symb.symbolize_text_section(self.container, None)
+        symb.symbolize_code_sections(self.container, None)
         symb.symbolize_data_sections(self.container, None)
 
     def dump(self):
         results = list()
 
         # Emit rewritten functions
-        for section_name, section_functions in self.container.functions_by_section.items():
-            results.append('.section %s,"ax",@progbits' % section_name)
+        for _, function in self.container.functions.items():
+            if function.name in Rewriter.GCC_FUNCTIONS:
+                continue
+            results.append('.section %s,"ax",@progbits' % function.address.section.name)
             results.append(".align 16")
 
-            for _, function in sorted(section_functions.items()):
-                if function.name in Rewriter.GCC_FUNCTIONS:
-                    continue
-                results.append("%s" % function)
+            # for _, function in sorted(section_functions.items()):
+            results.append("%s" % function)
 
         # Emit rewritten data sections
         for sec, section in sorted(
@@ -96,18 +97,47 @@ class Symbolizer():
         ENUM_RELOC_TYPE_x64['R_X86_64_PLT32']: 4,
         ENUM_RELOC_TYPE_x64['R_X86_64_PC16']: 2,
         ENUM_RELOC_TYPE_x64['R_X86_64_PC8']: 1,
+        ENUM_RELOC_TYPE_x64['R_X86_64_JUMP_SLOT']: 8,
     }
 
     def __init__(self):
         self.bases = set()
         self.pot_sw_bases = defaultdict(set)
-        self.symbolized = set()
+        self.symbolized_imm = set()
+        self.symbolized_mem = set()
+
+    def apply_mem_op_symbolization(self, instruction, target, relocation=None):
+        op_mem, _ = instruction.get_mem_access_op()
+        assert op_mem
+
+        if op_mem.segment != 0:
+            # Segment offsets don't use this form, instead they are like %gs:offset
+            instruction.op_str = instruction.op_str.replace(':{}'.format(op_mem.disp), ':' + target.split('+')[0].strip())
+        elif op_mem.base == 0 and op_mem.index == 0:
+            # Absolute call ds:offset, or in at&t callq *addr. Yes this is a thing in the kernel
+            # if instruction.mnemonic == 'movq' and instruction.op_str == '$0, 0(, %rax, 8)':
+            if relocation:
+                replacement = '*({} - {})'.format(target,
+                    Symbolizer.RELOCATION_SIZES[relocation['type']])
+            else:
+                replacement = '*{}'.format(target)
+
+            instruction.op_str = instruction.op_str.replace(
+                '*{}'.format(op_mem.disp),
+                replacement
+            )
+        else:
+            instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), str(target) + '(')
+
+        self.symbolized_mem.add(instruction.address)
 
     def apply_code_relocation(self, instruction, relocation):
-        if relocation['target_section'] is None:
+        if relocation['symbol_address'] is None:
             # This relocation refers to an imported symbol
-            # relocation_target = relocation['name']
-            relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'] + Symbolizer.RELOCATION_SIZES[relocation['type']])
+            relocation_target = '{} + {}'.format(
+                relocation['name'], relocation['addend'] +
+                Symbolizer.RELOCATION_SIZES[relocation['type']]
+            )
         else:
             if (relocation['type'] in [
                 ENUM_RELOC_TYPE_x64['R_X86_64_64'],
@@ -117,7 +147,7 @@ class Symbolizer():
                 ENUM_RELOC_TYPE_x64['R_X86_64_16'],
                 ENUM_RELOC_TYPE_x64['R_X86_64_8'],
              ]):
-                section_offset = relocation['st_value'] + relocation['addend']
+                section_offset = relocation['symbol_address'].offset + relocation['addend']
             elif (relocation['type'] in [
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC64'],
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC32'],
@@ -125,16 +155,16 @@ class Symbolizer():
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC16'],
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC8'],
             ]):
-                section_offset = relocation['st_value'] + relocation['addend'] + \
-                    instruction.address + instruction.sz - relocation['offset']
+                section_offset = relocation['symbol_address'].offset + relocation['addend'] + \
+                    instruction.address.offset + instruction.sz - relocation['address'].offset
             else:
                 assert False, 'Unknown relocation type'
 
             # The target symbol is in this binary
-            relocation_target = '.LC{}{:x}'.format(relocation['target_section'].name,
+            relocation_target = '.LC{}{:x}'.format(relocation['symbol_address'].section.name,
                 section_offset)
 
-        rel_offset_inside_instruction = relocation['offset'] - instruction.address
+        rel_offset_inside_instruction = relocation['address'].offset - instruction.address.offset
 
         op_imm, op_imm_idx = instruction.get_imm_op()
         op_mem, op_mem_idx = instruction.get_mem_access_op()
@@ -151,136 +181,85 @@ class Symbolizer():
                 instruction.op_str = relocation_target
             else:
                 instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target.split('+')[0].strip())
+
+            self.symbolized_imm.add(instruction.address)
         elif op_mem is not None and rel_offset_inside_instruction == instruction.cs.disp_offset:
             # Relocation writes to displacement
-            if op_mem.segment != 0:
-                # Segment offsets don't use this form, instead they are like %gs:offset
-                # import pdb; pdb.set_trace()
-                instruction.op_str = instruction.op_str.replace(':{}'.format(op_mem.disp), ':' + relocation_target.split('+')[0].strip())
-            elif op_mem.base == 0 and op_mem.index == 0:
-                # Absolute call ds:offset, or in at&t callq *addr. Yes this is a thing in the kernel
-                # if instruction.mnemonic == 'movq' and instruction.op_str == '$0, 0(, %rax, 8)':
-                # import pdb; pdb.set_trace()
-                instruction.op_str = instruction.op_str.replace(
-                    '*{}'.format(op_mem.disp),
-                    '*({} - {})'.format(
-                        relocation_target,
-                        Symbolizer.RELOCATION_SIZES[relocation['type']]
-                    )
-                )
-            else:
-                instruction.op_str = instruction.op_str.replace('{}('.format(op_mem.disp), relocation_target + '(')
+            self.apply_mem_op_symbolization(instruction, relocation_target, relocation)
         else:
-            assert False, 'Relocation doesn\'t write to disp or imm'
+            assert False, "Relocation doesn't write to disp or imm"
 
 
-    # TODO: Use named symbols instead of generic labels when possible.
-    # TODO: Replace generic call labels with function names instead
-    def symbolize_text_section(self, container, context):
-        # Symbolize using relocation information.
+    # symbolize_code_sections symbolizes all code and data references located in
+    # the code sections.
+    # There are 4 categories of references that need to be symbolized:
+    #   1 - anything that uses relocations. In x86_64 PIE usermode binaries 
+    #       these are used for imports (got entries) and init_array. In kernel
+    #       modules these are used for anything that references a different
+    #       section or a symbol in the main kernel binary or another module.
+    #
+    #   2 - Direct calls and jumps. These all use an offset relative to the
+    #       next instruction, and don't use RIP-relative addressing
+    #
+    #   3 - RIP-relative data references. There can be no direct data references
+    #       because the executable is position-indepent. Indirect jumps and
+    #       calls can also have data references
+    #
+    #   
+    def symbolize_code_sections(self, container, context):
+        # Symbolize relocations
         for section in container.loader.elffile.iter_sections():
             # Only look for functions in sections that contain code
             if (section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR) == 0:
                 continue
 
-            # print('Symbolizing functions in section %s with relocations %s' % (section.name, container.relocations[section.name]))
+            for rel in container.code_relocations[section.name]:
+                target_address = rel['address']
 
-            for rel in container.relocations[section.name]:
-                fn = container.function_of_address_and_section(rel['offset'], section.name)
+                fn = container.function_of_address(target_address)
                 if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
                     # Relocation doesn't point into a function
                     continue
 
-                inst = fn.instruction_of_address(rel['offset'])
+                inst = fn.instruction_of_address(target_address)
                 if not inst:
                     # Relocation doesn't point to an instruction
                     continue
 
                 self.apply_code_relocation(inst, rel)
-                self.symbolized.add((section.name, inst.address))
 
-        self.symbolize_cf_transfer(container, context)
-        # Symbolize remaining memory accesses
+        # Symbolize direct branches
+        self.symbolize_direct_branches(container, context)
+
+        # Symbolize memory accesses
         self.symbolize_mem_accesses(container, context)
-        self.symbolize_switch_tables(container, context)
+        # self.symbolize_switch_tables(container, context)
 
-    def symbolize_cf_transfer(self, container, context=None):
+    # Symbolize direct branches
+    def symbolize_direct_branches(self, container, context=None):
         for _, function in container.functions.items():
-            addr_to_idx = dict()
-            for inst_idx, instruction in enumerate(function.cache):
-                addr_to_idx[instruction.address] = inst_idx
-
-            for inst_idx, instruction in enumerate(function.cache):
-
+            for _, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
 
+                # Ignore jumps and calls
                 if not (is_jmp or is_call):
-                    # Simple, next is idx + 1
-                    if instruction.mnemonic.startswith('ret'):
-                        function.nexts[inst_idx].append("ret")
-                        instruction.cf_leaves_fn = True
-                    else:
-                        function.nexts[inst_idx].append(inst_idx + 1)
                     continue
 
-                instruction.cf_leaves_fn = False
+                imm_op = instruction.get_imm_op()[0]
+                # Ignore indirect jumps and calls
+                if not imm_op:
+                    continue
 
-                if is_jmp and not instruction.mnemonic.startswith("jmp"):
-                    if inst_idx + 1 < len(function.cache):
-                        # Add natural flow edge
-                        function.nexts[inst_idx].append(inst_idx + 1)
-                    else:
-                        # Out of function bounds, no idea what to do!
-                        function.nexts[inst_idx].append("undef")
-                elif is_call:
-                    instruction.cf_leaves_fn = True
-                    function.nexts[inst_idx].append("call")
-                    if inst_idx + 1 < len(function.cache):
-                        function.nexts[inst_idx].append(inst_idx + 1)
-                    else:
-                        # Out of function bounds, no idea what to do!
-                        function.nexts[inst_idx].append("undef")
+                # Ignore targets that were already symbolized with relocations
+                if instruction.address in self.symbolized_imm:
+                    continue
 
-                if instruction.cs.operands[0].type == CS_OP_IMM:
-                    target = instruction.cs.operands[0].imm
-                    # Check if the target is in the same section as the current function
-                    if container.is_in_section(function.section.name, target):
-                        function.bbstarts.add(target)
+                # Capstone should have already computed the right address 
+                # (in terms of offset from the start of the section)
+                target = container.adjust_address(Address(instruction.address.section, imm_op))
+                instruction.op_str = str(target)
 
-                        # If the control flow transfer was not already
-                        # symbolized because of relocations, do it
-                        if (function.section.name, instruction.address) not in self.symbolized:
-                            instruction.op_str = ".L%s%x" % (function.section.name, target)
-                    elif target in container.plt:
-                        if (function.section.name, instruction.address) not in self.symbolized:
-                            instruction.op_str = "{}@PLT".format(
-                                container.plt[target])
-                    else:
-                        gotent = container.is_target_gotplt(target)
-                        if gotent:
-                            found = False
-                            for relocation in container.relocations[".dyn"]:
-                                if gotent == relocation['offset']:
-                                    if (funciton.section.name, instruction.address) not in self.symbolized:
-                                        instruction.op_str = "{}@PLT".format(
-                                            relocation['name'])
-                                    found = True
-                                    break
-                            if not found:
-                                print("[x] Missed GOT entry!")
-                        else:
-                            print("[x] Missed call target: %x in section %s" % (target, function.section.name))
-
-                    if is_jmp:
-                        if target in addr_to_idx:
-                            idx = addr_to_idx[target]
-                            function.nexts[inst_idx].append(idx)
-                        else:
-                            instruction.cf_leaves_fn = True
-                            function.nexts[inst_idx].append("undef")
-                elif is_jmp:
-                    function.nexts[inst_idx].append("undef")
 
     def symbolize_switch_tables(self, container, context):
         rodata = container.sections.get(".rodata", None)
@@ -320,157 +299,89 @@ class Symbolizer():
                     swlbl = ".LC%x-.LC%x" % (value, swbase)
                     rodata.replace(slot, 4, swlbl)
 
-    def _adjust_target(self, container, target):
-        # Find the nearest section
-        sec = None
-        for sname, sval in sorted(
-                container.sections.items(), key=lambda x: x[1].base):
-            if sval.base >= target:
-                break
-            sec = sval
-
-        assert sec is not None
-
-        end = sec.base  # + sec.sz - 1
-        adjust = target - end
-
-        assert adjust > 0
-
-        return end, adjust
-
-    def _is_target_in_region(self, container, target):
-        for sec, sval in container.sections.items():
-            if sval.base <= target < sval.base + sval.sz:
-                return True
-
-        for fn, fval in container.functions.items():
-            if fval.start <= target < fval.start + fval.sz:
-                return True
-
-        return False
-
+    # Symbolize memory accesses
     def symbolize_mem_accesses(self, container, context):
         for _, function in container.functions.items():
-            for inst in function.cache:
-                if inst.address in self.symbolized:
-                    continue
+            for instruction in function.cache:
+                mem_access, _ = instruction.get_mem_access_op()
 
-                mem_access, _ = inst.get_mem_access_op()
+                # Ignore instructions that don't access memory
                 if not mem_access:
                     continue
 
-                # Now we have a memory access,
-                # check if it is rip relative.
-                base = mem_access.base
-                if base == X86_REG_RIP:
-                    value = mem_access.disp
-                    ripbase = inst.address + inst.sz
-                    target = ripbase + value
+                # Ignore non-RIP relative references
+                if mem_access.base != X86_REG_RIP:
+                    continue
 
-                    is_an_import = False
+                if instruction.address in self.symbolized_mem:
+                    continue
 
-                    for relocation in container.relocations[".dyn"]:
-                        if relocation['st_value'] == target:
-                            is_an_import = relocation['name']
-                            sfx = ""
-                            break
-                        elif target in container.plt:
-                            is_an_import = container.plt[target]
-                            sfx = "@PLT"
-                            break
-                        elif relocation['offset'] == target:
-                            is_an_import = relocation['name']
-                            sfx = "@GOTPCREL"
-                            break
+                target = container.adjust_address(
+                    Address(instruction.address.section,
+                        instruction.address.offset + instruction.sz +
+                        mem_access.disp
+                    )
+                )
 
-                    if is_an_import:
-                        inst.op_str = inst.op_str.replace(
-                            hex(value), "%s%s" % (is_an_import, sfx))
-                    else:
-                        # Check if target is contained within a known region
-                        in_region = self._is_target_in_region(
-                            container, target)
-                        if in_region:
-                            inst.op_str = inst.op_str.replace(
-                                hex(value), ".LC%x" % (target))
-                        else:
-                            target, adjust = self._adjust_target(
-                                container, target)
-                            inst.op_str = inst.op_str.replace(
-                                hex(value), "%d+.LC%x" % (adjust, target))
-                            print("[*] Adjusted: %x --8%d+.LC%x" %
-                                  (inst.address, adjust, target))
+                self.apply_mem_op_symbolization(instruction, target)
 
-                    # if container.is_in_section(".rodata", target):
-                    #     self.pot_sw_bases[function.start].add(target)
 
-    def _handle_relocation(self, container, section, rel):
-        reloc_type = rel['type']
+
+    def _handle_relocation(self, container, section, relocation):
+        reloc_type = relocation['type']
         if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
             # NOP
             return
 
-        relocation_target = ''
-        relocation_size = 0
+        relocation_size = Symbolizer.RELOCATION_SIZES[relocation['type']]
+        relocation_target = None
 
-        if rel['target_section'] is None:
+        if relocation['symbol_address'] is None:
             # This relocation refers to an imported symbol
-            # import pdb; pdb.set_trace()
-            relocation_target = '{} + {}'.format(rel['name'], rel['addend'])
+            relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'])
 
-        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
-            value = rel['st_value'] + rel['addend']
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
+            value = relocation['symbol_address'] + relocation['addend']
 
             if not relocation_target:
-                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
             relocation_target += ' - .'
-            relocation_size = 4
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
-            value = rel['st_value'] + rel['addend']
+            value = relocation['symbol_address'].offset + relocation['addend']
             if not relocation_target:
-                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
             relocation_target += ' - .'
-            relocation_size = 8
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_32S"]:
-            value = rel['st_value'] + rel['addend']
+            value = relocation['symbol_address'].offset + relocation['addend']
             if not relocation_target:
-                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
-            relocation_size = 4
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
-            value = rel['st_value'] + rel['addend']
+            value = relocation['symbol_address'].offset + relocation['addend']
 
             if not relocation_target:
-                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
-            relocation_size = 8
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
-            value = rel['addend']
+            value = relocation['addend']
 
             if not relocation_target:
-                relocation_target = '.LC%s%x' % (rel['target_section'].name, value)
-            relocation_size = 8
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_JUMP_SLOT"]:
+            value = relocation['symbol_address'].offset
+
+            if not relocation_target:
+                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         else:
             print("[*] Unhandled relocation {}".format(
                 describe_reloc_type(reloc_type, container.loader.elffile)))
-            import pdb; pdb.set_trace()
 
         if relocation_size:
-            section.replace(rel['offset'], relocation_size, relocation_target)
+            section.replace(relocation['address'].offset, relocation_size, relocation_target)
 
     def symbolize_data_sections(self, container, context=None):
         # Section specific relocation
         for secname, section in container.sections.items():
-            for rel in section.relocations:
-                self._handle_relocation(container, section, rel)
-
-        # .dyn relocations
-        dyn = container.relocations[".dyn"]
-        for rel in dyn:
-            section = container.section_of_address(rel['offset'])
-            if section:
-                self._handle_relocation(container, section, rel)
-            else:
-                print("[x] Couldn't find valid section {:x}".format(
-                    rel['offset']))
+            for relocation in section.relocations:
+                self._handle_relocation(container, section, relocation)
 
 
 def is_data_section(sname, sval, container):
@@ -482,8 +393,16 @@ def is_data_section(sname, sval, container):
     # references that need to be symbolized
     return (
         (sval['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and (
-            (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 or sname not in container.functions_by_section
+            (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 or sname not in container.code_section_names
         ) and sval['sz'] > 0
+    )
+
+
+def is_readonly_data_section(section):
+    return (
+        (section['sh_flags'] & SH_FLAGS.SHF_ALLOC) != 0 and
+        (section['sh_flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 and
+        (section['sh_flags'] & SH_FLAGS.SHF_WRITE) == 0
     )
 
 

@@ -9,8 +9,7 @@ from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.enums import ENUM_E_TYPE
 
-from .container import Container, Function, DataSection
-from .disasm import disasm_bytes
+from .container import Container, Function, DataSection, Address, disasm_bytes
 
 
 class Loader():
@@ -19,24 +18,34 @@ class Loader():
         self.elffile = ELFFile(self.fd)
         self.container = Container()
 
+    # Create a function object for each function in fnlist and add it to the
+    # container
     def load_functions(self, fnlist):
         for fn in fnlist:
-            section = fn['section']
-            bytes = section.data()[fn['offset']:fn['offset'] + fn['sz']]
-            function = Function(fn['name'], section, fn['offset'],
+            section = fn['address'].section
+            offset = fn['address'].offset
+            function_start = offset
+            function_end = offset + fn['sz']
+
+            bytes = section.data()[function_start:function_end]
+            function = Function(fn['name'], fn['address'],
                 fn['sz'], bytes, fn['bind'])
 
             print('Added function %s' % fn['name'])
 
-            self.container.add_function(function, section)
+            self.container.add_function(function)
 
-    def load_data_sections(self, seclist, section_filter=lambda x, y, z: True):
-        for sec in [sname for sname, sval in seclist.items() if section_filter(sname, sval, self.container)]:
-            sval = seclist[sec]
-            section = self.elffile.get_section_by_name(sec)
+    # Load all the data sections of the executable
+    def load_data_sections(self, seclist, section_filter=lambda sname, sval, container: True):
+        section_names_list = [sname for sname, sval in seclist.items()
+            if section_filter(sname, sval, self.container)]
+
+        for sname in section_names_list:
+            sval = seclist[sname]
+            section = self.elffile.get_section_by_name(sname)
             data = section.data()
             more = bytearray()
-            if sec == ".init_array":
+            if sname == ".init_array":
                 if len(data) > 8:
                     data = data[8:]
                 else:
@@ -49,78 +58,88 @@ class Loader():
                         [0x0 for _ in range(0, sval['sz'] - len(more))])
 
             bytes = more
-            ds = DataSection(sec, sval["base"], sval["sz"], bytes, sval['flags'],
+            ds = DataSection(sname, sval["base"], sval["sz"], bytes, sval['flags'],
                              sval['type'], sval['align'])
 
-            print('Loaded data section %s' % sec)
+            print('Loaded data section %s' % sname)
             self.container.add_section(ds)
 
-        # Find if there is a plt section
-        for sec in seclist:
-            if sec == '.plt':
-                self.container.plt_base = seclist[sec]['base']
-            if sec == ".plt.got":
-                section = self.elffile.get_section_by_name(sec)
-                data = section.data()
-                entries = list(
-                    disasm_bytes(section.data(), seclist[sec]['base']))
-                self.container.gotplt_base = seclist[sec]['base']
-                self.container.gotplt_sz = seclist[sec]['sz']
-                self.container.gotplt_entries = entries
-
+    # Load all the relocations
     def load_relocations(self, relocs):
         for reloc_section, relocations in relocs.items():
             section = reloc_section[5:]
-
-            if reloc_section == ".rela.plt":
-                self.container.add_plt_information(relocations)
 
             if section in self.container.sections:
                 # Data section relocation
                 self.container.sections[section].add_relocations(relocations)
             else:
                 # Code section relocation
-                self.container.add_relocations(section, relocations)
+                self.container.add_code_relocations(section, relocations)
 
     def reloc_list_from_symtab(self):
         relocs = defaultdict(list)
 
-        for section in self.elffile.iter_sections():
-            if not isinstance(section, RelocationSection):
+        # Find all the relocation sections in the file
+        # relocation_section is a section containing the relocations for another
+        # section (the target section)
+        for relocation_section in self.elffile.iter_sections():
+            if not isinstance(relocation_section, RelocationSection):
                 continue
 
-            symtable = self.elffile.get_section(section['sh_link'])
+            # symtable is the symbol table section associated with this
+            # relocation section
+            symtable = self.elffile.get_section(relocation_section['sh_link'])
 
-            for rel in section.iter_relocations():
+            # target_section is the section that the relocation affects (i.e.
+            # the section where the linker/loader will write the value computed by
+            # the relocation)
+            target_section = self.elffile.get_section_by_name(relocation_section.name[5:])
+
+            for relocation in relocation_section.iter_relocations():
+                # symbol is the symbol that the relocation refers to
                 symbol = None
-                if rel['r_info_sym'] != 0:
-                    symbol = symtable.get_symbol(rel['r_info_sym'])
+                # symbol_section is the section that contains the symbol
+                symbol_section = None
 
-                if symbol:
-                    if symbol['st_name'] == 0:
-                        symsec = self.elffile.get_section(symbol['st_shndx'])
-                        symbol_name = symsec.name
-                    else:
-                        symbol_name = symbol.name
+                if relocation['r_info_sym'] != 0:
+                    symbol = symtable.get_symbol(relocation['r_info_sym'])
+
+                assert symbol
+
+                symbol_section = self.elffile.get_section(symbol['st_shndx']) if symbol['st_shndx'] != 'SHN_UNDEF' else None
+
+                # Symbols can have a name or no name
+                if symbol['st_name'] == 0:
+                    # The symbol doesn't have a name, we will use the name of
+                    # the section that contains it instead. Symbols that don't
+                    # have a name always have a section
+                    assert symbol_section
+                    symbol_name = symbol_section.name
                 else:
-                    symbol = dict(st_value=None)
-                    symbol_name = None
+                    # The symbol has a name
+                    symbol_name = symbol.name
+
+                
+                # relocation_address is the address at which the relocation will
+                # be applied
+                # symbol_address is the address of the symbol, or None if the
+                # symbol is external/imported
+                if self.elffile['e_type'] == 'ET_REL':
+                    relocation_address = Address(target_section, relocation['r_offset'])
+                    symbol_address = Address(symbol_section, symbol['st_value']) if symbol_section else None
+                else:
+                    relocation_address = Address(target_section, relocation['r_offset'] - section['sh_addr'])
+                    symbol_address = Address(symbol_section, symbol['st_value'] - symbol_section['sh_addr']) if symbol_section else None
 
                 reloc_i = {
                     'name': symbol_name,
-                    'st_value': symbol['st_value'],
-                    'offset': rel['r_offset'],
-                    'addend': rel['r_addend'],
-                    'type': rel['r_info_type'],
+                    'address': relocation_address,
+                    'addend': relocation['r_addend'],
+                    'type': relocation['r_info_type'],
+                    'symbol_address': symbol_address,
                 }
 
-                if symbol and symbol['st_shndx'] != 'SHN_UNDEF':
-                    reloc_i['target_section'] = self.elffile.get_section(symbol['st_shndx'])
-                else:
-                    reloc_i['target_section'] = None
-
-
-                relocs[section.name].append(reloc_i)
+                relocs[relocation_section.name].append(reloc_i)
 
         return relocs
 
@@ -158,8 +177,7 @@ class Loader():
                         'sz': symbol['st_size'],
                         'visibility': symbol['st_other']['visibility'],
                         'bind': symbol['st_info']['bind'],
-                        'section': fn_section,
-                        'offset': fn_offset,
+                        'address': Address(fn_section, fn_offset),
                     })
 
         return function_list

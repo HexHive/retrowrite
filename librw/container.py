@@ -1,10 +1,22 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import struct
 
-from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
+from capstone import *
 from elftools.elf.constants import SH_FLAGS
+from elftools.elf.enums import ENUM_E_TYPE
 
-from . import disasm
+
+def disasm_bytes(bytes, addr):
+    md = Cs(CS_ARCH_X86, CS_MODE_64)
+    md.syntax = CS_OPT_SYNTAX_ATT
+    md.detail = True
+    ret = []
+
+    for i in md.disasm(bytes, addr.offset):
+        address = Address(addr.section, i.address)
+        ret.append(InstructionWrapper(i, address))
+
+    return ret
 
 
 class SzPfx():
@@ -21,14 +33,28 @@ class SzPfx():
         return SzPfx.PREFIXES[sz]
 
 
+class Address(namedtuple('Address', 'section offset')):
+    __slots__ = ()
+
+    def __str__(self):
+        return '%s%x' % (self.section.name.replace('-', '_'), self.offset)
+
+    def __hash__(self):
+        return hash(self.section.name) ^ hash(self.offset)
+
+    def __eq__(self, other):
+        return (other.section.name == self.section.name and
+                other.offset == self.offset)
+
+
 class Container():
     def __init__(self):
         self.functions = dict()
-        self.functions_by_section = defaultdict(dict)
         self.function_names = set()
+        self.code_section_names = set()
         self.sections = dict()
         self.globals = None
-        self.relocations = defaultdict(list)
+        self.code_relocations = defaultdict(list)
         self.loader = None
         # PLT information
         self.plt_base = None
@@ -38,12 +64,13 @@ class Container():
         self.gotplt_sz = None
         self.gotplt_entries = list()
 
-    def add_function(self, function, section):
+    def add_function(self, function):
         if function.name in self.function_names:
-            function.name = "%s_%x" % (function.name, function.start)
-        self.functions[function.start] = function
+            function.name = "%s_%s" % (function.name, function.address)
+            # assert False
+        self.functions[function.address] = function
         self.function_names.add(function.name)
-        self.functions_by_section[section.name][function.start] = function
+        self.code_section_names.add(function.address.section.name)
 
     def add_section(self, section):
         self.sections[section.name] = section
@@ -73,45 +100,39 @@ class Container():
     def attach_loader(self, loader):
         self.loader = loader
 
-    def is_in_section(self, secname, value):
-        assert self.loader, "No loader found!"
-
-        section = self.loader.elffile.get_section_by_name(secname)
-        base = section['sh_addr']
-        sz = section['sh_size']
-        if base <= value < base + sz:
-            return True
-        return False
-
-    def add_relocations(self, section_name, relocations):
-        self.relocations[section_name].extend(relocations)
-
-    def section_of_address(self, addr):
-        for _, section in self.sections.items():
-            if section.base <= addr < section.base + section.sz:
-                return section
-        # XXX: This does not check for .text section
-        return None
+    def add_code_relocations(self, section_name, relocations):
+        self.code_relocations[section_name].extend(relocations)
 
     def function_of_address(self, addr):
         for _, function in self.functions.items():
-            if function.start <= addr < function.start + function.sz:
+            if (function.address.section == addr.section and
+                function.address.offset <= addr.offset < function.address.offset + function.sz):
                 return function
         return None
 
-    def function_of_address_and_section(self, offset, section_name):
-        for _, function in self.functions_by_section[section_name].items():
-            if function.start <= offset < function.start + function.sz:
-                return function
-        print(section_name)
-        # print(self.functions_by_section[section_name])
-        return None
+    def adjust_address(self, address):
+        if self.loader.elffile['e_type'] == 'ET_REL':
+            # Relocatable file, there can't be cross-section references unless
+            # they use relocations
+            assert address.offset >= 0 and address.offset < address.section.data_size
+            return address
+        elif self.loader.elffile['e_type'] == 'ET_DYN':
+            # Position-independent userspace binary, there can be cross-section
+            # references
+            if address.offset >= 0 and address.offset < address.section.data_size:
+                # The address is still inside this section
+                return address
 
+            absolute_address = address.section['sh_addr'] + address.offset
 
-    def add_plt_information(self, relocinfo):
-        plt_base = self.plt_base
-        for idx, relocation in enumerate(relocinfo, 1):
-            self.plt[plt_base + idx * 16] = relocation['name']
+            # The address points to a different section
+            for section in self.loader.elffile.iter_sections():
+                if section['sh_addr'] <= absolute_address < section['sh_addr'] + section.data_size:
+                    return Address(section, absolute_address - section['sh_addr'])
+
+        else:
+            # What is this binary?
+            assert False
 
     def reloc(self, target):
         assert self.loader, "No loader found!"
@@ -119,11 +140,10 @@ class Container():
 
 
 class Function():
-    def __init__(self, name, section, start, sz, bytes, bind="STB_LOCAL"):
+    def __init__(self, name, address, sz, bytes, bind="STB_LOCAL"):
         self.name = name
         self.cache = list()
-        self.section = section
-        self.start = start
+        self.address = address
         self.sz = sz
         self.bytes = bytes
         self.bbstarts = set()
@@ -133,7 +153,7 @@ class Function():
         # Invalidated by any instrumentation.
         self.nexts = defaultdict(list)
 
-        self.bbstarts.add(start)
+        self.bbstarts.add(address)
 
         # Dict to save function analysis results
         self.analysis = defaultdict(lambda: None)
@@ -146,14 +166,16 @@ class Function():
 
     def disasm(self):
         assert not self.cache
-        for decoded in disasm.disasm_bytes(self.bytes, self.start):
-            self.cache.append(InstructionWrapper(decoded))
+        self.cache = disasm_bytes(self.bytes, self.address)
 
     def is_valid_instruction(self, address):
         assert self.cache, "Function not disassembled!"
 
+        if address.section != self.address.section:
+            return False
+
         for instruction in self.cache:
-            if instruction.address == address:
+            if instruction.address.offset == address.offset:
                 return True
 
         return False
@@ -161,8 +183,11 @@ class Function():
     def instruction_of_address(self, address):
         assert self.cache, "Function not disassembled!"
 
+        if address.section != self.address.section:
+            return None
+
         for instruction in self.cache:
-            if instruction.address <= address < instruction.address + instruction.sz:
+            if instruction.address.offset <= address.offset < instruction.address.offset + instruction.sz:
                 return instruction
 
         return None
@@ -187,12 +212,10 @@ class Function():
                 continue
 
             if instruction.address in self.bbstarts:
-                results.append(".L%s%x:" % (self.section.name, instruction.address))
-                # GAS doesn't like '-' in section names
-                results.append(".LC%s%x:" % (self.section.name.replace('-', '_'), instruction.address))
+                results.append(".L%s:" % str(instruction.address))
+                results.append(".LC%s:" % str(instruction.address))
             else:
-                # Same as above
-                results.append(".LC%s%x:" % (self.section.name.replace('-', '_'), instruction.address))
+                results.append(".LC%s:" % str(instruction.address))
 
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
@@ -223,9 +246,9 @@ class Function():
 
 
 class InstructionWrapper():
-    def __init__(self, instruction):
+    def __init__(self, instruction, address):
         self.cs = instruction
-        self.address = instruction.address
+        self.address = address
         self.mnemonic = instruction.mnemonic
         self.op_str = instruction.op_str
         self.sz = instruction.size
@@ -238,7 +261,7 @@ class InstructionWrapper():
         self.cf_leaves_fn = None
 
     def __str__(self):
-        return "%x: %s %s" % (self.address, self.mnemonic, self.op_str)
+        return "%s: %s %s" % (self.address, self.mnemonic, self.op_str)
 
     def get_mem_access_op(self):
         for idx, op in enumerate(self.cs.operands):
@@ -333,17 +356,17 @@ class DataSection():
 
         return value
 
-    def replace(self, address, sz, value):
-        cacheoff = address - self.base
+    def replace(self, offset, sz, value):
+        # cacheoff = address - self.base
 
-        if cacheoff >= len(self.cache):
+        if offset >= len(self.cache):
             print("[x] Could not replace value in {}".format(self.name))
             return
 
-        self.cache[cacheoff].value = value
-        self.cache[cacheoff].sz = sz
+        self.cache[offset].value = value
+        self.cache[offset].sz = sz
 
-        for cell in self.cache[cacheoff + 1:cacheoff + sz]:
+        for cell in self.cache[offset + 1:offset + sz]:
             cell.set_ignored()
 
     def iter_cells(self):
