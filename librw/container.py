@@ -4,12 +4,17 @@ import struct
 from capstone import *
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.enums import ENUM_E_TYPE
+from intervaltree import Interval, IntervalTree
 
+md = None
 
 def disasm_bytes(bytes, addr):
-    md = Cs(CS_ARCH_X86, CS_MODE_64)
-    md.syntax = CS_OPT_SYNTAX_ATT
-    md.detail = True
+    global md
+    if not md:
+        md = Cs(CS_ARCH_X86, CS_MODE_64)
+        md.syntax = CS_OPT_SYNTAX_ATT
+        md.detail = True
+
     ret = []
 
     for i in md.disasm(bytes, addr.offset):
@@ -49,7 +54,11 @@ class Address(namedtuple('Address', 'section offset')):
 
 class Container():
     def __init__(self):
-        self.functions = dict()
+        # Using an IntervalTree instead of a dict containing the starting address
+        # of each function for function_of_address saves 25-30% of the run time
+        # when symbolizing btrfs (approx 4.3 out of 16 seconds)
+        self.functions = defaultdict(IntervalTree)
+
         self.function_names = set()
         self.code_section_names = set()
         self.sections = dict()
@@ -67,8 +76,14 @@ class Container():
     def add_function(self, function):
         if function.name in self.function_names:
             function.name = "%s_%s" % (function.name, function.address)
-            # assert False
-        self.functions[function.address] = function
+
+        function_start = function.address.offset
+        function_end = function.address.offset + function.sz
+
+        # Add the function to the interval tree unless there is already a function there
+        if not self.functions[function.address.section.name][function_start:function_end]:
+            self.functions[function.address.section.name][function_start:function_end] = function
+
         self.function_names.add(function.name)
         self.code_section_names.add(function.address.section.name)
 
@@ -104,11 +119,21 @@ class Container():
         self.code_relocations[section_name].extend(relocations)
 
     def function_of_address(self, addr):
-        for _, function in self.functions.items():
-            if (function.address.section == addr.section and
-                function.address.offset <= addr.offset < function.address.offset + function.sz):
-                return function
-        return None
+        # for _, function in self.functions.items():
+        #     if (function.address.section.name == addr.section.name and
+        #         function.address.offset <= addr.offset < function.address.offset + function.sz):
+        #         return function
+        # return None
+        if addr.section.name not in self.functions:
+            return None
+
+        interval, = self.functions[addr.section.name][addr.offset]
+        return interval.data
+
+    def iter_functions(self):
+        for _, it in self.functions.items():
+            for i in it:
+                yield i.data
 
     def adjust_address(self, address):
         if self.loader.elffile['e_type'] == 'ET_REL':

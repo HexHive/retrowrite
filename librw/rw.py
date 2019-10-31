@@ -50,7 +50,7 @@ class Rewriter():
             section.load()
 
         # Disassemble all functions
-        for _, function in container.functions.items():
+        for function in container.iter_functions():
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             # print('Disassembling %s' % function.name)
@@ -65,7 +65,7 @@ class Rewriter():
         results = list()
 
         # Emit rewritten functions
-        for _, function in self.container.functions.items():
+        for function in self.container.iter_functions():
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             results.append('.section %s,"ax",@progbits' % function.address.section.name)
@@ -237,7 +237,7 @@ class Symbolizer():
 
     # Symbolize direct branches
     def symbolize_direct_branches(self, container, context=None):
-        for _, function in container.functions.items():
+        for function in container.iter_functions():
             for _, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
@@ -258,7 +258,7 @@ class Symbolizer():
                 # Capstone should have already computed the right address 
                 # (in terms of offset from the start of the section)
                 target = container.adjust_address(Address(instruction.address.section, imm_op))
-                instruction.op_str = str(target)
+                instruction.op_str = '.LC%s' % str(target)
 
 
     def symbolize_switch_tables(self, container, context):
@@ -269,7 +269,7 @@ class Symbolizer():
         all_bases = set([x for _, y in self.pot_sw_bases.items() for x in y])
 
         for faddr, swbases in self.pot_sw_bases.items():
-            fn = container.functions[faddr]
+            fn = container.function_of_address(faddr)
             for swbase in sorted(swbases, reverse=True):
                 value = rodata.read_at(swbase, 4)
                 if not value:
@@ -301,7 +301,7 @@ class Symbolizer():
 
     # Symbolize memory accesses
     def symbolize_mem_accesses(self, container, context):
-        for _, function in container.functions.items():
+        for function in container.iter_functions():
             for instruction in function.cache:
                 mem_access, _ = instruction.get_mem_access_op()
 
@@ -340,35 +340,31 @@ class Symbolizer():
             # This relocation refers to an imported symbol
             relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'])
 
-        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
-            value = relocation['symbol_address'] + relocation['addend']
-
+        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
             if not relocation_target:
+                value = relocation['symbol_address'].offset + relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
             relocation_target += ' - .'
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
-            value = relocation['symbol_address'].offset + relocation['addend']
             if not relocation_target:
+                value = relocation['symbol_address'].offset + relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
             relocation_target += ' - .'
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_32S"]:
-            value = relocation['symbol_address'].offset + relocation['addend']
             if not relocation_target:
+                value = relocation['symbol_address'].offset + relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
-            value = relocation['symbol_address'].offset + relocation['addend']
-
             if not relocation_target:
+                value = relocation['symbol_address'].offset + relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
-            value = relocation['addend']
-
             if not relocation_target:
+                value = relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_JUMP_SLOT"]:
-            value = relocation['symbol_address'].offset
-
             if not relocation_target:
+                value = relocation['symbol_address'].offset
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
         else:
             print("[*] Unhandled relocation {}".format(
