@@ -96,6 +96,15 @@ class Loader():
             target_section = self.elffile.get_section_by_name(relocation_section.name[5:])
 
             for relocation in relocation_section.iter_relocations():
+                if relocation_section.name == '.rela.dyn':
+                    for s in self.elffile.iter_sections():
+                        section_start = s['sh_offset']
+                        section_end = section_start + s.data_size
+                        if section_start <= relocation['r_offset'] < section_end:
+                            target_section = s
+                            break
+                    else:
+                        assert False
                 # symbol is the symbol that the relocation refers to
                 symbol = None
                 # symbol_section is the section that contains the symbol
@@ -104,32 +113,50 @@ class Loader():
                 if relocation['r_info_sym'] != 0:
                     symbol = symtable.get_symbol(relocation['r_info_sym'])
 
-                assert symbol
+                if symbol:
+                    # This relocation points to a symbol
+                    symbol_section = self.elffile.get_section(symbol['st_shndx']) if symbol['st_shndx'] != 'SHN_UNDEF' else None
 
-                symbol_section = self.elffile.get_section(symbol['st_shndx']) if symbol['st_shndx'] != 'SHN_UNDEF' else None
+                    # Symbols can have a name or no name
+                    if symbol['st_name'] == 0:
+                        # The symbol doesn't have a name, we will use the name of
+                        # the section that contains it instead. Symbols that don't
+                        # have a name always have a section
+                        assert symbol_section
+                        symbol_name = symbol_section.name
+                    else:
+                        # The symbol has a name
+                        symbol_name = symbol.name
 
-                # Symbols can have a name or no name
-                if symbol['st_name'] == 0:
-                    # The symbol doesn't have a name, we will use the name of
-                    # the section that contains it instead. Symbols that don't
-                    # have a name always have a section
-                    assert symbol_section
-                    symbol_name = symbol_section.name
+                    # relocation_address is the address at which the relocation will
+                    # be applied
+                    # symbol_address is the address of the symbol, or None if the
+                    # symbol is external/imported
+                    if self.elffile['e_type'] == 'ET_REL':
+                        relocation_address = Address(target_section, relocation['r_offset'])
+                        symbol_address = Address(symbol_section, symbol['st_value']) if symbol_section else None
+                    else:
+                        relocation_address = Address(target_section, relocation['r_offset'] - target_section['sh_addr'])
+                        symbol_address = Address(symbol_section, symbol['st_value'] - symbol_section['sh_addr']) if symbol_section else None
                 else:
-                    # The symbol has a name
-                    symbol_name = symbol.name
+                    symbol_name = None
+                    # This relocation doesn't point to a symbol, we have to use
+                    # 0 as the symbol's value, which basically means that this
+                    # points to some place in the executable. This can only work
+                    # for non-relocatable files because relocatable files could
+                    # have any layout in memory
+                    absolute_address = relocation['r_addend']
+                    assert self.elffile['e_type'] != 'ET_REL'
 
-                
-                # relocation_address is the address at which the relocation will
-                # be applied
-                # symbol_address is the address of the symbol, or None if the
-                # symbol is external/imported
-                if self.elffile['e_type'] == 'ET_REL':
-                    relocation_address = Address(target_section, relocation['r_offset'])
-                    symbol_address = Address(symbol_section, symbol['st_value']) if symbol_section else None
-                else:
-                    relocation_address = Address(target_section, relocation['r_offset'] - section['sh_addr'])
-                    symbol_address = Address(symbol_section, symbol['st_value'] - symbol_section['sh_addr']) if symbol_section else None
+                    for section in self.elffile.iter_sections():
+                        if section['sh_addr'] <= absolute_address < section['sh_addr'] + section.data_size:
+                            symbol_address = Address(section, absolute_address - section['sh_addr'])
+                            break;
+                    else:
+                        assert False, 'Relocation with no symbol outside of all sections'
+
+                    # import pdb; pdb.set_trace()
+                    relocation_address = Address(target_section, relocation['r_offset'] - target_section['sh_addr'])
 
                 reloc_i = {
                     'name': symbol_name,

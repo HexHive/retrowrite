@@ -81,7 +81,7 @@ class Container():
         function_end = function.address.offset + function.sz
 
         # Add the function to the interval tree unless there is already a function there
-        if not self.functions[function.address.section.name][function_start:function_end]:
+        if not self.functions[function.address.section.name][function_start:function_end] and function_start != function_end:
             self.functions[function.address.section.name][function_start:function_end] = function
 
         self.function_names.add(function.name)
