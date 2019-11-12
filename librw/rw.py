@@ -71,7 +71,6 @@ class Rewriter():
             results.append('.section %s,"ax",@progbits' % function.address.section.name)
             results.append(".align 16")
 
-            # for _, function in sorted(section_functions.items()):
             results.append("%s" % function)
 
         # Emit rewritten data sections
@@ -193,7 +192,7 @@ class Symbolizer():
     # symbolize_code_sections symbolizes all code and data references located in
     # the code sections.
     # There are 4 categories of references that need to be symbolized:
-    #   1 - anything that uses relocations. In x86_64 PIE usermode binaries 
+    #   1 - anything that uses relocations. In x86_64 PIE usermode binaries
     #       these are used for imports (got entries) and init_array. In kernel
     #       modules these are used for anything that references a different
     #       section or a symbol in the main kernel binary or another module.
@@ -205,7 +204,7 @@ class Symbolizer():
     #       because the executable is position-indepent. Indirect jumps and
     #       calls can also have data references
     #
-    #   
+    #
     def symbolize_code_sections(self, container, context):
         # Symbolize relocations
         for section in container.loader.elffile.iter_sections():
@@ -255,9 +254,16 @@ class Symbolizer():
                 if instruction.address in self.symbolized_imm:
                     continue
 
-                # Capstone should have already computed the right address 
+                # Capstone should have already computed the right address
                 # (in terms of offset from the start of the section)
                 target = container.adjust_address(Address(instruction.address.section, imm_op))
+
+                if (is_jmp and target.section.name == function.address.section.name and
+                    function.address.offset <= target.offset < function.address.offset + function.sz):
+                    # The jump goes back to the same function
+                    function.bbstarts.add(target)
+                    function.bbstarts.add(Address(instruction.address.section, instruction.address.offset + instruction.sz))
+
                 instruction.op_str = '.LC%s' % str(target)
 
 
@@ -340,7 +346,7 @@ class Symbolizer():
             # This relocation refers to an imported symbol
             relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'])
 
-        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
+        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"] or reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
                 relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)

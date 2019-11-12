@@ -119,11 +119,6 @@ class Container():
         self.code_relocations[section_name].extend(relocations)
 
     def function_of_address(self, addr):
-        # for _, function in self.functions.items():
-        #     if (function.address.section.name == addr.section.name and
-        #         function.address.offset <= addr.offset < function.address.offset + function.sz):
-        #         return function
-        # return None
         if addr.section.name not in self.functions:
             return None
 
