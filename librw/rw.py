@@ -247,32 +247,84 @@ class Symbolizer():
     # Symbolize direct branches
     def symbolize_direct_branches(self, container, context=None):
         for function in container.iter_functions():
-            for _, instruction in enumerate(function.cache):
+            offset_to_idx = dict()
+            for inst_idx, instruction in enumerate(function.cache):
+                offset_to_idx[instruction.address.offset] = inst_idx
+
+            for inst_idx, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
 
-                # Ignore jumps and calls
+                # Ignore everything except jumps and calls
                 if not (is_jmp or is_call):
+                    if instruction.mnemonic.startswith('ret'):
+                        # This instruction is a return, treat specially
+                        function.nexts[inst_idx].append('ret')
+                        instruction.cf_leaves_fn = True
+                    else:
+                        # This instruction doesn't alter control flow, it only
+                        # has one successor (the next instruction)
+                        function.nexts[inst_idx].append(inst_idx + 1)
                     continue
 
+                instruction.cf_leaves_fn = False
+
                 imm_op = instruction.get_imm_op()[0]
-                # Ignore indirect jumps and calls
+
+                # Indirect jump/call
                 if not imm_op:
+                    if is_call:
+                        # Indirect call
+                        function.nexts[inst_idx].append('call')
+                        function.nexts[inst_idx].append(inst_idx + 1)
+                        instruction.cf_leaves_fn = True
+                    else:
+                        # Indirect jump
+                        function.nexts[inst_idx].append('undef')
                     continue
 
                 # Ignore targets that were already symbolized with relocations
                 if instruction.address in self.symbolized_imm:
+                    if is_jmp:
+                        # Direct jump to an external symbol
+                        if not instruction.mnemonic.startswith('jmp'):
+                            # Conditional direct jump
+                            function.nexts[inst_idx].append(inst_idx + 1)
+                        function.nexts[inst_idx].append('undef')
+                        instruction.cf_leaves_fn = True
+                    else:
+                        # Direct call to an external symbol
+                        function.nexts[inst_idx].append('call')
+                        function.nexts[inst_idx].append(inst_idx + 1)
+                        instruction.cf_leaves_fn = True
                     continue
 
                 # Capstone should have already computed the right address
                 # (in terms of offset from the start of the section)
                 target = container.adjust_address(Address(instruction.address.section, imm_op))
 
-                if (is_jmp and target.section.name == function.address.section.name and
-                    function.address.offset <= target.offset < function.address.offset + function.sz):
-                    # The jump goes back to the same function
-                    function.bbstarts.add(target)
-                    function.bbstarts.add(Address(instruction.address.section, instruction.address.offset + instruction.sz))
+                if is_jmp:
+                    # Direct jump
+                    if not instruction.mnemonic.startswith('jmp'):
+                        # Conditional direct jump, this could also fall through to the next instruction
+                        function.bbstarts.add(Address(instruction.address.section, instruction.address.offset + instruction.sz))
+                        function.nexts[inst_idx].append(inst_idx + 1)
+
+                    if (target.section.name == function.address.section.name and
+                        function.address.offset <= target.offset < function.address.offset + function.sz):
+                        # The jump stays inside the same function
+                        function.bbstarts.add(target)
+                        function.nexts[inst_idx].append(offset_to_idx[target.offset])
+
+                    else:
+                        # Direct jump that leaves the function (typically a tail call)
+                        function.nexts[inst_idx].append('undef')
+                        instruction.cf_leaves_fn = True
+                else:
+                    # Direct call
+                    function.nexts[inst_idx].append('call')
+                    function.nexts[inst_idx].append(inst_idx + 1)
+                    instruction.cf_leaves_fn = True
 
                 instruction.op_str = '.LC%s' % str(target)
 

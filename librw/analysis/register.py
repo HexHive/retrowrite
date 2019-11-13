@@ -118,7 +118,8 @@ class RegisterAnalysis(object):
 
     @staticmethod
     def analyze(container):
-        for addr, function in container.functions.items():
+        for function in container.iter_functions():
+            print(f'Analyzing {function.name}...')
             ra = RegisterAnalysis()
             ra.analyze_function(function)
             function.analysis[RegisterAnalysis.KEY] = ra.free_regs
