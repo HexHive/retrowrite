@@ -58,8 +58,8 @@ class Rewriter():
 
     def symbolize(self):
         symb = Symbolizer()
-        symb.symbolize_code_sections(self.container, None)
         symb.symbolize_data_sections(self.container, None)
+        symb.symbolize_code_sections(self.container, None)
 
     def dump(self):
         results = list()
@@ -130,7 +130,7 @@ class Symbolizer():
 
         self.symbolized_mem.add(instruction.address)
 
-    def apply_code_relocation(self, instruction, relocation):
+    def apply_code_relocation(self, instruction, relocation, container):
         if relocation['symbol_address'] is None:
             # This relocation refers to an imported symbol
             relocation_target = '{} + {}'.format(
@@ -159,9 +159,20 @@ class Symbolizer():
             else:
                 assert False, 'Unknown relocation type'
 
+            symbol_section_name = relocation['symbol_address'].section.name
+
             # The target symbol is in this binary
-            relocation_target = '.LC{}{:x}'.format(relocation['symbol_address'].section.name,
-                section_offset)
+            if symbol_section_name in container.sections:
+                # The relocation points to a data section, it can point to the middle of something
+                # e.g. if the compiler uses it in a loop termination condition
+                closest_non_ignored_offset = container.sections[symbol_section_name].get_closest_non_ignored_offset(section_offset)
+                relocation_target = '.LC{}{:x} + {}'.format(symbol_section_name,
+                    closest_non_ignored_offset, section_offset - closest_non_ignored_offset)
+            else:
+                # The relocation points to code, it should never point to the
+                # middle of an instruction. If it does, we have a problem
+                relocation_target = '.LC{}{:x}'.format(symbol_section_name,
+                    section_offset)
 
         rel_offset_inside_instruction = relocation['address'].offset - instruction.address.offset
 
@@ -179,7 +190,7 @@ class Symbolizer():
                 # Direct branch targets are not prefixed with $
                 instruction.op_str = relocation_target
             else:
-                instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target.split('+')[0].strip())
+                instruction.op_str = instruction.op_str.replace('${}'.format(op_imm), '$' + relocation_target)
 
             self.symbolized_imm.add(instruction.address)
         elif op_mem is not None and rel_offset_inside_instruction == instruction.cs.disp_offset:
@@ -225,14 +236,13 @@ class Symbolizer():
                     # Relocation doesn't point to an instruction
                     continue
 
-                self.apply_code_relocation(inst, rel)
+                self.apply_code_relocation(inst, rel, container)
 
         # Symbolize direct branches
         self.symbolize_direct_branches(container, context)
 
         # Symbolize memory accesses
         self.symbolize_mem_accesses(container, context)
-        # self.symbolize_switch_tables(container, context)
 
     # Symbolize direct branches
     def symbolize_direct_branches(self, container, context=None):
@@ -266,45 +276,6 @@ class Symbolizer():
 
                 instruction.op_str = '.LC%s' % str(target)
 
-
-    def symbolize_switch_tables(self, container, context):
-        rodata = container.sections.get(".rodata", None)
-        if not rodata:
-            return
-
-        all_bases = set([x for _, y in self.pot_sw_bases.items() for x in y])
-
-        for faddr, swbases in self.pot_sw_bases.items():
-            fn = container.function_of_address(faddr)
-            for swbase in sorted(swbases, reverse=True):
-                value = rodata.read_at(swbase, 4)
-                if not value:
-                    continue
-
-                value = (value + swbase) & 0xffffffff
-                if not fn.is_valid_instruction(value):
-                    continue
-
-                # We have a valid switch base now.
-                swlbl = ".LC%x-.LC%x" % (value, swbase)
-                rodata.replace(swbase, 4, swlbl)
-
-                # Symbolize as long as we can
-                for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
-                    if any([x in all_bases for x in range(slot, slot + 4)]):
-                        break
-
-                    value = rodata.read_at(slot, 4)
-                    if not value:
-                        break
-
-                    value = (value + swbase) & 0xFFFFFFFF
-                    if not fn.is_valid_instruction(value):
-                        break
-
-                    swlbl = ".LC%x-.LC%x" % (value, swbase)
-                    rodata.replace(slot, 4, swlbl)
-
     # Symbolize memory accesses
     def symbolize_mem_accesses(self, container, context):
         for function in container.iter_functions():
@@ -333,7 +304,7 @@ class Symbolizer():
 
 
 
-    def _handle_relocation(self, container, section, relocation):
+    def apply_data_relocation(self, container, section, relocation):
         reloc_type = relocation['type']
         if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
             # NOP
@@ -346,6 +317,7 @@ class Symbolizer():
             # This relocation refers to an imported symbol
             relocation_target = '{} + {}'.format(relocation['name'], relocation['addend'])
 
+        # PC32 and PLT32 are more or less the same in the kernel, but not in user space
         if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"] or reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
@@ -383,7 +355,7 @@ class Symbolizer():
         # Section specific relocation
         for secname, section in container.sections.items():
             for relocation in section.relocations:
-                self._handle_relocation(container, section, relocation)
+                self.apply_data_relocation(container, section, relocation)
 
 
 def is_data_section(sname, sval, container):

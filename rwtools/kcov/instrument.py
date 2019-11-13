@@ -5,7 +5,7 @@ from archinfo import ArchAMD64
 from librw.container import InstrumentedInstruction
 
 CALLER_SAVED_REGS = [
-    'rax', 'rax', 'rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9', 'r10', 'r11'#, 'rflags',
+    'rax', 'rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9', 'r10', 'r11',
 ]
 
 CALLEE_SAVED_REGS = [
@@ -59,6 +59,8 @@ class Instrument():
                     # Todo: make this more precise
                     regs_to_save = CALLER_SAVED_REGS
 
+                    iinstr.append('pushfq')
+
                     for reg in regs_to_save:
                         iinstr.append('\tpushq %{}'.format(reg))
 
@@ -66,6 +68,8 @@ class Instrument():
 
                     for reg in regs_to_save[::-1]:
                         iinstr.append('\tpopq %{}'.format(reg))
+
+                    iinstr.append('popfq')
 
                     if instr.address.offset == 0:
                         # this needs to go after the stack pointer adjustment

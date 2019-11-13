@@ -389,6 +389,23 @@ class DataSection():
         for cell in self.cache[offset + 1:offset + sz]:
             cell.set_ignored()
 
+    def get_closest_non_ignored_offset(self, offset):
+        if offset >= len(self.cache):
+            return len(self.cache) - 1
+
+        if not self.cache[offset].ignored:
+            return offset
+
+        ret = offset - 1
+
+        while ret >= 0:
+            if not self.cache[ret].ignored:
+                return ret
+
+            ret -= 1
+
+        raise RuntimeError('Invalid data address')
+
     def iter_cells(self):
         location = self.base
         for cidx, cell in enumerate(self.cache):
