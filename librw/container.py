@@ -41,6 +41,9 @@ class SzPfx():
 class Address(namedtuple('Address', 'section offset')):
     __slots__ = ()
 
+    def as_dict(self):
+        return {'section': self.section.name, 'offset': self.offset}
+
     def __str__(self):
         return '%s%x' % (self.section.name.replace('-', '_'), self.offset)
 
@@ -50,7 +53,6 @@ class Address(namedtuple('Address', 'section offset')):
     def __eq__(self, other):
         return (other.section.name == self.section.name and
                 other.offset == self.offset)
-
 
 class Container():
     def __init__(self):

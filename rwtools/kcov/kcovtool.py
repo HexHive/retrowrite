@@ -50,10 +50,10 @@ def do_symbolization(input, outfile):
     #         analysis = json.load(fd)
 
     # except IOError:
-    print("[*] Analyzing free registers")
-    RegisterAnalysis.analyze(loader.container)
-    analysis = dict()
+    # print("[*] Analyzing free registers")
+    # RegisterAnalysis.analyze(loader.container)
 
+    # analysis = dict()
     # for func in loader.container.iter_functions():
     #     addr = func.address
     #     analysis[str(addr)] = dict()
@@ -61,7 +61,7 @@ def do_symbolization(input, outfile):
     #     for k, info in func.analysis["free_registers"].items():
     #         analysis[str(addr)]["free_registers"][k] = list(info)
 
-    print("[*] Done")
+    # print("[*] Done")
 
         # with open(outfile + ".analysis_cache", "w") as fd:
         #     json.dump(analysis, fd)

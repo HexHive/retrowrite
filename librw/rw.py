@@ -1,4 +1,5 @@
 import argparse
+import json
 from collections import defaultdict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
@@ -81,6 +82,39 @@ class Rewriter():
         # Write the final output
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
+
+        # need: list of successors of each instruction
+        #       registers read by each instruction
+        #       registers written to by each instruction
+
+        # schema:
+        #   file contains a dict of functions keyed by function name
+        #   function contains entry point and list of instructions
+        #   instruction contains the address of the instruction, the list of the
+        #       indices of the successors, the list of registers written, and
+        #       the list of registers read
+        cf_info = defaultdict(dict)
+
+        for function in self.container.iter_functions():
+            instructions_info = []
+            bbstarts = [str(bbs) for bbs in function.bbstarts]
+
+            for instruction_idx, instruction in enumerate(function.cache):
+                instructions_info.append({
+                    'address': instruction.address.as_dict(),
+                    'successors': function.next_of(instruction_idx),
+                    'regs_written': instruction.reg_writes(),
+                    'regs_read': instruction.reg_reads(),
+                })
+
+            cf_info[function.name] = {
+                'address': function.address.as_dict(),
+                'instructions': instructions_info,
+                'bbstarts': bbstarts,
+            }
+
+        with open(self.outfile + '.cf.json', 'w') as f:
+            json.dump(cf_info, f)
 
 
 class Symbolizer():
