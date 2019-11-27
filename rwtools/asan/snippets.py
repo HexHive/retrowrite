@@ -29,20 +29,31 @@ MODULE_DEINIT = [
 
 MEM_LOAD_COMMON = [
     "\tleaq {lexp}, {clob1}",
-    "\tmovq {clob1}, {tgt}",
-    "\tshrq $3, {tgt}",
-    "\tmovb 2147450880({tgt}), {tgt_8}",
+    "\tmovq $0xffffe00000000000, {tgt}",
+    "\tleaq ({tgt}, {clob1}), {tgt}",
+    "\tsarq $3, {tgt}",
+    "\tmovzbl ({tgt}), {tgt_32}",
     "\ttestb {tgt_8}, {tgt_8}",
     "\tje {0}_{{addr}}".format(ASAN_MEM_EXIT),
 ]
 
 MEM_LOAD_SZ = [
-    "\tandl $7, {clob1_32}",
-    "\taddl ${acsz_1}, {clob1_32}",
-    "\tmovsbl {tgt_8}, {tgt_32}",
-    "\tcmpl {tgt_32}, {clob1_32}",
+    "\tshll $8, {tgt_32}",
+    "\tmovb {clob1_8}, {tgt_8}",
+    "\trorl $8, {tgt_32}",
+    "\tandb $7, {clob1_8}",
+    "\taddb ${acsz_1}, {clob1_8}",
+    "\tcmpb {tgt_8}, {clob1_8}",
     "\tjl {0}_{{addr}}".format(ASAN_MEM_EXIT),
-    "\tcallq __asan_report_load{acsz}@PLT",
+    "\troll $8, {tgt_32}",
+    "\tmovb {tgt_8}, {clob1_8}",
+]
+
+ASAN_REPORT = [
+    "{save_regs}",
+    "\tmovq {clob1}, %rdi",
+    "\tcallq __asan_report_{acctype}{acsz}_noabort",
+    "{restore_regs}",
 ]
 
 MEM_REG_SAVE = [
@@ -86,16 +97,17 @@ MEM_REG_RESTORE = [
 ]
 
 STACK_POISON_BASE = [
-    "\tleaq {pbase}, {reg}",
-    "\tshrq $3, {reg}",
+    "\tleaq {pbase}, {reg1}",
+    "\tshrq $3, {reg1}",
+    "\tmovq $0xdffffc0000000000, {reg2}",
 ]
 
-STACK_POISON_SLOT = "\tmovb $0xff, {off}({reg})"
-STACK_UNPOISON_SLOT = "\tmovb $0x0, {off}({reg})"
+STACK_POISON_SLOT = "\tmovb $0xff, ({reg1}, {reg2})"
+STACK_UNPOISON_SLOT = "\tmovb $0x0, ({reg1}, {reg2})"
 STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
 STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
 
-CANARY_CHECK = "%fs:0x28"
+CANARY_CHECK = "%gs:0x28"
 LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
 LEAF_STACK_UNADJUST = "\tleaq 256(%rsp), %rsp"
 

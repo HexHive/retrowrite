@@ -21,7 +21,7 @@ class StackFrameAnalysis(object):
         analyzer.update_results(container)
 
     def analyze_container(self, container):
-        for addr, fn in container.functions.items():
+        for fn in container.iter_functions():
             self.analyze_function(fn, container)
 
     def analyze_function(self, function, container):
@@ -37,7 +37,7 @@ class StackFrameAnalysis(object):
             if mem.disp >= 0:
                 continue
 
-            self.analysis[function.start][
+            self.analysis[function.name][
                 StackFrameAnalysis.KEY_IS_LEAF] = True
 
             break
@@ -45,4 +45,4 @@ class StackFrameAnalysis(object):
     def update_results(self, container):
         for key, result in self.analysis.items():
             for rkey, values in result.items():
-                container.functions[key].analysis[rkey] = values
+                container.get_function_by_name(key).analysis[rkey] = values

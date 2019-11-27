@@ -114,6 +114,13 @@ class Container():
 
         return False
 
+    def get_function_by_name(self, name):
+        for fn in self.iter_functions():
+            if name == fn.name:
+                return fn
+        else:
+            return None
+
     def attach_loader(self, loader):
         self.loader = loader
 
