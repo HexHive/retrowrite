@@ -434,6 +434,8 @@ class Instrument():
         if need_save > 0:
             instrumentation.append(
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
+            instrumentation.append('\tleaq {}(%rsp), %rsp'.format(need_save * 8))
+
 
         # Add instrumentation to poison
         instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
@@ -444,6 +446,7 @@ class Instrument():
 
         # Restore clobbered registers
         if need_save > 0:
+            instrumentation.append('\tleaq -{}(%rsp), %rsp'.format(need_save * 8))
             instrumentation.append(
                 copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
 
@@ -466,6 +469,7 @@ class Instrument():
         if need_save > 0:
             instrumentation.append(
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
+            instrumentation.append('\tleaq {}(%rsp), %rsp'.format(need_save * 8))
 
         # Add instrumentation to poison
         instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
@@ -476,6 +480,7 @@ class Instrument():
 
         # Restore clobbered registers
         if need_save > 0:
+            instrumentation.append('\tleaq -{}(%rsp), %rsp'.format(need_save * 8))
             instrumentation.append(
                 copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
 
