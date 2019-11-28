@@ -222,9 +222,9 @@ class Instrument():
                     sp.MEM_FLAG_SAVE_OPT))
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
-        if push_cnt % 2 != 0:
-            save.append("leaq -8(%rsp), %rsp".format(push_cnt * 8))
-            restore.insert(0, "leaq 8(%rsp), %rsp".format(push_cnt * 8))
+        if push_cnt > 0:
+            save.append("leaq {}(%rsp), %rsp".format(push_cnt * 8))
+            restore.insert(0, "leaq -{}(%rsp), %rsp".format(push_cnt * 8))
 
         if acsz == 1:
             memcheck = self._access1()
