@@ -29,7 +29,7 @@ class Loader():
 
             bytes = section.data()[function_start:function_end]
             function = Function(fn['name'], fn['address'],
-                fn['sz'], bytes, fn['bind'])
+                fn['sz'], bytes, self.container, fn['bind'])
 
             print('Added function %s' % fn['name'])
 

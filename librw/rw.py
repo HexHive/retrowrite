@@ -388,7 +388,21 @@ class Symbolizer():
 
                 self.apply_mem_op_symbolization(instruction, target)
 
+    def label_for_address(self, container, address):
+        fn = container.function_of_address(address)
 
+        # Assume that relocations that point into data sections never point into
+        # the middle of something
+        if not fn:
+            return '.LC%s' % str(address)
+
+        insn = fn.instruction_of_address(address)
+        # Check if the relocation refers to the start of an instruction
+        if insn.address.offset == address.offset:
+            return '.LC%s' % str(address)
+
+        # The relocation refers to the middle of an instruction
+        return '.LC%s + %d' % (str(insn.address), address.offset - insn.address.offset)
 
     def apply_data_relocation(self, container, section, relocation):
         reloc_type = relocation['type']
@@ -407,29 +421,29 @@ class Symbolizer():
         if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"] or reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PLT32"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
             relocation_target += ' - .'
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC64"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
             relocation_target += ' - .'
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_32S"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset + relocation['addend']
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
             if not relocation_target:
                 value = relocation['addend']
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_JUMP_SLOT"]:
             if not relocation_target:
                 value = relocation['symbol_address'].offset
-                relocation_target = '.LC%s%x' % (relocation['symbol_address'].section.name, value)
+                relocation_target = self.label_for_address(container, Address(relocation['symbol_address'].section, value))
         else:
             print("[*] Unhandled relocation {}".format(
                 describe_reloc_type(reloc_type, container.loader.elffile)))

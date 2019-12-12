@@ -131,7 +131,11 @@ class Container():
         if addr.section.name not in self.functions:
             return None
 
-        interval, = self.functions[addr.section.name][addr.offset]
+        function_data = self.functions[addr.section.name][addr.offset]
+        if not function_data:
+            return None
+
+        interval, = function_data
         return interval.data
 
     def iter_functions(self):
@@ -144,6 +148,7 @@ class Container():
             # Relocatable file, there can't be cross-section references unless
             # they use relocations
             assert address.offset >= 0 and address.offset < address.section.data_size
+
             return address
         elif self.loader.elffile['e_type'] == 'ET_DYN':
             # Position-independent userspace binary, there can be cross-section
@@ -169,13 +174,14 @@ class Container():
 
 
 class Function():
-    def __init__(self, name, address, sz, bytes, bind="STB_LOCAL"):
+    def __init__(self, name, address, sz, bytes, container, bind="STB_LOCAL"):
         self.name = name
         self.cache = list()
         self.address = address
         self.sz = sz
         self.bytes = bytes
         self.bbstarts = set()
+        self.container = container
         self.bind = bind
 
         # Populated during symbolization.
@@ -261,6 +267,13 @@ class Function():
                 results.append("{}".format(iinstr))
 
         results.append(".size %s,.-%s" % (self.name, self.name))
+
+        # Add a label for the address after the end of the function (used for unwind information)
+        # but only if there is not already another function at the same address
+        address_after_end = Address(self.cache[-1].address.section, self.cache[-1].address.offset + self.cache[-1].sz)
+
+        if not self.container.function_of_address(address_after_end):
+            results.append('.LC%s:' % str(address_after_end))
 
         return "\n".join(results)
 
