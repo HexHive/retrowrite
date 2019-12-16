@@ -165,12 +165,32 @@ class Symbolizer():
         self.symbolized_mem.add(instruction.address)
 
     def apply_code_relocation(self, instruction, relocation, container):
+        # DEBUG
+        # if instruction.address.section.name == '.text' and instruction.address.offset == 0xbff21:
+        #     import pdb; pdb.set_trace()
         if relocation['symbol_address'] is None:
             # This relocation refers to an imported symbol
-            relocation_target = '{} + {}'.format(
-                relocation['name'], relocation['addend'] +
-                Symbolizer.RELOCATION_SIZES[relocation['type']]
-            )
+            if (relocation['type'] in [
+                ENUM_RELOC_TYPE_x64['R_X86_64_64'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_GOT32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_32S'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_16'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_8'],
+             ]):
+                add = relocation['addend']
+            elif (relocation['type'] in [
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC64'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PLT32'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC16'],
+                ENUM_RELOC_TYPE_x64['R_X86_64_PC8'],
+            ]):
+                add = relocation['addend'] + Symbolizer.RELOCATION_SIZES[relocation['type']]
+            else:
+                assert False, 'Unknown relocation type'
+
+            relocation_target = '{} + {}'.format(relocation['name'], add)
         else:
             if (relocation['type'] in [
                 ENUM_RELOC_TYPE_x64['R_X86_64_64'],
