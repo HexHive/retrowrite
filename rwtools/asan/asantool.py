@@ -7,6 +7,7 @@ from librw.loader import Loader
 from librw.rw import Rewriter
 from librw.analysis.register import RegisterAnalysis
 from librw.analysis.stackframe import StackFrameAnalysis
+from librw.container import InstrumentedInstruction
 
 from .instrument import Instrument
 
@@ -40,7 +41,7 @@ def do_symbolization(input, outfile):
 
     loader.container.attach_loader(loader)
 
-    rw = Rewriter(loader.container, outfile + ".s")
+    rw = Rewriter(loader.container, outfile)
     rw.symbolize()
 
     StackFrameAnalysis.analyze(loader.container)
@@ -63,6 +64,58 @@ def do_symbolization(input, outfile):
 
     return rw
 
+class KcovInstrument():
+    CALLER_SAVED_REGS = [
+        'rax', 'rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9', 'r10', 'r11',
+    ]
+
+    def __init__(self, rewriter):
+        self.rewriter = rewriter
+
+    def do_instrument(self):
+        for fn in self.rewriter.container.iter_functions():
+            fn.set_instrumented()
+
+            for iidx, instr in enumerate(fn.cache):
+                if instr.address in fn.bbstarts:
+                    iinstr = []
+                    free_regs = fn.analysis['free_registers'][iidx]
+                    flags_are_free = 'rflags' in free_regs
+
+                    regs_to_save = [
+                        r for r in KcovInstrument.CALLER_SAVED_REGS
+                        if r not in free_regs
+                    ]
+
+                    if not flags_are_free:
+                        iinstr.append('\tpushfq')
+
+                    for reg in regs_to_save:
+                        iinstr.append('\tpushq %{}'.format(reg))
+
+                    # Keep the stack pointer aligned
+                    used_stack_slots = len(regs_to_save) if flags_are_free else len(regs_to_save) + 1
+
+                    if (used_stack_slots % 2) != 0:
+                        iinstr.append('\tsubq $8, %rsp')
+
+                    iinstr.append('\tcallq __sanitizer_cov_trace_pc')
+
+                    if (used_stack_slots % 2) != 0:
+                        iinstr.append('\taddq $8, %rsp')
+
+                    for reg in regs_to_save[::-1]:
+                        iinstr.append('\tpopq %{}'.format(reg))
+
+                    if not flags_are_free:
+                        iinstr.append('\tpopfq')
+
+                    if instr.address.offset == 0:
+                        # this needs to go after the stack pointer adjustment
+                        instr.instrument_after(InstrumentedInstruction('\n'.join(iinstr)))
+                    else:
+                        instr.instrument_before(InstrumentedInstruction('\n'.join(iinstr)))
+
 
 if __name__ == "__main__":
     argp = argparse.ArgumentParser()
@@ -71,13 +124,7 @@ if __name__ == "__main__":
     argp.add_argument("outfile", type=str, help="Input binary to instrument")
 
     argp.add_argument(
-        "--compile", type=str, help="Compile command for the binary")
-
-    argp.add_argument(
-        "--gcc", action='store_true', help="Use gcc compile final binary")
-
-    argp.add_argument(
-        "--clang", action='store_true', help="Use clang compile final binary")
+        "--kcov", action='store_true', help="Instrument the kernel module with kcov")
 
     args = argp.parse_args()
 
@@ -86,6 +133,8 @@ if __name__ == "__main__":
     instrumenter = Instrument(rewriter)
     instrumenter.do_instrument()
 
-    # instrumenter.dump_stats()
+    if args.kcov:
+        kcov_instrumenter = KcovInstrument(rewriter)
+        kcov_instrumenter.do_instrument()
 
     rewriter.dump()
