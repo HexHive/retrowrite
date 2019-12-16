@@ -156,6 +156,31 @@ class Instrument():
         r2 = [True, "%rsi"]
         push_cnt = 0
 
+        # XXX: Bug in capstone?
+        if any([
+            instruction.mnemonic.startswith(x) for x in
+            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
+        ]):
+            midx = 1
+
+        is_rep_stos = False
+        if instruction.mnemonic.startswith("rep stos"):
+            is_rep_stos = True
+            lexp = instruction.op_str.split(",", 1)[1]
+        elif len(instruction.cs.operands) == 1:
+            lexp = instruction.op_str
+        elif len(instruction.cs.operands) > 2:
+            print("[*] Found op len > 2: %s" % (instruction))
+            op1 = instruction.op_str.split(",", 1)[1]
+            lexp = op1.rsplit(",", 1)[0]
+        elif midx == 0:
+            lexp = instruction.op_str.rsplit(",", 1)[0]
+        else:
+            lexp = instruction.op_str.split(",", 1)[1]
+
+        if lexp.startswith("*"):
+            lexp = lexp[1:]
+
         if "rflags" in free:
             save_rflags = False
             free.remove("rflags")
@@ -175,7 +200,8 @@ class Instrument():
                 save_rflags = "opt"
                 save_rax = "rax" not in free
 
-        # The kernel doesn't use red zones (TODO: check)
+        # Linux on x86_64 doesn't use red zones
+        # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f21937231034f554bdd7/arch/x86/Makefile#L132
         # if is_leaf and (r1[0] or r2[0] or save_rflags):
         #     save.append(sp.LEAF_STACK_ADJUST)
         #     restore.append(sp.LEAF_STACK_UNADJUST)
@@ -222,9 +248,21 @@ class Instrument():
                     sp.MEM_FLAG_SAVE_OPT))
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
-        if push_cnt > 0:
-            save.append("leaq {}(%rsp), %rsp".format(push_cnt * 8))
-            restore.insert(0, "leaq -{}(%rsp), %rsp".format(push_cnt * 8))
+        if push_cnt > 0 and '%rsp' in lexp:
+            # In this case we have a stack-relative load but the value of the stack
+            # pointer has changed because we pushed some registers to the stack
+            # to save them. Adjust the displacement of the access to take this
+            # into account
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + push_cnt * 8
+
+            if hex(disp) in lexp:
+                lexp = lexp.replace(hex(disp), hex(adjusted_disp))
+            elif str(disp) in lexp:
+                lexp = lexp.replace(str(disp), hex(adjusted_disp))
+            else:
+                assert False, 'Can\'t find displacement in lexp'
+
 
         if acsz == 1:
             memcheck = self._access1()
@@ -243,30 +281,6 @@ class Instrument():
             copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
         codecache.extend(restore)
 
-        # XXX: Bug in capstone?
-        if any([
-            instruction.mnemonic.startswith(x) for x in
-            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
-        ]):
-            midx = 1
-
-        is_rep_stos = False
-        if instruction.mnemonic.startswith("rep stos"):
-            is_rep_stos = True
-            lexp = instruction.op_str.split(",", 1)[1]
-        elif len(instruction.cs.operands) == 1:
-            lexp = instruction.op_str
-        elif len(instruction.cs.operands) > 2:
-            print("[*] Found op len > 2: %s" % (instruction))
-            op1 = instruction.op_str.split(",", 1)[1]
-            lexp = op1.rsplit(",", 1)[0]
-        elif midx == 0:
-            lexp = instruction.op_str.rsplit(",", 1)[0]
-        else:
-            lexp = instruction.op_str.split(",", 1)[1]
-
-        if lexp.startswith("*"):
-            lexp = lexp[1:]
 
         args = dict()
         args["lexp"] = lexp
@@ -310,6 +324,11 @@ class Instrument():
 
     def instrument_mem_accesses(self):
         for fn in self.rewriter.container.iter_functions():
+
+            # DEBUG
+            if fn.name == 'btrfs_run_delayed_refs':
+                continue
+
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):
                 # Do not instrument instrumented instructions
@@ -321,15 +340,21 @@ class Instrument():
                 # Do not instrument lea
                 if instruction.mnemonic.startswith("lea"):
                     continue
+                # Do not instrument prefetches
+                if instruction.mnemonic.startswith("prefetch"):
+                    continue
                 if instruction.address in self.skip_instrument:
                     continue
                 # Do not instrument stack canaries
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
                     continue
 
-                # XXX: THIS IS A TODO for more accurate check.
+                # TODO: figure out why this doen't work
+                if instruction.mnemonic.startswith("rep mov"):
+                    continue
                 if instruction.mnemonic.startswith("rep stos"):
-                    pass
+                    continue
+
 
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
@@ -423,7 +448,7 @@ class Instrument():
 
         return meta
 
-    def poison_stack(self, args, need_save):
+    def poison_stack(self, args, need_save, instruction, midx):
         instrumentation = list()
 
         # Save the registers we're about to clobber
@@ -432,9 +457,20 @@ class Instrument():
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg1}'))
 
         if need_save > 0:
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + need_save * 8
+
             instrumentation.append(
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
-            instrumentation.append('\tleaq {}(%rsp), %rsp'.format(need_save * 8))
+
+            if '%rsp' in args['pbase']:
+                if hex(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(hex(disp), hex(adjusted_disp))
+                elif str(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(str(disp), hex(adjusted_disp))
+                else:
+                    import pdb; pdb.set_trace()
+                    assert False, 'Can\'t find displacement in pbase'
 
 
         # Add instrumentation to poison
@@ -446,7 +482,6 @@ class Instrument():
 
         # Restore clobbered registers
         if need_save > 0:
-            instrumentation.append('\tleaq -{}(%rsp), %rsp'.format(need_save * 8))
             instrumentation.append(
                 copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
 
@@ -458,7 +493,7 @@ class Instrument():
         return InstrumentedInstruction(
             code_str, sp.STACK_ENTER_LBL.format(**args), None)
 
-    def unpoison_stack(self, args, need_save):
+    def unpoison_stack(self, args, need_save, instruction, midx):
         instrumentation = list()
 
         # Save the registers we're about to clobber
@@ -467,9 +502,19 @@ class Instrument():
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg1}'))
 
         if need_save > 0:
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + need_save * 8
+
             instrumentation.append(
                 copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
-            instrumentation.append('\tleaq {}(%rsp), %rsp'.format(need_save * 8))
+
+            if '%rsp' in args['pbase']:
+                if hex(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(hex(disp), hex(adjusted_disp))
+                elif str(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(str(disp), hex(adjusted_disp))
+                else:
+                    assert False, 'Can\'t find displacement in pbase'
 
         # Add instrumentation to poison
         instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
@@ -480,7 +525,6 @@ class Instrument():
 
         # Restore clobbered registers
         if need_save > 0:
-            instrumentation.append('\tleaq -{}(%rsp), %rsp'.format(need_save * 8))
             instrumentation.append(
                 copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
 
@@ -588,7 +632,8 @@ class Instrument():
                         reg1=clob1, reg2=clob2, pbase=pbase,
                         addr=instruction.address)
 
-                    poisoni = self.poison_stack(args, need_save)
+                    _, midx = nexti.get_mem_access_op()
+                    poisoni = self.poison_stack(args, need_save, nexti, midx)
                     instruction.instrument_before(poisoni)
                     is_poisoned = True
                 else:
@@ -629,7 +674,7 @@ class Instrument():
                         reg1=clob1, reg2=clob2, pbase=pbase,
                         addr=instruction.address)
 
-                    unpoisoni = self.unpoison_stack(args, need_save)
+                    unpoisoni = self.unpoison_stack(args, need_save, instruction, midx)
                     instruction.instrument_before(unpoisoni)
 
             for idx, code in enumerate(inserts):

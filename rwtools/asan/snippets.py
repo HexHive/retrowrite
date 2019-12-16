@@ -104,8 +104,8 @@ STACK_POISON_BASE = [
 
 STACK_POISON_SLOT = "\tmovb $0xff, ({reg1}, {reg2})"
 STACK_UNPOISON_SLOT = "\tmovb $0x0, ({reg1}, {reg2})"
-STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
-STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
+STACK_ENTER_LBL = ".LC_ASAN_STACK_ENTER_{addr}"
+STACK_EXIT_LBL = ".LC_ASAN_STACK_EXIT_{addr}"
 
 CANARY_CHECK = "%gs:0x28"
 LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
