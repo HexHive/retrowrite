@@ -255,6 +255,8 @@ class Function():
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
 
+            results.append('.LCorig_%s:' % str(instruction.address))
+
             # HACK: gas will assemble 'nopl 0(%rax, %rax, 1)' as a 4-byte NOP but
             # in the original module it might be 5 bytes
             if instruction.sz == 5 and instruction.mnemonic == 'nopl':
@@ -488,7 +490,11 @@ class DataSection():
 
             if self.name == '.bss':
                 cell.value = 0
-            results.append("\t%s" % (cell))
+
+            if self.name == '.altinstructions':
+                results.append("\t%s" % (str(cell).replace('.LC.text', '.LCorig_.text')))
+            else:
+                results.append("\t%s" % (cell))
 
             for after in cell.after:
                 results.append("\t%s" % (after))
