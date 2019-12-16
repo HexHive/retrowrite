@@ -7,10 +7,7 @@ cycler==0.10.0
 future==0.16.0
 greenstalk==0.5.2
 kiwisolver==1.0.1
-matplotlib==3.0.3
 more-itertools==4.3.0
-numpy==1.16.2
-pandas==0.24.1
 pathlib2==2.3.2
 pluggy==0.8.0
 py==1.7.0
@@ -22,8 +19,6 @@ python-dateutil==2.8.0
 pytz==2018.9
 pyvex==8.18.10.5
 PyYAML==5.1.1
-scikit-learn==0.20.3
-scipy==1.2.1
 six==1.11.0
-sklearn==0.0
 yapf==0.24.0
+intervaltree==3.0.2

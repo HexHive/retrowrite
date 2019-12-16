@@ -62,27 +62,7 @@ class Rewriter():
         symb.symbolize_data_sections(self.container, None)
         symb.symbolize_code_sections(self.container, None)
 
-    def dump(self):
-        results = list()
-
-        # Emit rewritten functions
-        for function in self.container.iter_functions():
-            if function.name in Rewriter.GCC_FUNCTIONS:
-                continue
-            results.append('.section %s,"ax",@progbits' % function.address.section.name)
-            results.append(".align 16")
-
-            results.append("%s" % function)
-
-        # Emit rewritten data sections
-        for sec, section in sorted(
-                self.container.sections.items(), key=lambda x: x[1].base):
-            results.append("%s" % (section))
-
-        # Write the final output
-        with open(self.outfile, 'w') as outfd:
-            outfd.write("\n".join(results + ['']))
-
+    def dump_cf_info(self, f):
         # need: list of successors of each instruction
         #       registers read by each instruction
         #       registers written to by each instruction
@@ -113,8 +93,28 @@ class Rewriter():
                 'bbstarts': bbstarts,
             }
 
-        with open(self.outfile + '.cf.json', 'w') as f:
-            json.dump(cf_info, f)
+        json.dump(cf_info, f)
+        
+    def dump(self):
+        results = list()
+
+        # Emit rewritten functions
+        for function in self.container.iter_functions():
+            if function.name in Rewriter.GCC_FUNCTIONS:
+                continue
+            results.append('.section %s,"ax",@progbits' % function.address.section.name)
+            results.append(".align 16")
+
+            results.append("%s" % function)
+
+        # Emit rewritten data sections
+        for sec, section in sorted(
+                self.container.sections.items(), key=lambda x: x[1].base):
+            results.append("%s" % (section))
+
+        # Write the final output
+        with open(self.outfile, 'w') as outfd:
+            outfd.write("\n".join(results + ['']))
 
 
 class Symbolizer():

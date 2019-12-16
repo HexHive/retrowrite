@@ -1,5 +1,7 @@
 import argparse
 import json
+import tempfile
+import subprocess
 
 from elftools.elf.constants import SH_FLAGS
 
@@ -46,21 +48,25 @@ def do_symbolization(input, outfile):
 
     StackFrameAnalysis.analyze(loader.container)
 
-    # Try to find a cache of analysis results.
-    with open(outfile + ".analysis_cache") as fd:
-        analysis = json.load(fd)
+    with tempfile.NamedTemporaryFile(mode='w') as cf_file:
+        with tempfile.NamedTemporaryFile(mode='r') as regs_file:
+            rw.dump_cf_info(cf_file)
+            cf_file.flush()
 
-    print("[*] Loading analysis cache")
-    for func, info in analysis.items():
-        for key, finfo in info.items():
-            fn = loader.container.get_function_by_name(func)
-            fn.analysis[key] = dict()
-            for k, v in finfo.items():
-                try:
-                    addr = int(k)
-                except ValueError:
-                    addr = k
-                fn.analysis[key][addr] = v
+            subprocess.check_call(['cftool', cf_file.name, regs_file.name])
+
+            analysis = json.load(regs_file)
+
+            for func, info in analysis.items():
+                for key, finfo in info.items():
+                    fn = loader.container.get_function_by_name(func)
+                    fn.analysis[key] = dict()
+                    for k, v in finfo.items():
+                        try:
+                            addr = int(k)
+                        except ValueError:
+                            addr = k
+                        fn.analysis[key][addr] = v
 
     return rw
 
