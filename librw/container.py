@@ -499,6 +499,9 @@ class DataSection():
             for after in cell.after:
                 results.append("\t%s" % (after))
 
+        # Append a label after the end of the section
+        results.append(".LC%s%x:" % (self.name.replace('-', '_'), location))
+
         if valid_cells:
             return "\n".join(results)
         else:

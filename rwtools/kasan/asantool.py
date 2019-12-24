@@ -116,11 +116,7 @@ class KcovInstrument():
                     if not flags_are_free:
                         iinstr.append('\tpopfq')
 
-                    if instr.address.offset == 0:
-                        # this needs to go after the stack pointer adjustment
-                        instr.instrument_after(InstrumentedInstruction('\n'.join(iinstr)))
-                    else:
-                        instr.instrument_before(InstrumentedInstruction('\n'.join(iinstr)))
+                    instr.instrument_before(InstrumentedInstruction('\n'.join(iinstr)))
 
 
 if __name__ == "__main__":

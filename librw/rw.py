@@ -326,7 +326,7 @@ class Symbolizer():
                 imm_op = instruction.get_imm_op()[0]
 
                 # Indirect jump/call
-                if not imm_op:
+                if imm_op is None:
                     if is_call:
                         # Indirect call
                         function.nexts[inst_idx].append('call')
