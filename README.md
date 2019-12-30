@@ -35,6 +35,16 @@ Activate the virtualenv (from root of the repository):
 
 ## Usage
 
+### Target requirements
+
+Please note that your targets currently ...
+* must be compiled with position independant code (PIC/PIE)
+* must be x86 (32 or 64 bit)
+* must be not stripped
+* will most likely not work if they were compiled with a C++ compiler
+
+### Commands
+
 The individual tools also have commandline help which describes all the
 options, and may be accessed with `-h`. The below steps should quickly get you
 started with using retrowrite.
@@ -74,8 +84,12 @@ sections for more details on getting started.
 #### c. Instrument Binary with AFL
 
 To generate an AFL instrumented binary, first generate the symbolized assembly
-as described above. Then, recompile the symbolized assembly with `afl-gcc` or
-`afl-clang`.
+as described above. Then, recompile the symbolized assembly with `afl-gcc` from
+[afl++](https://github.com/vanhauser-thc/AFLplusplus) like this:
+
+```
+$ AFL_AS_FORCE_INSTRUMENT=1 afl-gcc foo.s -o foo
+```
 
 # Developer Guide
 
