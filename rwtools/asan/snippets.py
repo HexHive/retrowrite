@@ -3,6 +3,8 @@ ASAN_VERSION_CHECK = "__asan_version_mismatch_check_v6"
 ASAN_INIT_FN = "asan.module_ctor"
 ASAN_DEINIT_FN = "asan.module_dtor"
 
+# TODO: If you're using Debian, this becomes __assan_init
+# TODO: Switch these modifiers automatically
 ASAN_LIB_INIT = "__asan_init_v4"
 
 ASAN_MEM_EXIT = ".LC_ASAN_EX"
