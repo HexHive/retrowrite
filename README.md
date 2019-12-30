@@ -1,17 +1,24 @@
 # Retrowrite
 
 Code repository for "Retrowrite: Statically Instrumenting COTS Binaries for
-Fuzzing and Sanitization" (to appear in *IEEE S&P'20*). Please refer to the
-paper for technical details: [paper](https://nebelwelt.net/publications/files/20Oakland.pdf).
+Fuzzing and Sanitization" (in *IEEE S&P'20*). Please refer to the
+[paper](https://nebelwelt.net/publications/files/20Oakland.pdf) for
+technical details. There's also a
+[36c3 presentation](http://nebelwelt.net/publications/files/19CCC-presentation.pdf)
+and [36c3 video](https://media.ccc.de/v/36c3-10880-no_source_no_problem_high_speed_binary_fuzzing)
+to get you started.
 
 Retrowrite ships with two utilities to support binary rewriting:
 * **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
 * **librw.rw :** Generate symbolized assembly files from binaries
 
+
+
 # Quick Usage Guide
 
 This section highlights the steps to get you up to speed to use retrowrite for
 rewriting PIC binaries.
+
 
 ## Setup
 
@@ -33,21 +40,26 @@ Activate the virtualenv (from root of the repository):
 (Bonus) To exit virtualenv when you're done with retrowrite:
 * `deactivate`
 
+
 ## Usage
 
-### Target requirements
+### Requirements for target binary
 
-Please note that your targets currently ...
-* must be compiled with position independant code (PIC/PIE)
-* must be x86 (32 or 64 bit)
-* must be not stripped
-* will most likely not work if they were compiled with a C++ compiler
+The target binary
+* must be compiled as position independent code (PIC/PIE)
+* must be x86_64 (32 bit at your own risk)
+* must contain symbols (i.e., not stripped; if stripped, please recover
+  symbols first)
+* must not contain C++ exceptions (i.e., C++ exception tables are not
+  recovered and simply stripped during lifting)
+
 
 ### Commands
 
 The individual tools also have commandline help which describes all the
 options, and may be accessed with `-h`. The below steps should quickly get you
 started with using retrowrite.
+
 
 #### a. Instrument Binary with Binary-Address Sanitizer (BASan)
 
@@ -65,6 +77,7 @@ using any compiler, example:
 
 `gcc ls-basan-instrumented.s -lasan -o ls-basan-instrumented`
 
+
 #### b. Generate Symbolized Assembly
 
 To generate symbolized assembly that may be modified by hand or post-processed
@@ -81,6 +94,7 @@ instrumentation / modification needs! This saves the additional effort of
 having to load and parse binaries or assembly files. Check the developer
 sections for more details on getting started.
 
+
 #### c. Instrument Binary with AFL
 
 To generate an AFL instrumented binary, first generate the symbolized assembly
@@ -90,6 +104,7 @@ as described above. Then, recompile the symbolized assembly with `afl-gcc` from
 ```
 $ AFL_AS_FORCE_INSTRUMENT=1 afl-gcc foo.s -o foo
 ```
+
 
 # Developer Guide
 
@@ -105,14 +120,28 @@ tools in `rwtools/`.
 See [docker](docker) for more information on building a docker image for
 fuzzing and reproducing results.
 
-## Cite
+
+# Cite
+
+The following publications cover different parts of the RetroWrite project:
+
+* *RetroWrite: Statically Instrumenting COTS Binaries for Fuzzing and Sanitization*
+  Sushant Dinesh, Nathan Burow, Dongyan Xu, and Mathias Payer.
+  **In Oakland'20: IEEE International Symposium on Security and Privacy, 2020**
+
+* *No source, no problem! High speed binary fuzzing*
+  Matteo Rizzo, and Mathias Payer.
+  **In 36c3'19: Chaos Communication Congress, 2019**
 
 
+# License -- MIT
 
-## License -- MIT
 The MIT License
 
-Copyright (c) 2019 HexHive Group, Sushant Dinesh <sushant.dinesh94@gmail.com>.
+Copyright (c) 2019 HexHive Group,
+Sushant Dinesh <sushant.dinesh94@gmail.com>,
+Matteo Rizzo <matteorizzo.personal@gmail.com>,
+Mathias Payer <mathias.payer@nebelwelt.net>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
