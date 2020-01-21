@@ -1,0 +1,22 @@
+#!/bin/sh
+
+mount -t devtmpfs devtmpfs /dev
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+# Needed to communicate with syzkaller
+
+modprobe ext4
+modprobe e1000
+modprobe isofs
+modprobe btrfs
+
+# /bin/sh
+
+mount -o ro /dev/sda /mnt/root
+
+umount /proc
+umount /sys
+
+exec switch_root /mnt/root /sbin/init
+
