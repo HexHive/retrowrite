@@ -17,6 +17,7 @@ fi
 
 LINUX_VERSION="5.5.0-rc6"
 
+GOPATH="$WORKDIR/go"
 LINUX_DIR="$WORKDIR/linux"
 INITRAMFS_DIR="$WORKDIR/initramfs"
 MODULES_DIR="$WORKDIR/modules"
@@ -58,9 +59,16 @@ popd
 
 # Instrument module with kRetroWrite
 pushd $KRWDIR
+	# Work around a virtualenv bug
+	set +u
 	. retro/bin/activate	
+	set -u
+
 	python -m rwtools.kasan.asantool --kcov "$PLAIN_MODULE" "$MODULE_ASM"
+
+	set +u
 	deactivate
+	set -u
 popd
 pushd $MODULES_DIR
 	as -o "$BINARY_MODULE" "$MODULE_ASM"

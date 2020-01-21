@@ -36,7 +36,9 @@ sudo apt install -y \
 	qemu-system-x86 \
 	debootstrap \
 	btrfs-progs \
-	pypy3
+	pypy3 \
+	pypy3-dev \
+	cpio
 
 
 # Build Linux
@@ -108,26 +110,38 @@ fi
 export GOPATH="$WORKDIR/go"
 export GOROOT="$WORKDIR/go1.12"
 export PATH="$GOPATH/bin:$GOROOT/bin:$PATH"
+SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
-go get -u -d github.com/google/syzkaller/...
+if [[ ! -e "$SYZKALLER_DIR" ]]; then
+	go get -u -d github.com/google/syzkaller/...
 
-pushd "$GOPATH/src/github.com/google/syzkaller"
-	git checkout "$SYZKALLER_COMMIT"
-	make
-popd
+	pushd "$SYZKALLER_DIR"
+		git checkout "$SYZKALLER_COMMIT"
+		make
+	popd
+fi
+
 
 # Setup RetroWrite
 if [[ ! -e "$KRWDIR/retro" ]]; then
 	pushd "$KRWDIR"
 		pypy3 -m venv retro
+
+		# Work around a virtualenv bug :\
+		set +u
 		source retro/bin/activate
+		set -u
+
 		pip install --upgrade pip
 		pip install -r requirements.txt
 		git submodule update --init --checkout third-party/capstone
 		cd third-party/capstone
 		make -j`nproc`
 		cd bindings/python/ && make && make install
+
+		set +u
 		deactivate
+		set -u
 	popd
 fi
 
