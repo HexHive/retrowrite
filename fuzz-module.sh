@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euxo pipefail
+set -euo pipefail
 
 WORKDIR=`pwd`
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
@@ -23,16 +23,16 @@ INITRAMFS_DIR="$WORKDIR/initramfs"
 MODULES_DIR="$WORKDIR/modules"
 IMAGE_DIR="$WORKDIR/image"
 CAMPAIGNS_DIR="$WORKDIR/campaigns"
-SYZKALLER_ORIG_CONFIG="$KRWDIR/config/$1.cfg"
+CONFIG_BASE="$KRWDIR/syzkaller-configs/$1.cfg"
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 PLAIN_MODULE="$MODULES_DIR/$1_plain.ko"
 SOURCE_MODULE="$MODULES_DIR/$1_kasan_kcov_source.ko"
 BINARY_MODULE="$MODULES_DIR/$1_kasan_kcov_rw.ko"
 MODULE_ASM="$MODULES_DIR/$1_kasan_kcov_rw.S"
 
-TIMEOUT="3h"
+CAMPAIGN_DURATION="3h"
 NUM_RUNS=10
-VMS=8
+VMS=4
 
 if [[ ! -e $MODULES_DIR ]]; then
 	mkdir "$MODULES_DIR"
@@ -77,61 +77,71 @@ popd
 pushd "$CAMPAIGNS_DIR/$1"
 
 	for ((i=0; i < $NUM_RUNS; i++)); do
-		echo "Running source campaign $i..."
-		mkdir -p "source/$i/workdir"
+		if [[ ! -e "source/$i" ]]; then
+			echo "Running source campaign $i..."
+			mkdir -p "source/$i/workdir"
 
-		# Remake initramfs
-		pushd "$INITRAMFS_DIR"
-			cp "$SOURCE_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
-			find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz
-		popd
+			# Remake initramfs
+			pushd "$INITRAMFS_DIR"
+				cp "$SOURCE_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
+				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > ../initramfs.cpio.gz
+			popd
 
-		pushd "source/$i"
-			# Generate the configuration
-			"$KRWDIR/generate_config.py" \
-				--workdir `pwd`/workdir \
-				--kernel "$LINUX_DIR" \
-				--initramfs "$WORKDIR/initramfs.cpio.gz" \
-				--image "$IMAGE_DIR/stretch_$i.img" \
-				--sshkey "$IMAGE_DIR/stretch.id_rsa" \
-				--syzkaller "$SYZKALLER_DIR"  \
-				--vms "$VMS" > "config.cfg"
+			pushd "source/$i"
+				# Generate the configuration
+				"$KRWDIR/generate_config.py" \
+					--workdir `pwd`/workdir \
+					--kernel "$LINUX_DIR" \
+					--initramfs "$WORKDIR/initramfs.cpio.gz" \
+					--image "$IMAGE_DIR/stretch_$1.img" \
+					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
+					--syzkaller "$SYZKALLER_DIR"  \
+					--vms "$VMS" \
+					"$CONFIG_BASE" > "config.cfg"
 
-			# Run syzkaller
-			TMPDIR="/tmp" timeout \
-				-s INT \
-				"$DURATION" \
-				"$SYZKALLER_DIR/bin/syz-manager" \
-				-config `pwd`/config.cfg 2> log.txt
-		popd
+				# Run syzkaller
+				TMPDIR="/tmp" timeout \
+					--preserve-status \
+					--foreground \
+					-s INT \
+					"$CAMPAIGN_DURATION" \
+					"$SYZKALLER_DIR/bin/syz-manager" \
+					-config `pwd`/config.cfg 2> log.txt
+			popd
+		fi
 
-		echo "Running binary campaign $i..."
-		mkdir -p "binary/$i/workdir"
+		if [[ ! -e "binary/$i" ]]; then
+			echo "Running binary campaign $i..."
+			mkdir -p "binary/$i/workdir"
 
-		# Remake initramfs
-		pushd "$INITRAMFS_DIR"
-			cp "$BINARY_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
-			find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz
-		popd
+			# Remake initramfs
+			pushd "$INITRAMFS_DIR"
+				cp "$BINARY_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
+				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > ../initramfs.cpio.gz
+			popd
 
-		pushd "binary/$i"
-			# Generate the configuration
-			"$KRWDIR/generate_config.py" \
-				--workdir `pwd`/workdir \
-				--kernel "$LINUX_DIR" \
-				--initramfs "$WORKDIR/initramfs.cpio.gz" \
-				--image "$IMAGE_DIR/stretch_$i.img" \
-				--sshkey "$IMAGE_DIR/stretch.id_rsa" \
-				--syzkaller "$SYZKALLER_DIR" \
-				--vms "$VMS" > "config.cfg"
+			pushd "binary/$i"
+				# Generate the configuration
+				"$KRWDIR/generate_config.py" \
+					--workdir `pwd`/workdir \
+					--kernel "$LINUX_DIR" \
+					--initramfs "$WORKDIR/initramfs.cpio.gz" \
+					--image "$IMAGE_DIR/stretch_$1.img" \
+					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
+					--syzkaller "$SYZKALLER_DIR" \
+					--vms "$VMS" \
+					"$CONFIG_BASE" > "config.cfg"
 
-			# Run syzkaller
-			TMPDIR="/tmp" timeout \
-				-s INT \
-				"$DURATION" \
-				"$SYZKALLER_DIR/bin/syz-manager" \
-				-config `pwd`/config.cfg 2> log.txt
-		popd
+				# Run syzkaller
+				TMPDIR="/tmp" timeout \
+					--preserve-status \
+					--foreground \
+					-s INT \
+					"$CAMPAIGN_DURATION" \
+					"$SYZKALLER_DIR/bin/syz-manager" \
+					-config `pwd`/config.cfg 2> log.txt
+			popd
+		fi
 	done
 popd
 

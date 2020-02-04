@@ -99,7 +99,7 @@ if [[ ! -e $IMAGE_DIR ]]; then
 	popd
 fi
 
-# Build syzkaller
+# Download Go
 if [[ ! -e go1.12 ]]; then
 	wget https://dl.google.com/go/go1.12.linux-amd64.tar.gz
 	tar xf go1.12.linux-amd64.tar.gz
@@ -109,9 +109,20 @@ fi
 
 export GOPATH="$WORKDIR/go"
 export GOROOT="$WORKDIR/go1.12"
-export PATH="$GOPATH/bin:$GOROOT/bin:$PATH"
+export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+
+echo "export GOPATH=\"$GOPATH\"" > .vars
+echo "export GOROOT=\"$GOROOT\"" >> .vars
+echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> .vars
+
+# Build cftoool
+pushd "$KRWDIR/cftool"
+	go build
+popd
+
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
+# Build Syzkaller
 if [[ ! -e "$SYZKALLER_DIR" ]]; then
 	go get -u -d github.com/google/syzkaller/...
 
