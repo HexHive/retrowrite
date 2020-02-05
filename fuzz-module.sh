@@ -61,7 +61,7 @@ popd
 pushd $KRWDIR
 	# Work around a virtualenv bug
 	set +u
-	. retro/bin/activate	
+	. retro/bin/activate
 	set -u
 
 	python -m rwtools.kasan.asantool --kcov "$PLAIN_MODULE" "$MODULE_ASM"
@@ -73,6 +73,17 @@ popd
 pushd $MODULES_DIR
 	as -o "$BINARY_MODULE" "$MODULE_ASM"
 popd
+
+# Use the btrfs image when fuzzing btrfs, and the ext4 image for everything else
+IMAGE_PATH=""
+case $1 in
+	btrfs)
+		IMAGE_PATH="$IMAGE_DIR/stretch_btrfs.img"
+		;;
+	*)
+		IMAGE_PATH="$IMAGE_DIR/stretch_ext4.img"
+		;;
+esac
 
 pushd "$CAMPAIGNS_DIR/$1"
 
@@ -93,7 +104,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 					--workdir `pwd`/workdir \
 					--kernel "$LINUX_DIR" \
 					--initramfs "$WORKDIR/initramfs.cpio.gz" \
-					--image "$IMAGE_DIR/stretch_$1.img" \
+					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR"  \
 					--vms "$VMS" \
@@ -126,7 +137,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 					--workdir `pwd`/workdir \
 					--kernel "$LINUX_DIR" \
 					--initramfs "$WORKDIR/initramfs.cpio.gz" \
-					--image "$IMAGE_DIR/stretch_$1.img" \
+					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR" \
 					--vms "$VMS" \
