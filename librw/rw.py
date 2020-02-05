@@ -94,7 +94,7 @@ class Rewriter():
             }
 
         json.dump(cf_info, f)
-        
+
     def dump(self):
         results = list()
 
@@ -145,7 +145,9 @@ class Symbolizer():
 
         if op_mem.segment != 0:
             # Segment offsets don't use this form, instead they are like %gs:offset
-            instruction.op_str = instruction.op_str.replace(':{}'.format(op_mem.disp), ':' + target.split('+')[0].strip())
+            instruction.op_str = instruction.op_str.replace(
+                ':{}'.format(op_mem.disp),
+                ':{}'.format(target))
         elif op_mem.base == 0 and op_mem.index == 0:
             # Absolute call ds:offset, or in at&t callq *addr. Yes this is a thing in the kernel
             # if instruction.mnemonic == 'movq' and instruction.op_str == '$0, 0(, %rax, 8)':
@@ -186,7 +188,8 @@ class Symbolizer():
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC16'],
                 ENUM_RELOC_TYPE_x64['R_X86_64_PC8'],
             ]):
-                add = relocation['addend'] + Symbolizer.RELOCATION_SIZES[relocation['type']]
+                add = relocation['addend'] + \
+                    instruction.address.offset + instruction.sz - relocation['address'].offset
             else:
                 assert False, 'Unknown relocation type'
 
