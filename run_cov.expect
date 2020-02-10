@@ -1,0 +1,21 @@
+set timeout -1
+
+spawn qemu-system-x86_64 \
+	-kernel "$LINUX_DIR/arch/x86/boot/bzImage" \
+	-append "console=ttyS0 rw debug root=/dev/sda debug earlyprintk=serial slub_debug=QUZ" \
+	-hda "$IMAGE_PATH" \
+	-virtfs "local,path=$c/input,security_model=none,mount_tag=input,readonly" \
+	-virtfs "local,path=$c/coverage,security_model=none,mount_tag=output" \
+	-enable-kvm \
+	-nographic \
+	-cpu host \
+	-m 2G \
+	-smp 2 \
+	-snapshot \
+	2>&1 > cover_log.txt
+
+expect "login: "
+send "root\r"
+
+expect "# "
+send "mkdir -p /mnt/input && mount -t 9p -o trans=virtio,version=9p2000.L,ro input /mnt/input && cp /mnt/input/run_cov.sh . && bash run_cov.sh\r"

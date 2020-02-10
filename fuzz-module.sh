@@ -34,11 +34,11 @@ CAMPAIGN_DURATION="3h"
 NUM_RUNS=10
 VMS=4
 
-if [[ ! -e $MODULES_DIR ]]; then
+if [[ ! -d $MODULES_DIR ]]; then
 	mkdir "$MODULES_DIR"
 fi
 
-if [[ ! -e "$CAMPAIGNS_DIR/$1" ]]; then
+if [[ ! -d "$CAMPAIGNS_DIR/$1" ]]; then
 	mkdir -p "$CAMPAIGNS_DIR/$1"
 fi
 
@@ -46,7 +46,7 @@ fi
 pushd "$LINUX_DIR"
 	# Build module with KASan and kcov
 	cp "$KRWDIR/linux-config" .config
-	make modules -j`nproc`
+	make -j`nproc`
 
 	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$SOURCE_MODULE" \;
 
@@ -88,7 +88,7 @@ esac
 pushd "$CAMPAIGNS_DIR/$1"
 
 	for ((i=0; i < $NUM_RUNS; i++)); do
-		if [[ ! -e "source/$i" ]]; then
+		if [[ ! -d "source/$i" ]]; then
 			echo "Running source campaign $i..."
 			mkdir -p "source/$i/workdir"
 
@@ -121,7 +121,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 			popd
 		fi
 
-		if [[ ! -e "binary/$i" ]]; then
+		if [[ ! -d "binary/$i" ]]; then
 			echo "Running binary campaign $i..."
 			mkdir -p "binary/$i/workdir"
 

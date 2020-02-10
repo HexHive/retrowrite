@@ -38,7 +38,8 @@ sudo apt install -y \
 	btrfs-progs \
 	pypy3 \
 	pypy3-dev \
-	cpio
+	cpio \
+	expect
 
 
 # Build Linux
@@ -55,7 +56,7 @@ if [[ ! -e $LINUX_DIR ]]; then
 fi
 
 # Build Busybox
-if [[ ! -e $BUSYBOX_DIR ]]; then 
+if [[ ! -e $BUSYBOX_DIR ]]; then
 	wget -O busybox.tar.bz2 "https://www.busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2"
 	tar xf busybox.tar.bz2
 	rm busybox.tar.bz2
@@ -69,7 +70,7 @@ if [[ ! -e $BUSYBOX_DIR ]]; then
 fi
 
 # Make initramfs
-if [[ ! -e $INITRAMFS_DIR ]]; then 
+if [[ ! -e $INITRAMFS_DIR ]]; then
 	mkdir "$INITRAMFS_DIR"
 	pushd $INITRAMFS_DIR
 		mkdir -p bin sbin etc proc sys usr/bin usr/sbin mnt/root "lib/modules/$LINUX_VERSION"
@@ -81,7 +82,7 @@ if [[ ! -e $INITRAMFS_DIR ]]; then
 fi
 
 # Make image
-if [[ ! -e $IMAGE_DIR ]]; then 
+if [[ ! -e $IMAGE_DIR ]]; then
 	mkdir "$IMAGE_DIR"
 	pushd "$IMAGE_DIR"
 		wget -O create-image.sh "https://github.com/google/syzkaller/raw/$SYZKALLER_COMMIT/tools/create-image.sh"
@@ -89,7 +90,7 @@ if [[ ! -e $IMAGE_DIR ]]; then
 		./create-image.sh -d "$DEBIAN_VERSION" --feature full
 
 		# Build btrfs image
-		mv "$DEBIAN_VERSION.img" "${DEBIAN_VERSION}_ext4.img" 
+		mv "$DEBIAN_VERSION.img" "${DEBIAN_VERSION}_ext4.img"
 
 		dd if=/dev/zero "of=${DEBIAN_VERSION}_btrfs.img" bs=1M seek=2047 count=1
 		sudo mkfs.btrfs "${DEBIAN_VERSION}_btrfs.img"
