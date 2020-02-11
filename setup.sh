@@ -88,13 +88,27 @@ if [[ ! -e $IMAGE_DIR ]]; then
 		wget -O create-image.sh "https://github.com/google/syzkaller/raw/$SYZKALLER_COMMIT/tools/create-image.sh"
 		chmod +x create-image.sh
 		./create-image.sh -d "$DEBIAN_VERSION" --feature full
-
-		# Build btrfs image
 		mv "$DEBIAN_VERSION.img" "${DEBIAN_VERSION}_ext4.img"
 
+		# Build ext4 big images
+		dd if=/dev/zero "of=${DEBIAN_VERSION}_ext4_10g.img" bs=1M seek=10240 count=1
+		sudo mkfs.ext4 -F "${DEBIAN_VERSION}_ext4_10g.img"
+		sudo mount -o loop "${DEBIAN_VERSION}_ext4_10g.img" /mnt/chroot
+		sudo cp -a chroot/. /mnt/chroot/.
+		sudo umount /mnt/chroot
+
+		# Build btrfs images
 		dd if=/dev/zero "of=${DEBIAN_VERSION}_btrfs.img" bs=1M seek=2047 count=1
+		dd if=/dev/zero "of=${DEBIAN_VERSION}_btrfs_10g.img" bs=1M seek=10240 count=1
+
 		sudo mkfs.btrfs "${DEBIAN_VERSION}_btrfs.img"
+		sudo mkfs.btrfs "${DEBIAN_VERSION}_btrfs_10g.img"
+
 		sudo mount -o loop "${DEBIAN_VERSION}_btrfs.img" /mnt/chroot
+		sudo cp -a chroot/. /mnt/chroot/.
+		sudo umount /mnt/chroot
+
+		sudo mount -o loop "${DEBIAN_VERSION}_btrfs_10g.img" /mnt/chroot
 		sudo cp -a chroot/. /mnt/chroot/.
 		sudo umount /mnt/chroot
 	popd

@@ -38,10 +38,10 @@ popd
 IMAGE_PATH=""
 case $1 in
 	btrfs)
-		IMAGE_PATH="$IMAGE_DIR/stretch_btrfs.img"
+		IMAGE_PATH="$IMAGE_DIR/stretch_btrfs_10g.img"
 		;;
 	*)
-		IMAGE_PATH="$IMAGE_DIR/stretch_ext4.img"
+		IMAGE_PATH="$IMAGE_DIR/stretch_ext4_10g.img"
 		;;
 esac
 
@@ -54,14 +54,14 @@ for c in "$MODULE_CAMPAIGNS_DIR"/{source,binary}/*; do
 	echo "Computing coverage for $c..."
 
 	pushd "$c"
-		"$SYZ_DB" unpack corpus.db input
+		"$SYZ_DB" unpack workdir/corpus.db input
 		cp "$KRWDIR/run_cov.sh" input
 		cp "$SYZ_EXECPROG" input
 		cp "$SYZ_EXECUTOR" input
 
-		mkdir coverage
+		mkdir -p coverage
 
 		# Run the VM and collect coverage
-		expect run_cov.expect
+		expect "$KRWDIR/run_cov.expect" "$LINUX_DIR" "$IMAGE_PATH" "$c" "$KRWDIR"
 	popd
 done
