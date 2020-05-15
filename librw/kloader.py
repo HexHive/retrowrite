@@ -9,7 +9,7 @@ from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
 from elftools.elf.enums import ENUM_E_TYPE
 
-from .container import Container, Function, DataSection, Address, disasm_bytes
+from .kcontainer import Container, Function, DataSection, Address, disasm_bytes
 
 
 class Loader():

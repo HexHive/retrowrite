@@ -2,7 +2,7 @@ from collections import defaultdict
 
 from archinfo import ArchAMD64
 
-from librw.container import InstrumentedInstruction
+from librw.kcontainer import InstrumentedInstruction
 
 CALLER_SAVED_REGS = [
     'rax', 'rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9', 'r10', 'r11',

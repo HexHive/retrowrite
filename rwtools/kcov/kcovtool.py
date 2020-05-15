@@ -1,9 +1,9 @@
 import argparse
 import json
 
-from librw.loader import Loader
-from librw.rw import Rewriter
-from librw.analysis.register import RegisterAnalysis
+from librw.kloader import Loader
+from librw.krw import Rewriter
+from librw.analysis.kregister import RegisterAnalysis
 
 from .instrument import Instrument
 

@@ -9,9 +9,9 @@ from capstone.x86_const import X86_REG_RSP
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
 
 from . import snippets as sp
-from librw.container import (DataCell, InstrumentedInstruction, DataSection,
+from librw.kcontainer import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
-from librw.analysis.stackframe import StackFrameAnalysis
+from librw.analysis.kstackframe import StackFrameAnalysis
 
 ASAN_SHADOW_OFF = 0xffffe00000000000
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000

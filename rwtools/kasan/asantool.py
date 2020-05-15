@@ -5,11 +5,11 @@ import subprocess
 
 from elftools.elf.constants import SH_FLAGS
 
-from librw.loader import Loader
-from librw.rw import Rewriter
-from librw.analysis.register import RegisterAnalysis
-from librw.analysis.stackframe import StackFrameAnalysis
-from librw.container import InstrumentedInstruction
+from librw.kloader import Loader
+from librw.krw import Rewriter
+from librw.analysis.kregister import RegisterAnalysis
+from librw.analysis.kstackframe import StackFrameAnalysis
+from librw.kcontainer import InstrumentedInstruction
 
 from .instrument import Instrument
 

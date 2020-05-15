@@ -9,7 +9,7 @@ from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 from elftools.elf.constants import SH_FLAGS
 
-from .container import Address
+from .kcontainer import Address
 
 
 class Rewriter():
@@ -504,8 +504,8 @@ def is_readonly_data_section(section):
 
 
 if __name__ == "__main__":
-    from .loader import Loader
-    from .analysis import register
+    from .kloader import Loader
+    from .analysis import kregister
 
     argp = argparse.ArgumentParser()
 
