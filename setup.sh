@@ -6,62 +6,68 @@ LINUX_VERSION="5.5.0-rc6"
 # Why does the tarball version not have .0 in the version number? Whatever
 LINUX_TARBALL_VERSION="5.5-rc6"
 BUSYBOX_VERSION="1.27.2"
-SYZKALLER_COMMIT="3de7aabbb79a6c2267f5d7ee8a8aaa83f63305b7"
+SYZKALLER_COMMIT="8a9f1e7dbdb76a9c0af0dc6e3e75e446a7838dc8"
 DEBIAN_VERSION="stretch"
 
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 WORKDIR=`pwd`
-LINUX_DIR="$WORKDIR/linux"
-BUSYBOX_DIR="$WORKDIR/busybox"
-INITRAMFS_DIR="$WORKDIR/initramfs"
-IMAGE_DIR="$WORKDIR/image"
+VMS_DIR="$WORKDIR/vms_files"
+LINUX_DIR="$VMS_DIR/linux"
+BUSYBOX_DIR="$VMS_DIR/busybox"
+INITRAMFS_DIR="$VMS_DIR/initramfs"
+IMAGE_DIR="$VMS_DIR/image"
 
-if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
-	echo "Run the script from the parent directory: bash $KRWDIR/setup.sh"
-	exit 1
-fi
+# if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
+# 	echo "Run the script from the parent directory: bash $KRWDIR/setup.sh"
+# 	exit 1
+# fi
 
 # Install dependencies
-sudo apt update
-sudo apt install -y \
-	git \
-	build-essential \
-	flex \
-	bison \
-	libncurses-dev \
-	openssl \
-	libssl-dev \
-	libelf-dev \
-	autoconf \
-	qemu-system-x86 \
-	debootstrap \
-	btrfs-progs \
-	pypy3 \
-	pypy3-dev \
-	cpio \
-	expect
+# sudo apt update
+# sudo apt install -y \
+# 	git \
+# 	build-essential \
+# 	flex \
+# 	bison \
+# 	libncurses-dev \
+# 	openssl \
+# 	libssl-dev \
+# 	libelf-dev \
+# 	autoconf \
+# 	qemu-system-x86 \
+# 	debootstrap \
+# 	btrfs-progs \
+# 	pypy3 \
+# 	pypy3-dev \
+# 	cpio \
+# 	expect
+# current user need to be added in the kvm group to be able to user qemu
+# sudo usermod -a -G kvm $USER
 
 
 # Build Linux
 if [[ ! -e $LINUX_DIR ]]; then
-	wget -O linux.tar.gz "https://git.kernel.org/torvalds/t/linux-$LINUX_TARBALL_VERSION.tar.gz"
-	tar xf linux.tar.gz
-	rm linux.tar.gz
-	mv "linux-$LINUX_TARBALL_VERSION" "$LINUX_DIR"
-	cp "$KRWDIR/linux-config" "$LINUX_DIR/.config"
-
+	echo "Installing the linux files"
+	wget -O $VMS_DIR/linux.tar.gz "https://git.kernel.org/torvalds/t/linux-$LINUX_TARBALL_VERSION.tar.gz"
+	echo $VMS_DIR
+	tar xf  $VMS_DIR/linux.tar.gz -C $VMS_DIR
+	rm $VMS_DIR/linux.tar.gz
+	mv "$VMS_DIR/linux-$LINUX_TARBALL_VERSION" "$LINUX_DIR"
+	cp "$VMS_DIR/linux-config" "$LINUX_DIR/.config"
+	echo "Will compile"
 	pushd $LINUX_DIR
 		make -j`nproc`
 	popd
+	echo "End compile"
 fi
 
 # Build Busybox
 if [[ ! -e $BUSYBOX_DIR ]]; then
-	wget -O busybox.tar.bz2 "https://www.busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2"
-	tar xf busybox.tar.bz2
-	rm busybox.tar.bz2
-	mv "busybox-$BUSYBOX_VERSION" "$BUSYBOX_DIR"
-	cp "$KRWDIR/busybox-config" "$BUSYBOX_DIR/.config"
+	wget -O $VMS_DIR/busybox.tar.bz2 "https://www.busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2"
+	tar xf $VMS_DIR/busybox.tar.bz2 -C $VMS_DIR
+	rm $VMS_DIR/busybox.tar.bz2
+	mv "$VMS_DIR/busybox-$BUSYBOX_VERSION" "$BUSYBOX_DIR"
+	cp "$VMS_DIR/busybox-config" "$BUSYBOX_DIR/.config"
 
 	pushd $BUSYBOX_DIR
 		make -j`nproc`
@@ -75,11 +81,13 @@ if [[ ! -e $INITRAMFS_DIR ]]; then
 	pushd $INITRAMFS_DIR
 		mkdir -p bin sbin etc proc sys usr/bin usr/sbin mnt/root "lib/modules/$LINUX_VERSION"
 		cp -r $BUSYBOX_DIR/_install/* .
-		cp "$KRWDIR/vm_init" init
+		cp "$VMS_DIR/vm_init" init
 		chmod +x init
 		find "$LINUX_DIR" -name "*.ko" -type f -exec cp {} "$INITRAMFS_DIR/lib/modules/$LINUX_VERSION" \;
 	popd
 fi
+
+
 
 # Make image
 if [[ ! -e $IMAGE_DIR ]]; then
@@ -87,6 +95,7 @@ if [[ ! -e $IMAGE_DIR ]]; then
 	pushd "$IMAGE_DIR"
 		wget -O create-image.sh "https://github.com/google/syzkaller/raw/$SYZKALLER_COMMIT/tools/create-image.sh"
 		chmod +x create-image.sh
+
 		./create-image.sh -d "$DEBIAN_VERSION" --feature full
 		mv "$DEBIAN_VERSION.img" "${DEBIAN_VERSION}_ext4.img"
 
@@ -114,39 +123,6 @@ if [[ ! -e $IMAGE_DIR ]]; then
 	popd
 fi
 
-# Download Go
-if [[ ! -e go1.12 ]]; then
-	wget https://dl.google.com/go/go1.12.linux-amd64.tar.gz
-	tar xf go1.12.linux-amd64.tar.gz
-	rm go1.12.linux-amd64.tar.gz
-	mv go go1.12
-fi
-
-export GOPATH="$WORKDIR/go"
-export GOROOT="$WORKDIR/go1.12"
-export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
-
-echo "export GOPATH=\"$GOPATH\"" > .vars
-echo "export GOROOT=\"$GOROOT\"" >> .vars
-echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> .vars
-
-# Build cftoool
-pushd "$KRWDIR/cftool"
-	go build
-popd
-
-SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
-
-# Build Syzkaller
-if [[ ! -e "$SYZKALLER_DIR" ]]; then
-	go get -u -d github.com/google/syzkaller/...
-
-	pushd "$SYZKALLER_DIR"
-		git checkout "$SYZKALLER_COMMIT"
-		make
-	popd
-fi
-
 
 # Setup RetroWrite
 if [[ ! -e "$KRWDIR/retro" ]]; then
@@ -163,12 +139,77 @@ if [[ ! -e "$KRWDIR/retro" ]]; then
 		git submodule update --init --checkout third-party/capstone
 		cd third-party/capstone
 		make -j`nproc`
-		cd bindings/python/ && make && make install
+		cd bindings/python/ && make -j`nproc` && make install
+
+		echo "source $VIRTUAL_ENV/bin/postactivate" >> $VIRTUAL_ENV/bin/activate
 
 		set +u
 		deactivate
 		set -u
+
+
 	popd
 fi
 
+
+
+# Download Go
+# installing go into the venv bin
+if [[ ! -e "$KRWDIR/retro/go1.14" ]]; then
+	pushd "$KRWDIR/retro/"
+		# wget https://dl.google.com/go/go1.12.linux-amd64.tar.gz
+		# tar xf go1.12.linux-amd64.tar.gz
+		# rm go1.12.linux-amd64.tar.gz
+		# mv go go1.12
+
+		wget https://dl.google.com/go/go1.14.2.linux-amd64.tar.gz
+		tar -xf go1.14.2.linux-amd64.tar.gz
+		rm go1.14.2.linux-amd64.tar.gz
+		mv go go1.14
+
+		export GOPATH="$KRWDIR/retro/go"
+		echo "export GOPATH=\"$GOPATH\"" > $KRWDIR/retro/bin/postactivate
+
+		export GOROOT="$KRWDIR/retro/go1.14/"
+		echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
+
+		export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+		echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH\"" >> $KRWDIR/retro/bin/postactivate
+
+		pushd "$KRWDIR/cftool"
+			go build
+		popd
+	popd
+fi
+
+
+
+
+
+#
+# echo "export GOPATH=\"$GOPATH\"" > .vars
+# echo "export GOROOT=\"$GOROOT\"" >> .vars
+# echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> .vars
+
+GOPATH="$KRWDIR/retro/go"
+GOROOT="$KRWDIR/retro/go1.14/"
+PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
+
+# Build Syzkaller
+# https://github.com/google/syzkaller/blob/master/docs/linux/setup.md
+if [[ ! -e "$SYZKALLER_DIR" ]]; then
+	go get -u -d -v github.com/google/syzkaller/prog
+	pushd "$SYZKALLER_DIR"
+		git checkout "$SYZKALLER_COMMIT"
+		echo ' Checked out all'
+		make -j`nproc`
+	popd
+fi
+
+
+
 echo "[+] All done and ready to go"
+echo "might need to reboot to apply qemu install"
+echo " and add the current user into kvm group with the command: sudo usermod -a -G kvm \$USER"
+echo "Otherwise you can use : source ./retro/bin/activate"
