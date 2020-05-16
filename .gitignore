@@ -13,7 +13,7 @@ __pycache__/
 # Analysis cache
 *.analysis_cache
 # Virtual environment
-venv_retro/
+retro/
 vms_files/linux.tar.gz
 vms_files/linux/
 vms_files/busybox.tar.bz2
