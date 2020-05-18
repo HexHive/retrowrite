@@ -9,7 +9,7 @@ remove, or modify the fuzz targets.
 
 Requirements to build docker container:
 
-* (Included) fuzz-seeds.zip: Fuzzing seeds for all benchmarks. unzip
+* (Included) fuzz-seeds.zip: Fuzzing seeds for all benchmarks. **unzip**
 before building the docker image.
 
 * (Included) afl-dyninst.patch: Build patch for afl-dyninst
@@ -26,11 +26,17 @@ release version for ubuntu does not seem to work).
     - Create a tar of the install directory
 
 * (Required) retrowrite.bundle: Bundled version of retrowrite. Created
-using `git bundle create`.
+using `git bundle create retrowrite.bundle --all`
+
+
+
+* (Required) : LAVA-M/ directory of lava_corpus, [download](http://panda.moyix.net/~moyix/lava_corpus.tar.xz), 
+extract and rename the directory to LAVA-M
+
 
 
 Once these files are in the docker directory, build using: 
-`docker build -t retrowrite-docker`
+`docker build -t retrowrite-docker .`
 
 To run the container:
 `docker run --privileged --network="host" -it retrowrite-docker:latest`
@@ -39,7 +45,7 @@ To run the container:
 # Analyzing and Reproducing Results
 
 The retrowrite docker / fuzz infrastructure is designed to run on multiple
-systems by cordinating jobs through beanstalk.
+systems by cordinating jobs through **beanstalk**.
 
 Note: Configure fuzz_config.yaml to point to the correct beanstalk queue to
 pull fuzz jobs from.

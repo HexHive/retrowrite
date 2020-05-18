@@ -1,4 +1,4 @@
-"é# Retrowrite
+# Retrowrite
 
 Code repository for "Retrowrite: Statically Instrumenting COTS Binaries for
 Fuzzing and Sanitization" (in *IEEE S&P'20*). Please refer to the
