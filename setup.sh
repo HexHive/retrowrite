@@ -4,35 +4,49 @@ set -euo pipefail
 
 
 if [[(( $# == 0 )|| ("$1" != "kernel") && ("$1" != "user") )]]; then
-  echo "Usage of the script : $0 [kernel|userspace]"
+  echo "Usage of the script : $0 [kernel|user]"
   exit
 fi
 
 # install only userspace version
 if [[ $1 == 'user' ]]; then
-	if [[ ! -e "./retro" ]]; then
-		pypy3 -m venv retro
+	 if [[ ! -e "./retro" ]]; then
+
+
+		python3 -m venv retro
+
+
 
 		# Work around a virtualenv bug :\
 		set +u
 		source retro/bin/activate
 		set -u
+    pip3 install --upgrade wheel
+		pip3 install --upgrade pip
+		pip3 install -r requirements_user.txt
 
-		pip install --upgrade pip
-		pip install -r requirements.txt
+
+    echo "source $(pwd)/retro/bin/postactivate" >> retro/bin/activate
+
+		echo "export PYTHONPATH=\"$(pwd)\"" > retro/bin/postactivate
+
+
 		git submodule update --init --checkout third-party/capstone
 		cd third-party/capstone
 		make -j `nproc`
 		cd bindings/python/ && make -j `nproc` && make install
 
-		echo "source $VIRTUAL_ENV/bin/postactivate" >> $VIRTUAL_ENV/bin/activate
 
 		set +u
 		deactivate
 		set -u
+
+
+
 		echo "[+] All done and ready to go"
-	else
-		echo "virtualenv already setup."
+		echo "[ ] You can start run : source ./retro/bin/activate"
+	 else
+	 	echo "virtualenv already setup."
 	fi
 
 # install the full kernel version
@@ -162,22 +176,22 @@ else
 	# Setup RetroWrite
 	if [[ ! -e "$KRWDIR/retro" ]]; then
 		pushd "$KRWDIR"
-			pypy3 -m venv retro
+			python3 -m venv retro
 
 			# Work around a virtualenv bug :\
 			set +u
 			source retro/bin/activate
 			set -u
 
-			pip install --upgrade pip
-			pip install -r requirements.txt
+			pip3 install --upgrade pip
+			pip3 install -r requirements_kernel.txt
 			git submodule update --init --checkout third-party/capstone
 			cd third-party/capstone
 			make -j `nproc`
 			cd bindings/python/ && make -j `nproc` && make install
 
 			echo "source $VIRTUAL_ENV/bin/postactivate" >> $VIRTUAL_ENV/bin/activate
-
+			echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
 			set +u
 			deactivate
 			set -u
@@ -203,7 +217,7 @@ else
 			mv go go1.14
 
 			export GOPATH="$KRWDIR/retro/go"
-			echo "export GOPATH=\"$GOPATH\"" > $KRWDIR/retro/bin/postactivate
+			echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
 
 			export GOROOT="$KRWDIR/retro/go1.14/"
 			echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
@@ -238,7 +252,7 @@ else
 		pushd "$SYZKALLER_DIR"
 			git checkout "$SYZKALLER_COMMIT"
 			echo ' Checked out all'
-			make -j`nproc`
+			make -j `nproc`
 		popd
 	fi
 
