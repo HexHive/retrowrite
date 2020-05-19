@@ -12,10 +12,7 @@ fi
 if [[ $1 == 'user' ]]; then
 	 if [[ ! -e "./retro" ]]; then
 
-
 		python3 -m venv retro
-
-
 
 		# Work around a virtualenv bug :\
 		set +u
@@ -25,23 +22,17 @@ if [[ $1 == 'user' ]]; then
 		pip3 install --upgrade pip
 		pip3 install -r requirements_user.txt
 
-
     echo "source $(pwd)/retro/bin/postactivate" >> retro/bin/activate
-
 		echo "export PYTHONPATH=\"$(pwd)\"" > retro/bin/postactivate
-
 
 		git submodule update --init --checkout third-party/capstone
 		cd third-party/capstone
 		make -j `nproc`
 		cd bindings/python/ && make -j `nproc` && make install
 
-
 		set +u
 		deactivate
 		set -u
-
-
 
 		echo "[+] All done and ready to go"
 		echo "[ ] You can start run : source ./retro/bin/activate"
@@ -136,8 +127,6 @@ else
 		popd
 	fi
 
-
-
 	# Make image
 	if [[ ! -e $IMAGE_DIR ]]; then
 		mkdir "$IMAGE_DIR"
@@ -172,7 +161,6 @@ else
 		popd
 	fi
 
-
 	# Setup RetroWrite
 	if [[ ! -e "$KRWDIR/retro" ]]; then
 		pushd "$KRWDIR"
@@ -191,16 +179,12 @@ else
 			cd bindings/python/ && make -j `nproc` && make install
 
 			echo "source $VIRTUAL_ENV/bin/postactivate" >> $VIRTUAL_ENV/bin/activate
-			echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
+
 			set +u
 			deactivate
 			set -u
-
-
 		popd
 	fi
-
-
 
 	# Download Go
 	# installing go into the venv bin
@@ -216,14 +200,9 @@ else
 			rm go1.14.2.linux-amd64.tar.gz
 			mv go go1.14
 
-			export GOPATH="$KRWDIR/retro/go"
-			echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
-
-			export GOROOT="$KRWDIR/retro/go1.14/"
-			echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
-
-			export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
-			echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH\"" >> $KRWDIR/retro/bin/postactivate
+			# export GOPATH="$KRWDIR/retro/go"
+			# export GOROOT="$KRWDIR/retro/go1.14/"
+			#export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
 
 			pushd "$KRWDIR/cftool"
 				go build
@@ -231,19 +210,29 @@ else
 		popd
 	fi
 
-
-
-
-
-	#
-	# echo "export GOPATH=\"$GOPATH\"" > .vars
-	# echo "export GOROOT=\"$GOROOT\"" >> .vars
-	# echo "export PATH=\"$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> .vars
-
-	GOPATH="$KRWDIR/retro/go"
-	GOROOT="$KRWDIR/retro/go1.14/"
-	PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+	export GOPATH="$KRWDIR/retro/go"
+	export GOROOT="$KRWDIR/retro/go1.14"
+	export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
 	SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
+
+  # apply changes on the syzkaller configuration
+
+  sed -i -e "s|SYZKALLER_WORKDIR|$SYZKALLER_DIR/workdir|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|KERNEL_OBJ|$LINUX_DIR|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|IMAGE|$IMAGE_DIR${DEBIAN_VERSION}_ext4.img|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|SSH_KEY|$IMAGE_DIR$DEBIAN_VERSION.id_rsa|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|SYZKALLER_DIR|$SYZKALLER_DIR|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|KERNEL|$LINUX_DIR/arch/x86/boot/bzImage|g" syzkaller-configs/e1000.cfg
+  sed -i -e "s|INITRAMFS|$INITRAMFS_DIR.cpio.gz|g" syzkaller-configs/e1000.cfg
+
+  sed -i -e "s|SYZKALLER_WORKDIR|$SYZKALLER_DIR/workdir|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|KERNEL_OBJ|$LINUX_DIR|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|IMAGE|$IMAGE_DIR${DEBIAN_VERSION}_ext4.img|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|SSH_KEY|$IMAGE_DIR$DEBIAN_VERSION.id_rsa|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|SYZKALLER_DIR|$SYZKALLER_DIR|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|KERNEL|$LINUX_DIR/arch/x86/boot/bzImage|g" syzkaller-configs/ext4.cfg
+  sed -i -e "s|INITRAMFS|$INITRAMFS_DIR.cpio.gz|g" syzkaller-configs/ext4.cfg
+
 
 	# Build Syzkaller
 	# https://github.com/google/syzkaller/blob/master/docs/linux/setup.md
@@ -256,6 +245,10 @@ else
 		popd
 	fi
 
+  echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
+  echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
+  echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
+  echo "export PATH=\"$SYZKALLER_DIR/bin:$PATH\"" >> $KRWDIR/retro/bin/postactivate
 
 
 	echo "[+] All done and ready to go"
