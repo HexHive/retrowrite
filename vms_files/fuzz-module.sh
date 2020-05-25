@@ -6,7 +6,7 @@ WORKDIR=`pwd`
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
 if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
-	echo "Run the script from the parent directly: bash $KRWDIR/fuzz-module.sh"
+	echo "Run the script from the retrowrite root directly: cd $(dirname $KRWDIR) &&  bash ./vms_files/fuzz-module.sh"
 	exit 1
 fi
 
@@ -17,20 +17,30 @@ fi
 
 LINUX_VERSION="5.5.0-rc6"
 
-GOPATH="$WORKDIR/go"
-LINUX_DIR="$WORKDIR/linux"
-INITRAMFS_DIR="$WORKDIR/initramfs"
+
+KRWDIR=`pwd`
+WORKDIR=`pwd`
+VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+LINUX_DIR="$VMS_DIR/linux"
+
+
+INITRAMFS_DIR="$VMS_DIR/initramfs"
+IMAGE_DIR="$VMS_DIR/image"
+GOPATH="$KRWDIR/retro/go"
+SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
+
+
 MODULES_DIR="$WORKDIR/modules"
-IMAGE_DIR="$WORKDIR/image"
 CAMPAIGNS_DIR="$WORKDIR/campaigns"
 CONFIG_BASE="$KRWDIR/syzkaller-configs/$1.cfg"
-SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
+
+
 PLAIN_MODULE="$MODULES_DIR/$1_plain.ko"
 SOURCE_MODULE="$MODULES_DIR/$1_kasan_kcov_source.ko"
 BINARY_MODULE="$MODULES_DIR/$1_kasan_kcov_rw.ko"
 MODULE_ASM="$MODULES_DIR/$1_kasan_kcov_rw.S"
 
-CAMPAIGN_DURATION="3h"
+CAMPAIGN_DURATION="2m"
 NUM_RUNS=10
 VMS=4
 
@@ -43,28 +53,28 @@ if [[ ! -d "$CAMPAIGNS_DIR/$1" ]]; then
 fi
 
 # Build module
-pushd "$LINUX_DIR"
-	# Build module with KASan and kcov
-	cp "$KRWDIR/linux-config" .config
-	make -j`nproc`
-
-	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$SOURCE_MODULE" \;
-
-	# Build module without KASan and kcov
-	cp "$KRWDIR/linux-config-noinst" .config
-	make modules -j`nproc`
-
-	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$PLAIN_MODULE" \;
-popd
+# pushd "$LINUX_DIR"
+# 	# Build module with KASan and kcov
+# 	cp "$VMS_DIR/linux-config" .config
+# 	make -j`nproc`
+#
+# 	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$SOURCE_MODULE" \;
+#
+# 	# Build module without KASan and kcov
+# 	cp "$VMS_DIR/linux-config-noinst" .config
+# 	make modules -j`nproc`
+#
+# 	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$PLAIN_MODULE" \;
+# popd
 
 # Instrument module with kRetroWrite
-pushd $KRWDIR
+pushd $WORKDIR
 	# Work around a virtualenv bug
 	set +u
-	. retro/bin/activate
+	source retro/bin/activate
 	set -u
 
-	python -m rwtools.kasan.asantool --kcov "$PLAIN_MODULE" "$MODULE_ASM"
+	python3 -m rwtools.kasan.asantool --kcov "$PLAIN_MODULE" "$MODULE_ASM"
 
 	set +u
 	deactivate
@@ -91,19 +101,19 @@ pushd "$CAMPAIGNS_DIR/$1"
 		if [[ ! -d "source/$i" ]]; then
 			echo "Running source campaign $i..."
 			mkdir -p "source/$i/workdir"
-
+			mkdir -p $CAMPAIGNS_DIR/$1/workdir/
 			# Remake initramfs
 			pushd "$INITRAMFS_DIR"
 				cp "$SOURCE_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
-				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > ../initramfs.cpio.gz
+				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > $CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz
 			popd
 
 			pushd "source/$i"
 				# Generate the configuration
-				"$KRWDIR/generate_config.py" \
-					--workdir `pwd`/workdir \
+				"$KRWDIR/syzkaller-configs/generate_config.py" \
+					--workdir $CAMPAIGNS_DIR/$1/workdir/ \
 					--kernel "$LINUX_DIR" \
-					--initramfs "$WORKDIR/initramfs.cpio.gz" \
+					--initramfs "$CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz" \
 					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR"  \
@@ -133,7 +143,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 
 			pushd "binary/$i"
 				# Generate the configuration
-				"$KRWDIR/generate_config.py" \
+				"$KRWDIR/syzkaller-configs/generate_config.py" \
 					--workdir `pwd`/workdir \
 					--kernel "$LINUX_DIR" \
 					--initramfs "$WORKDIR/initramfs.cpio.gz" \
@@ -155,4 +165,3 @@ pushd "$CAMPAIGNS_DIR/$1"
 		fi
 	done
 popd
-

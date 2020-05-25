@@ -24,3 +24,5 @@ cftool/cftool
 syzkaller-configs/e1000.cfg
 syzkaller-configs/ext4.cfg
 
+modules/
+campaigns/
