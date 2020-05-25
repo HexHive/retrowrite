@@ -313,9 +313,10 @@ class DataSection():
         ]):
             return None
 
-        value = struct.unpack(
-            "<I",
-            bytes([x.value for x in self.cache[cacheoff:cacheoff + sz]]))[0]
+        bytes_read = [x.value for x in self.cache[cacheoff:cacheoff + sz]]
+        bytes_read_padded = bytes_read + [0]*(sz - len(bytes_read))
+
+        value = struct.unpack("<I", bytes(bytes_read_padded))[0]
 
         return value
 
