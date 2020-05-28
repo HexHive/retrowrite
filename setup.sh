@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+WORKDIR=`pwd`
+
+if [[ ! "$WORKDIR" -ef "$KRWDIR" ]]; then
+	echo "Run the script from the retrowrite root directory: cd $KRWDIR && bash ./setup.sh"
+	exit 1
+fi
 
 if [[(( $# == 0 )|| ("$1" != "kernel") && ("$1" != "user") )]]; then
   echo "Usage of the script : $0 [kernel|user]"
@@ -30,6 +37,7 @@ if [[ $1 == 'user' ]]; then
 		make -j `nproc`
 		cd bindings/python/ && make -j `nproc` && make install
 
+
 		set +u
 		deactivate
 		set -u
@@ -49,18 +57,14 @@ else
 	SYZKALLER_COMMIT="8a9f1e7dbdb76a9c0af0dc6e3e75e446a7838dc8"
 	DEBIAN_VERSION="stretch"
 
-	KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
-	WORKDIR=`pwd`
+
 	VMS_DIR="$WORKDIR/vms_files"
 	LINUX_DIR="$VMS_DIR/linux"
 	BUSYBOX_DIR="$VMS_DIR/busybox"
 	INITRAMFS_DIR="$VMS_DIR/initramfs"
 	IMAGE_DIR="$VMS_DIR/image"
 
-	# if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
-	# 	echo "Run the script from the parent directory: bash $KRWDIR/setup.sh"
-	# 	exit 1
-	# fi
+
 
 	# Install dependencies
 	sudo apt update
@@ -212,7 +216,7 @@ else
 
 	export GOPATH="$KRWDIR/retro/go"
 	export GOROOT="$KRWDIR/retro/go1.14"
-	export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+
 	SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
   # apply changes on the syzkaller configuration
@@ -234,6 +238,9 @@ else
   sed -i -e "s|INITRAMFS|$INITRAMFS_DIR.cpio.gz|g" syzkaller-configs/ext4.cfg
 
 
+  # adapt demo file to current PATHS
+  sed -i -e "s|KERNEL_OBJ|$LINUX_DIR|g" demos/kernel_demo/module/Makefile
+
 	# Build Syzkaller
 	# https://github.com/google/syzkaller/blob/master/docs/linux/setup.md
 	if [[ ! -e "$SYZKALLER_DIR" ]]; then
@@ -248,7 +255,8 @@ else
   echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
   echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
   echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
-  echo "export PATH=\"$SYZKALLER_DIR/bin:$PATH\"" >> $KRWDIR/retro/bin/postactivate
+  echo "export PATH=\"$SYZKALLER_DIR/bin:$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> $KRWDIR/retro/bin/postactivate
+
 
 
 	echo "[+] All done and ready to go"
