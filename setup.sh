@@ -188,6 +188,16 @@ else
 		popd
 	fi
 
+
+	export GOPATH="$KRWDIR/retro/go"
+	export GOROOT="$KRWDIR/retro/go1.14"
+	SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
+
+	echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
+  echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
+  echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
+  echo "export PATH=\"$SYZKALLER_DIR/bin:$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> $KRWDIR/retro/bin/postactivate
+	export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
 	# Download Go
 	# installing go into the venv bin
 	if [[ ! -e "$KRWDIR/retro/go1.14" ]]; then
@@ -212,10 +222,7 @@ else
 		popd
 	fi
 
-	export GOPATH="$KRWDIR/retro/go"
-	export GOROOT="$KRWDIR/retro/go1.14"
 
-	SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
   # apply changes on the syzkaller configuration
 
@@ -250,10 +257,6 @@ else
 		popd
 	fi
 
-  echo "export PYTHONPATH=\"$KRWDIR\"" > $KRWDIR/retro/bin/postactivate
-  echo "export GOPATH=\"$GOPATH\"" >> $KRWDIR/retro/bin/postactivate
-  echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
-  echo "export PATH=\"$SYZKALLER_DIR/bin:$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> $KRWDIR/retro/bin/postactivate
 
 
 
