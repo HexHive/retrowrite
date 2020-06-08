@@ -81,8 +81,6 @@ else
 		qemu-system-x86 \
 		debootstrap \
 		btrfs-progs \
-		pypy3 \
-		pypy3-dev \
 		cpio \
 		expect
 	# current user need to be added in the kvm group to be able to user qemu
