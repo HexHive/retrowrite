@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# create and prepare a campaign
+# of a module from a modules in the linux sources
+
+# get .ko of the module, instrument it with rwtools.kasan.asantool and
+
 set -euo pipefail
 
 WORKDIR=`pwd`
@@ -41,7 +46,7 @@ BINARY_MODULE="$MODULES_DIR/$1_kasan_kcov_rw.ko"
 MODULE_ASM="$MODULES_DIR/$1_kasan_kcov_rw.S"
 
 CAMPAIGN_DURATION="2m"
-NUM_RUNS=10
+NUM_RUNS=2
 VMS=4
 
 if [[ ! -d $MODULES_DIR ]]; then
@@ -53,19 +58,19 @@ if [[ ! -d "$CAMPAIGNS_DIR/$1" ]]; then
 fi
 
 # Build module
-# pushd "$LINUX_DIR"
-# 	# Build module with KASan and kcov
-# 	cp "$VMS_DIR/linux-config" .config
-# 	make -j`nproc`
-#
-# 	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$SOURCE_MODULE" \;
-#
-# 	# Build module without KASan and kcov
-# 	cp "$VMS_DIR/linux-config-noinst" .config
-# 	make modules -j`nproc`
-#
-# 	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$PLAIN_MODULE" \;
-# popd
+pushd "$LINUX_DIR"
+	# Build module with KASan and kcov
+	cp "$VMS_DIR/linux-config" .config
+	make -j`nproc`
+
+	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$SOURCE_MODULE" \;
+
+	# Build module without KASan and kcov
+	cp "$VMS_DIR/linux-config-noinst" .config
+	make modules -j`nproc`
+
+	find "$LINUX_DIR" -name "$1.ko" -type f -exec cp {} "$PLAIN_MODULE" \;
+popd
 
 # Instrument module with kRetroWrite
 pushd $WORKDIR
@@ -138,7 +143,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 			# Remake initramfs
 			pushd "$INITRAMFS_DIR"
 				cp "$BINARY_MODULE" "lib/modules/$LINUX_VERSION/$1.ko"
-				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > ../initramfs.cpio.gz
+				find . -print0 | cpio --null -ov --format=newc 2> /dev/null | gzip -9 > $CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz
 			popd
 
 			pushd "binary/$i"
@@ -146,7 +151,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 				"$KRWDIR/syzkaller-configs/generate_config.py" \
 					--workdir `pwd`/workdir \
 					--kernel "$LINUX_DIR" \
-					--initramfs "$WORKDIR/initramfs.cpio.gz" \
+					--initramfs "$CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz" \
 					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR" \

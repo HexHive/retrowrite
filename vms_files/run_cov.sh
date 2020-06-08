@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# executed from the vms
 set -euo pipefail
 
 cp -r /mnt/input corpus

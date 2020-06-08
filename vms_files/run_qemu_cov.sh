@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# this script run the syzskaller vms, no needs to start it by hands, it is ran from measure_coverage.sh (via run_cov.expect)
+
 set -euo pipefail
 
 qemu-system-x86_64 \

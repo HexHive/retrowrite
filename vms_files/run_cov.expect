@@ -11,6 +11,7 @@ expect "syzkaller login: "
 send "root\r"
 
 expect "root@syzkaller:~# "
+
 send "mkdir -p /mnt/input && mount -t 9p -o trans=virtio,version=9p2000.L,ro input /mnt/input && cp /mnt/input/run_cov.sh . && bash run_cov.sh\r"
 
 expect eof

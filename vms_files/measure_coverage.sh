@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Measure_coverage IIRC replays all the test cases and checks which basic blocks are hit
+
+# call run_cov.expect which run in the vm run_cov.sh
+
 set -euo pipefail
 
 WORKDIR=`pwd`
@@ -15,9 +19,13 @@ if [[ $# -ne 1 ]]; then
 	exit 1
 fi
 
-LINUX_DIR="$WORKDIR/linux"
-IMAGE_DIR="$WORKDIR/image"
+
+VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+LINUX_DIR="$VMS_DIR/linux"
+IMAGE_DIR="$VMS_DIR/image"
+
 MODULE_CAMPAIGNS_DIR="$WORKDIR/campaigns/$1"
+GOPATH="$WORKDIR/retro/go"
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 SYZ_DB="$SYZKALLER_DIR/bin/syz-db"
 SYZ_EXECPROG="$SYZKALLER_DIR/bin/linux_amd64/syz-execprog"
@@ -30,7 +38,7 @@ fi
 
 pushd "$LINUX_DIR"
 	# Build kernel with kcov
-	cp "$KRWDIR/linux-config-coverage" .config
+	cp "$VMS_DIR/linux-config-coverage" .config
 	make -j$(nproc)
 popd
 
@@ -55,13 +63,13 @@ for c in "$MODULE_CAMPAIGNS_DIR"/{source,binary}/*; do
 
 	pushd "$c"
 		"$SYZ_DB" unpack workdir/corpus.db input
-		cp "$KRWDIR/run_cov.sh" input
+		cp "$VMS_DIR/run_cov.sh" input
 		cp "$SYZ_EXECPROG" input
 		cp "$SYZ_EXECUTOR" input
 
 		mkdir -p coverage
 
 		# Run the VM and collect coverage
-		expect "$KRWDIR/run_cov.expect" "$LINUX_DIR" "$IMAGE_PATH" "$c" "$KRWDIR"
+		expect "$VMS_DIR/run_cov.expect" "$LINUX_DIR" "$IMAGE_PATH" "$c" "$KRWDIR"
 	popd
 done
