@@ -45,8 +45,8 @@ SOURCE_MODULE="$MODULES_DIR/$1_kasan_kcov_source.ko"
 BINARY_MODULE="$MODULES_DIR/$1_kasan_kcov_rw.ko"
 MODULE_ASM="$MODULES_DIR/$1_kasan_kcov_rw.S"
 
-CAMPAIGN_DURATION="2m"
-NUM_RUNS=2
+CAMPAIGN_DURATION="3h"
+NUM_RUNS=10
 VMS=4
 
 if [[ ! -d $MODULES_DIR ]]; then
