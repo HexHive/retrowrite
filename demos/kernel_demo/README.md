@@ -1,10 +1,12 @@
 # Demo time!
 
 This directory contains one exemple demos for ASan instrument with KRetroWrite.
+
 instrumenting with asan for red zone detection
+
 # Usage
-Notes : you need to have run setup install script before using this demo
-prepare kernel with asan
+> **_NOTE:_** You need to have run setup install script before try out this demo
+
 
 To compile the module:
 ```bash
@@ -16,12 +18,25 @@ To instrument the module previously compiled:
 ```
 ./instrument_module.sh module/demo_module.ko
 ```
+To see the differences between the instrumented and classic binary you can use the command objdump :
+* `objdump -d module/demo_module.ko`
+* `objdump -d module/demo_module_asan.ko`
 
 Test of the module:
+
 You will need to compile the linux kernel with kasan (automatic in the launch script)
-(Bonus) To exit virtual qemu machine : ctrl+a x
+
+(Bonus) To exit virtual qemu machine : `ctrl+a x`
+
 ```bash
-./launch_vm.sh
+$ ./launch_vm.sh
+[...]
+To load the classic module : modprobe demo_module
+To unload the module : rmmod demo_module
+To load the instrumented module : modprobe demo_module_asan
+The module create a file where you can write in it : echo 1234 > /dev/demo
+You can generate a bufferover flow with : echo 1337 > /dev/demo
+
 # modprobe demo_module
 [   14.531827] demo_module: loading out-of-tree module taints kernel.
 [   14.533619] Demo module loaded

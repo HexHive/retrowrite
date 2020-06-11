@@ -154,12 +154,14 @@ We wrote all script with the assumption that the module tested is in the Linux t
 
 
 [vms_files/fuzz-module.sh](vms_files/fuzz-module.sh) : create, prepare and run a fuzzing campaign of a module from a modules in the linux sources.
+
 You might want to setup the variables `CAMPAIGN_DURATION` , `NUM_RUNS`, `NB_VMS`, `CPU_VMS` and `MEMORY_VMS` depending of your available resources.
 
 An exemple to fuzz ext4 modules
 * `./vms_files/fuzz-module.sh ext4`
 
 (is it really usefull section >????? )It will create the directly campaign containing the results of your fuzzing campaign.
+
 here is an architecture exemple of the files generated for ext4:
 * campaigns/ext4/binary
 * source
