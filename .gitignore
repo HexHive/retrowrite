@@ -26,3 +26,5 @@ syzkaller-configs/ext4.cfg
 
 modules/
 campaigns/
+demos/kernel_demo/initramfs
+demos/kernel_demo/linux

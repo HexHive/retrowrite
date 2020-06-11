@@ -208,7 +208,7 @@ list of retrowrite files :
 
 ## Demos
 
-You will find in the [demos/](demos/) folder, files to try out respectivly, [demos/user_demo](demos/user_demo) and [demos/kernel_demo](demos/kernel_demo)
+You will find in the [demos/](demos/) folder, files to try out respectively, [demos/user_demo](demos/user_demo) and [demos/kernel_demo](demos/kernel_demo)
 
 ## Cite
 
