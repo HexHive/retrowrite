@@ -7,6 +7,14 @@
 
 set -euo pipefail
 
+CAMPAIGN_DURATION="3h"
+NUM_RUNS=10
+NB_VMS=4
+CPU_VMS=2
+MEMORY_VMS=2048
+
+
+
 WORKDIR=`pwd`
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
@@ -45,9 +53,7 @@ SOURCE_MODULE="$MODULES_DIR/$1_kasan_kcov_source.ko"
 BINARY_MODULE="$MODULES_DIR/$1_kasan_kcov_rw.ko"
 MODULE_ASM="$MODULES_DIR/$1_kasan_kcov_rw.S"
 
-CAMPAIGN_DURATION="3h"
-NUM_RUNS=10
-VMS=4
+
 
 if [[ ! -d $MODULES_DIR ]]; then
 	mkdir "$MODULES_DIR"
@@ -122,7 +128,9 @@ pushd "$CAMPAIGNS_DIR/$1"
 					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR"  \
-					--vms "$VMS" \
+					--vms "$NB_VMS" \
+					--cpus "$CPU_VMS" \
+					--mem "$MEMORY_VMS"\
 					"$CONFIG_BASE" > "config.cfg"
 
 				# Run syzkaller
@@ -155,7 +163,9 @@ pushd "$CAMPAIGNS_DIR/$1"
 					--image "$IMAGE_PATH" \
 					--sshkey "$IMAGE_DIR/stretch.id_rsa" \
 					--syzkaller "$SYZKALLER_DIR" \
-					--vms "$VMS" \
+					--vms "$NB_VMS" \
+					--cpus "$CPU_VMS" \
+					--mem "$MEMORY_VMS" \
 					"$CONFIG_BASE" > "config.cfg"
 
 				# Run syzkaller
