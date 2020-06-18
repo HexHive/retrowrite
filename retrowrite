@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+
+import argparse
+import json
+from librw.loader import Loader
+from librw.analysis import register
+from librw.rw import Rewriter
+from librw.analysis.register import RegisterAnalysis
+from librw.analysis.stackframe import StackFrameAnalysis
+from rwtools.asan.instrument import Instrument
+
+
+def load_analysis_cache(loader, outfile):
+    with open(outfile + ".analysis_cache") as fd:
+        analysis = json.load(fd)
+    print("[*] Loading analysis cache")
+    for func, info in analysis.items():
+        for key, finfo in info.items():
+            loader.container.functions[int(func)].analysis[key] = dict()
+            for k, v in finfo.items():
+                try:
+                    addr = int(k)
+                except ValueError:
+                    addr = k
+                loader.container.functions[int(func)].analysis[key][addr] = v
+
+def save_analysis_cache(loader, outfile):
+    analysis = dict()
+
+    for addr, func in loader.container.functions.items():
+        analysis[addr] = dict()
+        analysis[addr]["free_registers"] = dict()
+        for k, info in func.analysis["free_registers"].items():
+            analysis[addr]["free_registers"][k] = list(info)
+
+    with open(outfile + ".analysis_cache", "w") as fd:
+        json.dump(analysis, fd)
+
+
+def asan(rw, loader, args):
+    StackFrameAnalysis.analyze(loader.container)
+    if args.cache:
+        try:
+            load_analysis_cache(loader, args.outfile)
+        except IOError:
+            print("[*] Analyzing free registers")
+            RegisterAnalysis.analyze(loader.container)
+            save_analysis_cache(loader, args.outfile)
+    else:
+        print("[*] Analyzing free registers")
+        RegisterAnalysis.analyze(loader.container)
+
+
+    instrumenter = Instrument(rw)
+    instrumenter.do_instrument()
+    instrumenter.dump_stats()
+
+
+if __name__ == "__main__":
+    argp = argparse.ArgumentParser()
+
+    argp.add_argument("bin", type=str, help="Input binary to load")
+    argp.add_argument("outfile", type=str, help="Symbolized ASM output")
+    argp.add_argument("-a", "--asan", action='store_true',
+                      help="Add binary address sanitizer instrumentation")
+    argp.add_argument("-k", "--kernel", action='store_true',
+                      help="Instrument a kernel module")
+    argp.add_argument("-c", "--cache", action='store_true',
+                      help="Save/load register analysis cache (only used with --asan)")
+
+    args = argp.parse_args()
+
+    loader = Loader(args.bin)
+
+    flist = loader.flist_from_symtab()
+    loader.load_functions(flist)
+
+    slist = loader.slist_from_symtab()
+    loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
+
+    reloc_list = loader.reloc_list_from_symtab()
+    loader.load_relocations(reloc_list)
+
+    global_list = loader.global_data_list_from_symtab()
+    loader.load_globals_from_glist(global_list)
+
+    loader.container.attach_loader(loader)
+
+    rw = Rewriter(loader.container, args.outfile)
+    rw.symbolize()
+
+    if args.asan: 
+        asan(rw, loader, args)
+
+    rw.dump()
