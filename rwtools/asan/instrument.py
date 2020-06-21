@@ -1,7 +1,6 @@
 import copy
 import math
 from collections import defaultdict
-import numpy as np
 import json
 
 from archinfo import ArchAMD64
@@ -628,7 +627,7 @@ class Instrument():
         rflags_stats[0] = count - rflags_stats[0]
 
         print("[*] Instrumented: {} locations".format(count))
-        print("Stats:", np.bincount(free_reg_sz))
+        print("Number of free registers:", free_reg_sz)
         print(json.dumps(free_reg_cnt))
         print(
             "rflags live: {}, rflags + 0 regs: {}, rflags + rax: {},".format(

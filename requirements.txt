@@ -1,0 +1,4 @@
+archinfo
+pyelftools
+capstone
+intervaltree
