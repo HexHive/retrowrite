@@ -127,7 +127,7 @@ fuzzing and reproducing results.
 
 > **_NOTE:_** This script will setup all the environment (virtual machine file and go install), it take some time to setup and download everything.
 >
-> It will take about 10 Go on your disk for the virtual machine image disk and go tools, so make sure you have enough space.
+> It will take about 10 GB on your disk for the virtual machine image disk and go tools, so make sure you have enough space.
 
 Run `setup.sh`:
 
@@ -176,6 +176,7 @@ An exemple to measure our fuzzing:
 
 #### For custom module
 
+*work in progress*
 
 # Developer Guide
 
