@@ -126,7 +126,7 @@ Here are usefull link we used for creating the syscall file:
 
 We took as example the /dev/kvm [config file](https://github.com/google/syzkaller/blob/master/sys/linux/dev_kvm.txt) for file descriptor in /dev.
 
-And created the file [dev_demo.txt](demos/kernel_demo/dev_demo.txt) to add it you can use the following commands:
+And created the file [dev_demo.txt](dev_demo.txt) to add it you can use the following commands:
 
 ```bash
 $ source ../../retro/bin/activate
@@ -141,7 +141,7 @@ $ source ../../retro/bin/activate
 
 Now syzskaller should know about your new syscall.
 
-The syzskaller config file for the fuzzing campaign is here [demo_module.cfg](demos/kernel_demo/demo_module.cfg), you can see only the syscall from demo module enable.
+The syzskaller config file for the fuzzing campaign is here [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
 
 Now all good we are ready to start the fuzzing campaign on this demo module:
 ```
