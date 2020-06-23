@@ -1,7 +1,7 @@
 # Demo time!
 
 This directory contains one module to demonstrate ASan instrument with KRetroWrite.
-If you want to see how to run a fuzzing campaign for this modules please see [README_FUZZ.md](demos/kernel_demo/README_FUZZ.md)
+If you want to see how to run a fuzzing campaign for this modules please see [README_FUZZ.md](README_FUZZ.md)
 
 
 # Usage
