@@ -21,10 +21,10 @@ vms_files/busybox/
 vms_files/initramfs/
 vms_files/image/
 cftool/cftool
-syzkaller-configs/e1000.cfg
-syzkaller-configs/ext4.cfg
-
 modules/
 campaigns/
 demos/kernel_demo/initramfs
 demos/kernel_demo/linux
+demos/kernel_demo/module/Makefile
+syzkaller-configs/e1000.cfg
+syzkaller-configs/ext4.cfg
