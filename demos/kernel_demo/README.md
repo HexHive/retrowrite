@@ -1,8 +1,8 @@
 # Demo time!
 
-This directory contains one exemple demos for ASan instrument with KRetroWrite.
+This directory contains one module to demonstrate ASan instrument with KRetroWrite.
+If you want to see how to run a fuzzing campaign for this modules please see [README_FUZZ.md](demos/kernel_demo/README_FUZZ.md)
 
-instrumenting with asan for red zone detection
 
 # Usage
 > **_NOTE:_** You need to have run setup install script before try out this demo
@@ -15,7 +15,7 @@ make
 cd ..
 ```
 To instrument the module previously compiled:
-```
+```bash
 ./instrument_module.sh module/demo_module.ko
 ```
 To see the differences between the instrumented and classic binary you can use the command objdump :
@@ -24,7 +24,7 @@ To see the differences between the instrumented and classic binary you can use t
 
 Test of the module:
 
-You will need to compile the linux kernel with kasan (automatic in the launch script)
+You will need to compile the linux kernel with kasan (automated in the launch script)
 
 (Bonus) To exit virtual qemu machine : `ctrl+a x`
 
@@ -126,3 +126,5 @@ You can generate a bufferover flow with : echo 1337 > /dev/demo
 [   79.212716] Disabling lock debugging due to kernel taint
 [   79.260436] ffffffcc
 ```
+
+
