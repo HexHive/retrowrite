@@ -2,7 +2,7 @@
 
 This is a description of how to run a fuzzing campaign on a out-of-tree kernel modules with the demo module.
 
-It contain information about how to add the module into the kernel/syzskaller image, and all the config file needed.
+It contain information about how to add the module into the kernel/syzkaller image, and all the config file needed.
 
 (Bonus)
 Here are few usefull link about kernel module :
@@ -139,9 +139,9 @@ $ source ../../retro/bin/activate
 ```
 ## Syzkaller run
 
-Now syzskaller should know about your new syscall.
+Now syzkaller should know about your new syscall.
 
-The syzskaller config file for the fuzzing campaign is here [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
+The syzkaller config file for the fuzzing campaign is here [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
 
 Now all good we are ready to start the fuzzing campaign on this demo module:
 ```

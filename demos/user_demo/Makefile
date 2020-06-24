@@ -19,7 +19,7 @@ stack: stack.c
 	${CC} ${OPT} stack.c -o stack
 
 stack.asan: stack
-	PYTHONPATH=../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
+	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
 	${CC} stack.asan.s -lasan -o stack.asan
 
 .PHONY=stacktest
