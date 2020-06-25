@@ -400,7 +400,9 @@ class Symbolizer():
         for rel in dyn:
             section = container.section_of_address(rel['offset'])
             if section:
+                debug(f"SECTION CHANGED FROM: \n {section}")
                 self._handle_relocation(container, section, rel)
+                debug(f"TO: \n {section}")
             else:
                 print("[x] Couldn't find valid section {:x}".format(
                     rel['offset']))
