@@ -40,9 +40,11 @@ The target binary
 This section highlights the steps to get you up to speed to use retrowrite for
 rewriting PIC binaries.
 
-Retrowrite ships with two utilities to support binary rewriting:
-* **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
-* **librw.rw :** Generate symbolized assembly files from binaries
+Retrowrite ships with an utility with the following features:
+* Generate symbolized assembly files from binaries without source code
+* BASan: Instrument binary with binary-only Address Sanitizer 
+* Support for symbolizing (linux) kernel modules 
+* KCovariance instrumentation support
 
 ### Setup
 
@@ -69,14 +71,14 @@ started with using retrowrite.
 
 ##### a. Instrument Binary with Binary-Address Sanitizer (BASan)
 
-`python3 -m rwtools.asan.asantool </path/to/binary/> </path/to/output/binary>`
+`./retrowrite --asan </path/to/binary/> </path/to/output/binary>`
 
 Note: Make sure that the binary is position-independent and is not stripped.
 This can be checked using `file` command (the output should say `ELF shared object`).
 
 Example, create an instrumented version of `/bin/ls`:
 
-`python3 -m rwtools.asan.asantool /bin/ls ls-basan-instrumented`
+`./retrowrite --asan /bin/ls ls-basan-instrumented`
 
 This will generate an assembly (`.s`) file that can be assembled and linked
 using any compiler, example:
@@ -89,7 +91,7 @@ using any compiler, example:
 To generate symbolized assembly that may be modified by hand or post-processed
 by existing tools:
 
-`python3 -m librw.rw </path/to/binary> <path/to/output/asm/files>`
+`./retrowrite </path/to/binary> <path/to/output/asm/files>`
 
 Post-modification, the asm files may be assembled to working binaries as
 described above.
