@@ -16,6 +16,7 @@ if [[(( $# == 0 )|| ("$1" != "kernel") && ("$1" != "user") )]]; then
 fi
 
 # install only userspace version
+
 if [[ $1 == 'user' ]]; then
 	 if [[ ! -e "./retro" ]]; then
 
@@ -25,24 +26,26 @@ if [[ $1 == 'user' ]]; then
 		set +u
 		source retro/bin/activate
 		set -u
-    pip3 install --upgrade wheel
+        pip3 install --upgrade wheel
 		pip3 install --upgrade pip
 		pip3 install -r requirements_user.txt
 
-    echo "source $(pwd)/retro/bin/postactivate" >> retro/bin/activate
+        echo "source $(pwd)/retro/bin/postactivate" >> retro/bin/activate
 		echo "export PYTHONPATH=\"$(pwd)\"" > retro/bin/postactivate
 
 		git submodule update --init --checkout third-party/capstone
 		cd third-party/capstone
 		make -j `nproc`
 		cd bindings/python/ && make -j `nproc` && make install
-
+        
 
 		set +u
 		deactivate
 		set -u
 
-		echo "[+] All done and ready to go"
+        ln -s $(pwd)/retrowrite $(pwd)/retro/bin/retrowrite 
+	
+        echo "[+] All done and ready to go"
 		echo "[ ] You can start run : source ./retro/bin/activate"
 	 else
 	 	echo "virtualenv already setup."
@@ -185,6 +188,9 @@ else
 			set +u
 			deactivate
 			set -u
+
+            ln -s $(pwd)/retrowrite $(pwd)/retro/bin/retrowrite 
+
 		popd
 	fi
 
