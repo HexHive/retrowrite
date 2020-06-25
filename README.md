@@ -34,6 +34,30 @@ The target binary
 * must not contain C++ exceptions (i.e., C++ exception tables are not
   recovered and simply stripped during lifting)
 
+#### Command line helper
+
+The individual tools also have commandline help which describes all the
+options, and may be accessed with `-h`. The below steps should quickly get you
+started with using retrowrite.
+
+```bash
+(retro) $ retrowrite --help
+usage: retrowrite [-h] [-a] [-s] [-k] [--kcov] [-c] bin outfile
+
+positional arguments:
+  bin             Input binary to load
+  outfile         Symbolized ASM output
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -a, --asan      Add binary address sanitizer instrumentation
+  -s, --assembly  Generate Symbolized Assembly
+  -k, --kernel    Instrument a kernel module
+  --kcov          Instrument the kernel module with kcov
+  -c, --cache     Save/load register analysis cache (only used with --asan)
+
+```
+
 ## Retrowrite
 ### Quick Usage Guide
 
@@ -64,21 +88,19 @@ Activate the virtualenv (from root of the repository):
 
 #### Commands
 
-The individual tools also have commandline help which describes all the
-options, and may be accessed with `-h`. The below steps should quickly get you
-started with using retrowrite.
+
 
 
 ##### a. Instrument Binary with Binary-Address Sanitizer (BASan)
 
-`./retrowrite --asan </path/to/binary/> </path/to/output/binary>`
+`retrowrite --asan </path/to/binary/> </path/to/output/binary>`
 
 Note: Make sure that the binary is position-independent and is not stripped.
 This can be checked using `file` command (the output should say `ELF shared object`).
 
 Example, create an instrumented version of `/bin/ls`:
 
-`./retrowrite --asan /bin/ls ls-basan-instrumented`
+`retrowrite --asan /bin/ls ls-basan-instrumented`
 
 This will generate an assembly (`.s`) file that can be assembled and linked
 using any compiler, example:
@@ -91,7 +113,7 @@ using any compiler, example:
 To generate symbolized assembly that may be modified by hand or post-processed
 by existing tools:
 
-`./retrowrite </path/to/binary> <path/to/output/asm/files>`
+`retrowrite </path/to/binary> <path/to/output/asm/files>`
 
 Post-modification, the asm files may be assembled to working binaries as
 described above.
@@ -154,6 +176,12 @@ We wrote all script with the assumption that the module tested is in the Linux t
 
 #### Commands
 
+##### Classic instrumentation
+
+	- Instrument Binary with Binary-Address Sanitizer (BASan)  :`retrowrite --asan --kernel </path/to/module.ko> </path/to/output/module_asan.ko>`
+	- Generate Symbolized Assembly that may be modified by hand or post-processed by existing tools: `retrowrite </path/to/module.ko> <path/to/output/asm/files>`
+
+##### Fuzzing campaign
 
 [vms_files/fuzz-module.sh](vms_files/fuzz-module.sh) : create, prepare and run a fuzzing campaign of a module from a modules in the linux sources.
 
@@ -184,20 +212,21 @@ The files and folder starting with `k` are linked with the kernel retrowrite ver
 list of retrowrite files :
 * [librw/container.py](librw/container.py) :
 * [librw/disasm.py](librw/disasm.py)
-* [librw/kcontainer.py](librw/kcontainer.py)
-* [librw/kloader.py](librw/kloader.py) :
-* [librw/krw.py](librw/krw.py) :
 * [librw/loader.py](librw/loader.py) :
 * [librw/rw.py](librw/rw.py) :
-* [librw/analysis/kregister.py](librw/analysis/kregister.py) :
-* [librw/analysis/kstackframe.py](librw/analysis/kstackframe.py) :
 * [librw/analysis/register.py](librw/analysis/register.py) :
 * [librw/analysis/stackframe.py](librw/analysis/stackframe.py) :
-* [rwtools/kcov/instrument.py](rwtools/kcov/instrument.py) :
-* [rwtools/kcov/kcovtool.py](rwtools/kcov/kcovtool.py) :
 * [rwtools/asan/asantool.py](rwtools/asan/asantool.py) :
 * [rwtools/asan/snippets.py](rwtools/asan/snippets.py) :
 * [rwtools/asan/instrument.py](rwtools/asan/instrument.py) :
+
+* [librw/kcontainer.py](librw/kcontainer.py)
+* [librw/kloader.py](librw/kloader.py) :
+* [librw/krw.py](librw/krw.py) :
+* [librw/analysis/kregister.py](librw/analysis/kregister.py) :
+* [librw/analysis/kstackframe.py](librw/analysis/kstackframe.py) :
+* [rwtools/kcov/instrument.py](rwtools/kcov/instrument.py) :
+* [rwtools/kcov/kcovtool.py](rwtools/kcov/kcovtool.py) :
 * [rwtools/kasan/asantool.py](rwtools/kasan/asantool.py) :
 * [rwtools/kasan/snippets.py](rwtools/kasan/snippets.py) :
 * [rwtools/kasan/instrument.py](rwtools/kasan/instrument.py) :
