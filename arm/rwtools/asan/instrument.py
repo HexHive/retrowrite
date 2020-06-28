@@ -6,7 +6,7 @@ import json
 from archinfo import ArchAMD64
 
 from capstone.x86_const import X86_REG_RSP
-from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
+from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET, CS_OP_REG
 
 from . import snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
@@ -19,6 +19,40 @@ ASAN_GLOBAL_DS_BASE = 0x3000000000000000
 ASAN_INIT_LOC = 0x1000000000000000
 ASAN_DEINIT_LOC = 0x2000000000000000
 
+
+
+# TODO: move this function and the next in an util.py
+def get_reg_size_arm(regname):
+    sizes = {
+        "B" : 1,
+        "H" : 2,
+        "W" : 4,
+        "S" : 4,
+        "X" : 8,
+        "D" : 8,
+        "Q" : 16
+    }
+    return sizes[regname.upper()[0]]
+
+def get_access_size_arm(instruction):
+    bool_load = True if instruction.mnemonic.upper().startswith("L") else False
+    # here we get the size from the last letter of the instruction
+    # horrible hack I know, but capstone is a bad boy and is not reliable
+    sizes = {
+        "B" : 1,
+        "H" : 2,
+        "W" : 4,
+        "R" : 8,
+        "P" : 16
+    }
+    acsz = sizes[instruction.mnemonic.upper()[-1]]
+    if instruction.cs.operands[0].type == CS_OP_REG:
+        reg = instruction.cs.reg_name(instruction.cs.operands[0].reg)
+        regsz = get_reg_size_arm(reg)
+        if regsz < acsz or regsz == 16:
+            if acsz == 16: regsz *= 2  #16 means we store a pair, so double the size
+            return (regsz, bool_load)
+    return (acsz, bool_load)
 
 class Instrument():
     CANARY_ANALYSIS_KEY = 'stack_canary_expression'
@@ -298,6 +332,7 @@ class Instrument():
         return InstrumentedInstruction(codecache.format(**args),
                                        enter_lbl, comment)
 
+
     def instrument_mem_accesses(self):
         for _, fn in self.rewriter.container.functions.items():
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
@@ -322,12 +357,13 @@ class Instrument():
                     pass
 
                 mem, midx = instruction.get_mem_access_op()
-                debug(mem + midx)
+                debug(str(mem) + str(midx))
                 # This is not a memory access
                 if not mem:
                     continue
 
-                acsz = instruction.cs.operands[midx].size
+                acsz, bool_load = get_access_size_arm(instruction)
+                debug(f"{instruction} --- acsz: {acsz}, load: {bool_load}")
 
                 if acsz not in [1, 2, 4, 8]:
                     print("[*] Maybe missed an access: %s -- %d" %
