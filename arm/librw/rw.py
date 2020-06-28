@@ -7,7 +7,7 @@ from capstone.x86_const import X86_REG_RIP
 from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 
-from logging import *
+from arm.librw.logging import *
 
 
 class Rewriter():
@@ -173,6 +173,7 @@ class Symbolizer():
                 instruction.cf_leaves_fn = False
 
                 # XXX: ARM
+                # XXX: Capstone does not recognize "bl" (branch and link) as a call
                 if is_jmp and not instruction.mnemonic.startswith("jmp"):
                     if inst_idx + 1 < len(function.cache):
                         # Add natural flow edge

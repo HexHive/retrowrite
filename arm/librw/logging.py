@@ -9,3 +9,6 @@ def debug(s, end="\n"):
 
 def info(s, end="\n"):
     print(f"[{GREEN}INFO{CLEAR}] {s}", end=end)
+
+def critical(s, end="\n"):
+    print(f"[{CRITICAL}CRITICAL{CLEAR}] {s}", end=end)

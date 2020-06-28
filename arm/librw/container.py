@@ -4,6 +4,7 @@ import struct
 from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
 from . import disasm
+from arm.librw.logging import *
 
 
 class SzPfx():
@@ -113,7 +114,11 @@ class Container():
 
     def add_plt_information(self, relocinfo):
         plt_base = self.plt_base
-        for idx, relocation in enumerate(relocinfo, 1):
+
+        # we start from idx=2 because the start of the .plt takes 32 bytes
+        # on aarch64, while instead it takes only 16 in x86. 
+        # TODO: make this more robust, not empirical
+        for idx, relocation in enumerate(relocinfo, 2):
             self.plt[plt_base + idx * 16] = relocation['name']
 
     def reloc(self, target):
