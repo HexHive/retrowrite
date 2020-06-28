@@ -12,6 +12,7 @@ from . import snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 from librw.analysis.stackframe import StackFrameAnalysis
+from arm.librw.logging import *
 
 ASAN_SHADOW_OFF = 2147450880
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
@@ -321,6 +322,7 @@ class Instrument():
                     pass
 
                 mem, midx = instruction.get_mem_access_op()
+                debug(mem + midx)
                 # This is not a memory access
                 if not mem:
                     continue
@@ -338,8 +340,12 @@ class Instrument():
                     print("[x] Missing free reglist in cache. Regenerate!")
                     free_registers = list()
 
+                debug(f"ASAN GOTCHA on {instruction}")
+
                 iinstr = self.get_mem_instrumentation(
                     acsz, instruction, midx, free_registers, is_leaf)
+
+                debug(f"now is {iinstr}")
 
                 # Save some stats
                 self.memcheck_sites[fn.start].append(idx)

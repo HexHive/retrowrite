@@ -97,7 +97,6 @@ class Loader():
 
             for relocation in relocation_section.iter_relocations():
                 if relocation_section.name == '.rela.dyn':
-                    import IPython; IPython.embed()
                     for s in self.elffile.iter_sections():
                         section_start =  s['sh_addr'] if s['sh_addr'] > 0 else s['sh_offset']
                         section_end = section_start + s.data_size
