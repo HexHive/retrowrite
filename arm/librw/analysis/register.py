@@ -35,20 +35,20 @@ class RegisterAnalysis(object):
 
     def _init_reg_pool(self):
         # Possible extension: add xmm registers into the pool
-        # XXX: ARM
-        amd64 = ArchAMD64()
+        amd64 = ArchAArch64()
         regmap = dict()
         for reg in amd64.register_list:
             if reg.general_purpose:
                 regmap[reg.name] = reg
 
-        # Remove rip, rsp from regpool
-        del regmap["rip"]
-        del regmap["rsp"]
+        # Remove xsp, x30 (link register)
+        del regmap["xsp"]
+        del regmap["x30"]
 
         # Add a fake register for rflags
-        rflags = Register("rflags", 64)
-        regmap["rflags"] = rflags
+        # XXX: why?
+        # rflags = Register("rflags", 64)
+        # regmap["rflags"] = rflags
 
         return regmap
 
@@ -92,20 +92,19 @@ class RegisterAnalysis(object):
         for rn, reg in self.regmap.items():
             self.subregs[rn] = rn
 
-            # XXX: ARM
-            if reg.name in ["r8", "r9", "r10", "r11",
-                            "r12", "r13", "r14", "r15"]:
+            # XXX: Not needed by ARM? (archinfo correctly gives subregisters
+            # x0, x1, ..., x30
+            # if reg.name in ["x" + str(i) for i in range(0, 31)]: 
+                # reg.subregisters = [
+                    # (reg.name + "d", 0, 4),
+                    # (reg.name + "w", 0, 2),
+                    # (reg.name + "b", 0, 1)]
 
-                reg.subregisters = [
-                    (reg.name + "d", 0, 4),
-                    (reg.name + "w", 0, 2),
-                    (reg.name + "b", 0, 1)]
-
-            if reg.name == "rbp":
-                reg.subregisters = [
-                    ("ebp", 0, 4),
-                    ("bp", 0, 2),
-                    ("bpl", 0, 1)]
+            # if reg.name == "rbp":
+                # reg.subregisters = [
+                    # ("ebp", 0, 4),
+                    # ("bp", 0, 2),
+                    # ("bpl", 0, 1)]
 
             for subr in reg.subregisters:
                 self.subregs[subr[0]] = rn

@@ -333,6 +333,7 @@ class Instrument():
                 acsz, bool_load = get_access_size_arm(instruction.cs)
                 debug(f"{instruction} --- acsz: {acsz}, load: {bool_load}")
 
+                # XXX: add 16 bytes access, _access16()
                 if acsz not in [1, 2, 4, 8]:
                     print("[*] Maybe missed an access: %s -- %d" %
                           (instruction, acsz))
@@ -344,6 +345,7 @@ class Instrument():
                     print("[x] Missing free reglist in cache. Regenerate!")
                     free_registers = list()
 
+                debug(f"free registers {free_registers}")
                 debug(f"ASAN GOTCHA on {instruction}")
 
                 iinstr = self.get_mem_instrumentation(
