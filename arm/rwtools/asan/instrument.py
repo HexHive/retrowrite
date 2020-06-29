@@ -12,9 +12,9 @@ from . import snippets as sp
 from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 from librw.analysis.stackframe import StackFrameAnalysis
-from arm.librw.logging import *
-
+from arm.librw.util.logging import *
 ASAN_SHADOW_OFF = 2147450880
+
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
 ASAN_INIT_LOC = 0x1000000000000000
 ASAN_DEINIT_LOC = 0x2000000000000000

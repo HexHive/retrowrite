@@ -7,7 +7,7 @@ from capstone.x86_const import X86_REG_RIP
 from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 
-from arm.librw.logging import *
+from arm.librw.util.logging import *
 
 
 class Rewriter():

@@ -4,7 +4,7 @@ import struct
 from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
 from . import disasm
-from arm.librw.logging import *
+from arm.librw.util.logging import *
 
 
 class SzPfx():

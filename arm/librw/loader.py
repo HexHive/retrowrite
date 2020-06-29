@@ -10,7 +10,7 @@ from elftools.elf.relocation import RelocationSection
 from .container import Container, Function, DataSection
 from .disasm import disasm_bytes
 
-from arm.librw.logging import *
+from arm.librw.util.logging import *
 
 
 class Loader():
