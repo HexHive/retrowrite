@@ -13,6 +13,7 @@ from librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 from librw.analysis.stackframe import StackFrameAnalysis
 from arm.librw.util.logging import *
+from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm
 ASAN_SHADOW_OFF = 2147450880
 
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
@@ -20,39 +21,6 @@ ASAN_INIT_LOC = 0x1000000000000000
 ASAN_DEINIT_LOC = 0x2000000000000000
 
 
-
-# TODO: move this function and the next in an util.py
-def get_reg_size_arm(regname):
-    sizes = {
-        "B" : 1,
-        "H" : 2,
-        "W" : 4,
-        "S" : 4,
-        "X" : 8,
-        "D" : 8,
-        "Q" : 16
-    }
-    return sizes[regname.upper()[0]]
-
-def get_access_size_arm(instruction):
-    bool_load = True if instruction.mnemonic.upper().startswith("L") else False
-    # here we get the size from the last letter of the instruction
-    # horrible hack I know, but capstone is a bad boy and is not reliable
-    sizes = {
-        "B" : 1,
-        "H" : 2,
-        "W" : 4,
-        "R" : 8,
-        "P" : 16
-    }
-    acsz = sizes[instruction.mnemonic.upper()[-1]]
-    if instruction.cs.operands[0].type == CS_OP_REG:
-        reg = instruction.cs.reg_name(instruction.cs.operands[0].reg)
-        regsz = get_reg_size_arm(reg)
-        if regsz < acsz or regsz == 16:
-            if acsz == 16: regsz *= 2  #16 means we store a pair, so double the size
-            return (regsz, bool_load)
-    return (acsz, bool_load)
 
 class Instrument():
     CANARY_ANALYSIS_KEY = 'stack_canary_expression'
@@ -362,7 +330,7 @@ class Instrument():
                 if not mem:
                     continue
 
-                acsz, bool_load = get_access_size_arm(instruction)
+                acsz, bool_load = get_access_size_arm(instruction.cs)
                 debug(f"{instruction} --- acsz: {acsz}, load: {bool_load}")
 
                 if acsz not in [1, 2, 4, 8]:
