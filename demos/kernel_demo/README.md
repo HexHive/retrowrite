@@ -1,22 +1,30 @@
 # Demo time!
 
-This directory contains one module to demonstrate ASan instrument with KRetroWrite.
+This directory contains one module to demonstrate ASan instrumentation with KRetroWrite.
 If you want to see how to run a fuzzing campaign for this modules please see [README_FUZZ.md](README_FUZZ.md)
 
 
 # Usage
-> **_NOTE:_** You need to have run setup install script before try out this demo
+> **_NOTE:_** You need to have run the setup and install script before try out this demo.
 
 
 To prepare the environment, compile and instrument the demo module :
 ```bash
-./instrument_module.sh module/demo_module.c
+cd module
+make
+cd ..
 ```
-To see the differences between the instrumented and classic binary you can use the command objdump :
+To instrument the compiled module:
+```bash
+./instrument_module.sh module/demo_module.ko
+```
+To see the differences between the instrumented and classic binary you can use the command `objdump`:
 * `objdump -d module/demo_module.ko`
 * `objdump -d module/demo_module_asan.ko`
 
 Test of the module:
+
+You will need to compile the linux kernel with `kasan` (automated in the launch script).
 
 (Bonus) To exit virtual qemu machine : `ctrl+a x`
 

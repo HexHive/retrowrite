@@ -1,13 +1,13 @@
 # Run fuzzing campaing
 
-This is a description of how to run a fuzzing campaign on a out-of-tree kernel modules with the demo module.
+This is a description of how to run a fuzzing campaign for an out-of-tree kernel module with the demo module.
 
-It contain information about how to add the module into the kernel/syzkaller image, and all the config file needed.
+It contains information about how to add the module into the kernel/syzkaller image, and all the config files needed.
 
 To run properly this demo you will need to run [fuzzing/setup_fuzz.sh](/fuzzing/setup_fuzz.sh) script before.
 
 (Bonus)
-Here are few usefull link about kernel module :
+Here are few useful links about kernel modules:
 - <https://www.kernel.org/doc/Documentation/kbuild/modules.txt>
 - <http://tldp.org/LDP/lkmpg/2.6/html/lkmpg.html>
 - <https://www.cs.bham.ac.uk/~exr/teaching/lectures/systems/07_08/kernelProgramming.php>
@@ -44,7 +44,7 @@ cd ../../../../#
 
 ## Add the modules into the syzkaller filesystem
 
-To add the modules into the linux image
+To add the modules into the linux image:
 ```bash
 cp ../../fuzzing/kernel/vms_files/image/stretch_ext4_10g.img ./
 sudo qemu-nbd -c /dev/nbd0 stretch_ext4_10g.img
@@ -127,16 +127,16 @@ to load module not in a classic folder : `insmod /root/demo_module.ko`
 
 ## Syzkaller config
 
-Now than the modules is working inside the syzkaller vm you need to create the syzkaller config files.
+Now that the modules is working inside the syzkaller vm you need to create the syzkaller config files.
 
-As our module is not a classic linux module (hand made) the syscall doesn't exist in a classic linux kernel so we need to add them into the syzkaller sources.
+As our module is not a classic linux module (hand made), the syscall doesn't exist in a classic linux kernel and we need to add them into the syzkaller sources.
 
 Here are usefull link we used for creating the syscall file:
 - <https://github.com/google/syzkaller/blob/master/docs/syscall_descriptions.md>
 - <https://github.com/google/syzkaller/blob/master/docs/syscall_descriptions.md#describing-new-system-calls>
 - <https://github.com/google/syzkaller/blob/master/docs/syscall_descriptions_syntax.md>
 
-We took as example the /dev/kvm [config file](https://github.com/google/syzkaller/blob/master/sys/linux/dev_kvm.txt) for file descriptor in /dev.
+We took as example the `/dev/kvm` [config file](https://github.com/google/syzkaller/blob/master/sys/linux/dev_kvm.txt) for file descriptor in /dev.
 
 And created the file [dev_demo.txt](dev_demo.txt) to add it you can use the following commands:
 
@@ -153,9 +153,10 @@ $ source ../../retro/bin/activate
 
 Now syzkaller should know about your new syscall.
 
-The syzkaller config file for the fuzzing campaign is here [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
+<!-- What is "demo module enable?" -->
+The syzkaller config file for the fuzzing campaign is in [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
 
-Now all good we are ready to start the fuzzing campaign on this demo module:
+Now, we are ready to start the fuzzing campaign on this demo module:
 ```
 (retro) $ syz-manager --config demo_module.cfg
 2020/06/22 18:15:03 loading corpus...

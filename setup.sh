@@ -41,7 +41,7 @@ if [[ ! -e "./retro" ]]; then
   set +u
   deactivate
   set -u
-
+  cd $WORKDIR
   ln -s $(pwd)/retrowrite $(pwd)/retro/bin/retrowrite
 
   echo "[+] All done and ready to go"
@@ -58,7 +58,7 @@ if [[ (( $# == 1 )&&  ("$1" == 'kernel')) ]]; then
   echo "export PYTHONPATH=\"$(pwd)\"" > $KRWDIR/retro/bin/postactivate
   echo "export GOROOT=\"$GOROOT\"" >> $KRWDIR/retro/bin/postactivate
   echo "export PATH=\"$GOROOT/bin:$KRWDIR/cftool:\$PATH\"" >> $KRWDIR/retro/bin/postactivate
-  export PATH="$GOPATH/bin:$GOROOT/bin:$KRWDIR/cftool:$PATH"
+  export PATH="$GOROOT/bin:$KRWDIR/cftool:$PATH"
 
   	# Download Go
 	# installing go into the venv bin
