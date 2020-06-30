@@ -5,7 +5,7 @@ Implements analysis to look for free registers
 import copy
 from collections import defaultdict
 
-from archinfo import ArchAMD64, Register
+from archinfo import ArchAArch64, Register
 
 
 class RegisterAnalysis(object):
@@ -23,7 +23,6 @@ class RegisterAnalysis(object):
         self.closure_list = self._init_closure_list()
 
         # XXX: ARM
-
         # Caller saved register list, These are registers that cannot be
         # clobbered and therefore are 'used'.
         self.used_regs['ret'] = set([
@@ -45,6 +44,10 @@ class RegisterAnalysis(object):
         del regmap["xsp"]
         del regmap["x30"]
 
+        # Clobbered registers (reserved by caller, cannot overwrite)
+        for i in range(19, 28):
+            del regmap["x" + str(i)]
+
         # Add a fake register for rflags
         # XXX: why?
         # rflags = Register("rflags", 64)
@@ -53,34 +56,17 @@ class RegisterAnalysis(object):
         return regmap
 
     def _init_closure_list(self):
-        closure_list = defaultdict(lambda: ["", "", "", ""])
+        closure_list = defaultdict(lambda: [""])
 
+        # copied from x86, in reality not really needed
         for wrn, wr in self.regmap.items():
             subreg_list = list(enumerate(wr.subregisters))
-            # 64-bit register rules
             for idx, subreg in subreg_list:
                 closure_list[wrn][idx] = subreg[0]
 
-            # 32-bit register rules
             reg32 = closure_list[wrn][0]
             if reg32:
-                closure_list[reg32] = copy.copy(closure_list[wrn])
-                closure_list[reg32][0] = wrn
-
-            # 16-bit register rules
-            reg16 = closure_list[wrn][1]
-            if reg16:
-                closure_list[reg16] = copy.copy(closure_list[wrn][2:])
-
-            # 8l-bit register rules
-            reg8l = closure_list[wrn][2]
-            if reg8l:
-                closure_list[reg8l] = []
-
-            # 8h-bit register rules
-            reg8h = closure_list[wrn][3]
-            if reg8h:
-                closure_list[reg8h] = []
+                closure_list[reg32] = []
 
         # Cleanup
         for k, items in closure_list.items():
@@ -113,7 +99,8 @@ class RegisterAnalysis(object):
         regset = set(regl)
         for item in regl:
             clist = self.closure_list[item]
-            regset.update(clist)
+            if clist:
+                regset.update(clist)
         return regset
 
     def full_register_of(self, regname):
@@ -149,6 +136,7 @@ class RegisterAnalysis(object):
         ).difference(reguses)
 
         for nexti in nexts:
+            if nexti not in self.used_regs: continue
             reguses = reguses.union(
                 self.used_regs[nexti].difference(regwrites))
 

@@ -8,6 +8,7 @@ from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 
 from arm.librw.util.logging import *
+from arm.librw.util.arm_util import _is_jump_conditional
 
 
 class Rewriter():
@@ -104,6 +105,7 @@ class Symbolizer():
                 if rel['st_value'] == 0:
                     suffix = "@PLT"
 
+                # XXX: ARM
                 if len(inst.cs.operands) == 1:
                     inst.op_str = "%s%s" % (rel['name'].split("@")[0], suffix)
                 else:
@@ -149,6 +151,7 @@ class Symbolizer():
         self.symbolize_mem_accesses(container, context)
         self.symbolize_switch_tables(container, context)
 
+
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
             addr_to_idx = dict()
@@ -172,9 +175,8 @@ class Symbolizer():
 
                 instruction.cf_leaves_fn = False
 
-                # XXX: ARM
                 # XXX: Capstone does not recognize "bl" (branch and link) as a call
-                if is_jmp and not instruction.mnemonic.startswith("jmp"):
+                if is_jmp and _is_jump_conditional(instruction.mnemonic):
                     if inst_idx + 1 < len(function.cache):
                         # Add natural flow edge
                         function.nexts[inst_idx].append(inst_idx + 1)
@@ -191,6 +193,7 @@ class Symbolizer():
                         # Out of function bounds, no idea what to do!
                         function.nexts[inst_idx].append("undef")
 
+                # XXX: what if we jump on a register value i.e. we don't know the target?
                 if instruction.cs.operands[0].type == CS_OP_IMM:
                     target = instruction.cs.operands[0].imm
                     # Check if the target is in .text section.

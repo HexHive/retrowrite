@@ -32,3 +32,5 @@ def get_access_size_arm(instruction):
             return (regsz, bool_load)
     return (acsz, bool_load)
 
+def _is_jump_conditional(opcode):
+    return opcode.startswith("b.")
