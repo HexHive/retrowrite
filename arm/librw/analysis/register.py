@@ -135,6 +135,10 @@ class RegisterAnalysis(object):
             current_instruction.reg_writes()
         ).difference(reguses)
 
+        if current_instruction.mnemonic.startswith("cmp") \
+        or current_instruction.mnemonic.startswith("tst"):
+            reguses = reguses.union(regwrites)
+
         for nexti in nexts:
             if nexti not in self.used_regs: continue
             reguses = reguses.union(

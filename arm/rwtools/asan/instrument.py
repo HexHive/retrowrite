@@ -36,20 +36,9 @@ class Instrument():
         self.regmap = defaultdict(lambda: defaultdict(dict))
         for reg in amd64.register_list:
             if reg.general_purpose:
-                for subr in reg.subregisters:
-                    base = subr[1]
-                    sz = subr[2] * 8
-                    self.regmap[reg.name][base][sz] = subr[0]
-                if reg.name in [
-                        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]:
-                    self.regmap[reg.name][0][32] = reg.name + "d"
-                    self.regmap[reg.name][0][16] = reg.name + "w"
-                    self.regmap[reg.name][0][8] = reg.name + "b"
-                if reg.name == "rbp":
-                    self.regmap[reg.name][0][32] = "ebp"
-                    self.regmap[reg.name][0][16] = "bp"
-                    self.regmap[reg.name][0][8] = "bpl"
+                self.regmap[reg.name] = reg.subregisters
 
+        print(self.regmap)
         # Some stats
         self.memcheck_sites = defaultdict(list)
 
@@ -58,16 +47,16 @@ class Instrument():
         self.skip_instrument = set()
 
     def _get_subreg32(self, regname):
-        return self.regmap[regname][0][32]
+        return self.regmap[regname][0]
 
-    def _get_subreg8l(self, regname):
-        return self.regmap[regname][0][8]
+    # def _get_subreg8l(self, regname):
+        # return self.regmap[regname][0][8]
 
-    def _get_subreg8h(self, regname):
-        return self.regmap[regname][1][8]
+    # def _get_subreg8h(self, regname):
+        # return self.regmap[regname][1][8]
 
-    def _get_subreg16(self, regname):
-        return self.regmap[regname][0][16]
+    # def _get_subreg16(self, regname):
+        # return self.regmap[regname][0][16]
 
     def instrument_init_array(self):
         section = self.rewriter.container.sections[".init_array"]
@@ -138,8 +127,8 @@ class Instrument():
         raise NotImplementedError
 
     def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf):
-        affinity = ["rdi", "rsi", "rcx", "rdx", "rbx", "r8", "r9", "r10",
-                    "r11", "r12", "r13", "r14", "r15", "rax", "rbp"]
+        # we prefer high registers, less likely to go wrong
+        affinity = ["x" + i for i in range(18, 0, -1)]
 
         free = sorted(
             list(free),
@@ -513,6 +502,7 @@ class Instrument():
 
         for addr, fn in self.rewriter.container.functions.items():
             for idx, instruction in enumerate(fn.cache):
+                # XXX: ARM
                 if instruction.mnemonic.startswith("callq"):
                     if instruction.op_str.startswith("__longjmp"):
                         self.handle_longjmp(instruction)
@@ -532,6 +522,7 @@ class Instrument():
                     # The next instruction moves the canary into the current
                     # stack frame, get the address.
                     nexti = fn.cache[idx + 1]
+                    # XXX: ARM
                     if nexti.mnemonic != "movq":
                         continue
 
@@ -547,6 +538,7 @@ class Instrument():
 
                     free_registers = self.get_free_regs(fn, idx)
                     need_save = True
+                    #XXX: ARM
                     clob1 = "%rbx"
                     if len(free_registers) > 0:
                         clob1 = free_registers[0]
@@ -566,6 +558,7 @@ class Instrument():
                         continue
                     # Check if the next instruction is a xor with the canary
                     nexti = fn.cache[idx + 1]
+                    #XXX: ARM
                     if nexti.mnemonic != "xorq":
                         continue
                     # Check if we're xor'ing with the canary
@@ -582,6 +575,7 @@ class Instrument():
 
                     free_registers = self.get_free_regs(fn, idx)
                     need_save = True
+                    #XXX: ARM
                     clob1 = "%rbx"
                     if len(free_registers) > 0:
                         clob1 = free_registers[0]
