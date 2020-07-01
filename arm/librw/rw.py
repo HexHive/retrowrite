@@ -160,6 +160,7 @@ class Symbolizer():
 
             for inst_idx, instruction in enumerate(function.cache):
                 # XXX: ARM
+                # ARM64_GRP_CALL
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
 

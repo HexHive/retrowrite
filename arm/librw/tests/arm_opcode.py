@@ -63,7 +63,6 @@ def test_free_registers():
         rw.symbolize_cf_transfer(container)
         ra = RegisterAnalysis()
         ra.analyze_function(fun)
-        print(fun.nexts)
         return {idx:sorted(regs) for idx,regs in ra.used_regs.items()}, len(fun.cache)
 
     code = """
@@ -89,6 +88,8 @@ def test_free_registers():
     br x12
     """
     regs, instr_cnt = used_regs(code)
+    #assert all(["x2" in regs[i] for i in [0,1,2]]) XXX: capstone bug
+    assert all(["x2" not in regs[i] for i in [3,4,5,6]])
     assert all(["x12" in regs[i] for i in [0,1,2,3,6]])
     assert all(["x12" not in regs[i] for i in [4,5]])
     assert all(["x10" in regs[i] for i in [1]])
