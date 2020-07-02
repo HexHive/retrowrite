@@ -2,17 +2,40 @@
 
 set -euxo pipefail
 
-# setup local Linux files (to not disturb everything else)
-if [[ ! -e "./initramfs" ]]; then
-  cp ../../vms_files/initramfs ./ -r
+BUSYBOX_DIR="./busybox"
+INITRAMFS_DIR="./initramfs"
+
+BUSYBOX_VERSION="1.27.2"
+LINUX_VERSION="5.5.0-rc6"
+	# Why does the tarball version not have .0 in the version number? Whatever
+LINUX_TARBALL_VERSION="5.5-rc6"
+
+# Build Busybox
+if [[ ! -e $BUSYBOX_DIR ]]; then
+  wget -O ./busybox.tar.bz2 "https://www.busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2"
+  tar xf busybox.tar.bz2
+  rm ./busybox.tar.bz2
+  mv "./busybox-$BUSYBOX_VERSION" "$BUSYBOX_DIR"
+  cp "../../fuzzing/kernel/vms_files/busybox-config" "$BUSYBOX_DIR/.config"
+
+  pushd $BUSYBOX_DIR
+    make -j`nproc`
+    make install
+  popd
 fi
-if [[ ! -e "./linux" ]]; then
-  cp ../../vms_files/linux ./ -r
-  cd linux
-  cp ../../../vms_files/linux-config .config
-  make -j $(nproc)
-  cd ..
+
+# Make initramfs
+if [[ ! -e $INITRAMFS_DIR ]]; then
+  mkdir "$INITRAMFS_DIR"
+  pushd $INITRAMFS_DIR
+    mkdir -p bin sbin etc proc sys usr/bin usr/sbin mnt/root "lib/modules/$LINUX_VERSION"
+    cp -r ../$BUSYBOX_DIR/_install/* .
+    cp "../../../fuzzing/kernel/vms_files/vm_init" init
+    chmod +x init
+    find "../linux-5.5-rc6" -name "*.ko" -type f -exec cp {} "lib/modules/$LINUX_VERSION" \;
+  popd
 fi
+
 
 cp module/*.ko initramfs/lib/modules/5.5.0-rc6
 echo "#!/bin/sh
@@ -33,7 +56,7 @@ find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz
 cd ..
 
 qemu-system-x86_64 \
-  -kernel linux/arch/x86/boot/bzImage \
+  -kernel linux-5.5-rc6/arch/x86/boot/bzImage \
   -append "console=ttyS0 rw debug earlyprintk=serial slub_debug=QUZ"\
   -initrd initramfs.cpio.gz \
   -enable-kvm \

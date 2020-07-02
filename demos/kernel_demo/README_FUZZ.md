@@ -4,6 +4,8 @@ This is a description of how to run a fuzzing campaign on a out-of-tree kernel m
 
 It contain information about how to add the module into the kernel/syzkaller image, and all the config file needed.
 
+To run properly this demo you will need to run [fuzzing/setup_fuzz.sh](/fuzzing/setup_fuzz.sh) script before.
+
 (Bonus)
 Here are few usefull link about kernel module :
 - <https://www.kernel.org/doc/Documentation/kbuild/modules.txt>
@@ -18,16 +20,16 @@ tar xvf linux-5.5-rc6.tar.gz
 
 mv linux-5.5-rc6 5.5.0-rc6
 
-cp ../../../../../vms_files/linux-config ./
+cp ../../../../../fuzzing/kernel/vms_files/linux-config ./
 cp linux-config 5.5.0-rc6/.config
-cd kernel/lib/modules/5.5.0-rc6/
+
 cd 5.5.0-rc6/
 make -j 8
 cd ../../../../
 
 cd module && make && cd ..
 
-./instrument_module.sh module/demo_module.ko
+./instrument_module.sh module/demo_module.c
 cd module
 #  compile and install into the kernel
 make -C ../kernel/lib/modules/5.5.0-rc6/  M=$PWD
@@ -44,6 +46,7 @@ cd ../../../../#
 
 To add the modules into the linux image
 ```bash
+cp ../../fuzzing/kernel/vms_files/image/stretch_ext4_10g.img ./
 sudo qemu-nbd -c /dev/nbd0 stretch_ext4_10g.img
 mkdir mounted_disk
 sudo mount /dev/nbd0 mounted_disk
@@ -113,6 +116,15 @@ root@syzkaller:~# echo 1337 > /dev/demo
 [...]
 
 ```
+
+(Bonus)
+
+To preload (apply modification without reboot) the available modules : `depmod -a`
+
+to load module not in a classic folder : `insmod /root/demo_module.ko`
+
+
+
 ## Syzkaller config
 
 Now than the modules is working inside the syzkaller vm you need to create the syzkaller config files.
@@ -171,17 +183,10 @@ Now all good we are ready to start the fuzzing campaign on this demo module:
 2020/06/22 18:15:33 VMs 2, executed 3947, cover 1425, crashes 0, repro 0
 2020/06/22 18:15:43 VMs 3, executed 13231, cover 1450, crashes 0, repro 0
 2020/06/22 18:15:53 VMs 4, executed 20456, cover 1462, crashes 0, repro 0
+[...]
 ```
 
 After few minutes you will get the first crash.
-
-
-
-(Bonus)
-
-To preload (apply modification without reboot) the available modules : `depmod -a`
-
-to load module not in a classic folder : `insmod /root/demo_module.ko`
 
 
 
