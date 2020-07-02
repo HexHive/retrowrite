@@ -153,8 +153,7 @@ $ source ../../retro/bin/activate
 
 Now syzkaller should know about your new syscall.
 
-<!-- What is "demo module enable?" -->
-The syzkaller config file for the fuzzing campaign is in [demo_module.cfg](demo_module.cfg), you can see only the syscall from demo module enable.
+The syzkaller config file for the fuzzing campaign is in [demo_module.cfg](demo_module.cfg), you can see that only the demo module syscall are enable.
 
 Now, we are ready to start the fuzzing campaign on this demo module:
 ```

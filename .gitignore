@@ -14,17 +14,4 @@ __pycache__/
 *.analysis_cache
 # Virtual environment
 retro/
-vms_files/linux.tar.gz
-vms_files/linux/
-vms_files/busybox.tar.bz2
-vms_files/busybox/
-vms_files/initramfs/
-vms_files/image/
 cftool/cftool
-modules/
-campaigns/
-demos/kernel_demo/initramfs
-demos/kernel_demo/linux
-demos/kernel_demo/module/Makefile
-syzkaller-configs/e1000.cfg
-syzkaller-configs/ext4.cfg
