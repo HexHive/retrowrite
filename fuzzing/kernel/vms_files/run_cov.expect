@@ -5,7 +5,7 @@ set IMAGE_PATH [lindex $argv 1]
 set LOCAL_DIR [lindex $argv 2]
 set KRWDIR [lindex $argv 3]
 
-spawn "$KRWDIR/run_qemu_cov.sh" $LINUX_DIR $IMAGE_PATH $LOCAL_DIR
+spawn "$KRWDIR/fuzzing/kernel/vms_files/run_qemu_cov.sh" $LINUX_DIR $IMAGE_PATH $LOCAL_DIR
 
 expect "syzkaller login: "
 send "root\r"

@@ -36,18 +36,14 @@ WORKDIR=`pwd`
 VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)/vms_files
 LINUX_DIR="$VMS_DIR/linux"
 
-
-echo $VMS_DIR
-exit
-
 INITRAMFS_DIR="$VMS_DIR/initramfs"
 IMAGE_DIR="$VMS_DIR/image"
 GOPATH="$KRWDIR/retro/go"
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
 
-MODULES_DIR="$WORKDIR/fuzzing/modules"
-CAMPAIGNS_DIR="$WORKDIR/fuzzing/campaigns"
+MODULES_DIR="$WORKDIR/fuzzing/kernel/modules"
+CAMPAIGNS_DIR="$WORKDIR/fuzzing/kernel/campaigns"
 CONFIG_BASE="$KRWDIR/fuzzing/kernel/syzkaller-configs/$1.cfg"
 
 
