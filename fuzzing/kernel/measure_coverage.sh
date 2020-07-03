@@ -10,7 +10,7 @@ WORKDIR=`pwd`
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
 if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
-	echo "Run the script from the parent directly: bash $KRWDIR/fuzz-module.sh"
+	echo "Run the script from the retrowrite root directly: bash ./fuzzing/kernel/fuzz-module.sh"
 	exit 1
 fi
 
@@ -20,11 +20,12 @@ if [[ $# -ne 1 ]]; then
 fi
 
 
-VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)/vms_files
 LINUX_DIR="$VMS_DIR/linux"
 IMAGE_DIR="$VMS_DIR/image"
 
-MODULE_CAMPAIGNS_DIR="$WORKDIR/campaigns/$1"
+MODULE_CAMPAIGNS_DIR="$WORKDIR/fuzzing/campaigns/$1"
+
 GOPATH="$WORKDIR/retro/go"
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 SYZ_DB="$SYZKALLER_DIR/bin/syz-db"

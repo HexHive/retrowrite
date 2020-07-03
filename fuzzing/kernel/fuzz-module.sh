@@ -19,7 +19,7 @@ WORKDIR=`pwd`
 KRWDIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 
 if [[ "$WORKDIR" -ef "$KRWDIR" ]]; then
-	echo "Run the script from the retrowrite root directly: cd $(dirname $KRWDIR) &&  bash ./vms_files/fuzz-module.sh"
+	echo "Run the script from the retrowrite root directly: bash ./fuzzing/kernel/fuzz-module.sh"
 	exit 1
 fi
 
@@ -33,9 +33,12 @@ LINUX_VERSION="5.5.0-rc6"
 
 KRWDIR=`pwd`
 WORKDIR=`pwd`
-VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+VMS_DIR=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)/vms_files
 LINUX_DIR="$VMS_DIR/linux"
 
+
+echo $VMS_DIR
+exit
 
 INITRAMFS_DIR="$VMS_DIR/initramfs"
 IMAGE_DIR="$VMS_DIR/image"
@@ -43,9 +46,9 @@ GOPATH="$KRWDIR/retro/go"
 SYZKALLER_DIR="$GOPATH/src/github.com/google/syzkaller"
 
 
-MODULES_DIR="$WORKDIR/modules"
-CAMPAIGNS_DIR="$WORKDIR/campaigns"
-CONFIG_BASE="$KRWDIR/syzkaller-configs/$1.cfg"
+MODULES_DIR="$WORKDIR/fuzzing/modules"
+CAMPAIGNS_DIR="$WORKDIR/fuzzing/campaigns"
+CONFIG_BASE="$KRWDIR/fuzzing/kernel/syzkaller-configs/$1.cfg"
 
 
 PLAIN_MODULE="$MODULES_DIR/$1_plain.ko"
@@ -121,7 +124,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 
 			pushd "source/$i"
 				# Generate the configuration
-				"$KRWDIR/syzkaller-configs/generate_config.py" \
+				"$KRWDIR/fuzzing/kernel/syzkaller-configs/generate_config.py" \
 					--workdir $CAMPAIGNS_DIR/$1/workdir/ \
 					--kernel "$LINUX_DIR" \
 					--initramfs "$CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz" \
@@ -156,7 +159,7 @@ pushd "$CAMPAIGNS_DIR/$1"
 
 			pushd "binary/$i"
 				# Generate the configuration
-				"$KRWDIR/syzkaller-configs/generate_config.py" \
+				"$KRWDIR/fuzzing/kernel/syzkaller-configs/generate_config.py" \
 					--workdir `pwd`/workdir \
 					--kernel "$LINUX_DIR" \
 					--initramfs "$CAMPAIGNS_DIR/$1/workdir/initramfs.cpio.gz" \
