@@ -48,6 +48,11 @@ MEM_LOAD_SZ = [
     "\tcallq __asan_report_load{acsz}@PLT",
 ]
 
+ASAN_REPORT = [
+    "\tmov x0, {clob1}",
+    "\tbl __asan_report_{acctype}{acsz}_noabort",
+]
+
 MEM_REG_SAVE = [
     # Save Regs
     "\tpushq {reg}",

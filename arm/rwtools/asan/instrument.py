@@ -3,18 +3,18 @@ import math
 from collections import defaultdict
 import json
 
-from archinfo import ArchAMD64
+from archinfo import ArchAArch64
 
 from capstone.x86_const import X86_REG_RSP
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET, CS_OP_REG
 
 from . import snippets as sp
-from librw.container import (DataCell, InstrumentedInstruction, DataSection,
+from arm.librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
-from librw.analysis.stackframe import StackFrameAnalysis
+from arm.librw.analysis.stackframe import StackFrameAnalysis
 from arm.librw.util.logging import *
 from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm
-ASAN_SHADOW_OFF = 2147450880
+ASAN_SHADOW_OFF = 68719476736
 
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
 ASAN_INIT_LOC = 0x1000000000000000
@@ -32,13 +32,12 @@ class Instrument():
         self.global_count = 0
 
         # Get the register map
-        amd64 = ArchAMD64()
+        aarch64 = ArchAArch64()
         self.regmap = defaultdict(lambda: defaultdict(dict))
-        for reg in amd64.register_list:
+        for reg in aarch64.register_list:
             if reg.general_purpose:
-                self.regmap[reg.name] = reg.subregisters
+                self.regmap[reg.name] = reg.subregisters[0][0]
 
-        print(self.regmap)
         # Some stats
         self.memcheck_sites = defaultdict(list)
 
@@ -49,16 +48,8 @@ class Instrument():
     def _get_subreg32(self, regname):
         return self.regmap[regname][0]
 
-    # def _get_subreg8l(self, regname):
-        # return self.regmap[regname][0][8]
-
-    # def _get_subreg8h(self, regname):
-        # return self.regmap[regname][1][8]
-
-    # def _get_subreg16(self, regname):
-        # return self.regmap[regname][0][16]
-
     def instrument_init_array(self):
+        #XXX: yet todo
         section = self.rewriter.container.sections[".init_array"]
         constructor = DataCell.instrumented(".quad {}".format(sp.ASAN_INIT_FN),
                                             8)
@@ -95,7 +86,7 @@ class Instrument():
 
         del ac1[1]
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access2(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
@@ -103,13 +94,13 @@ class Instrument():
 
         ac1[1] = "\tincl {clob1_32}"
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access4(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access8(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
@@ -121,27 +112,52 @@ class Instrument():
         # rest = [rest[0], rest[1]]
         # save = [save[0]]
 
-        return "\n".join(common)
+        return "\n".join(common + sp.ASAN_REPORT)
 
     def _access16(self):
         raise NotImplementedError
 
-    def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf):
+    def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf, bool_load):
         # we prefer high registers, less likely to go wrong
-        affinity = ["x" + i for i in range(18, 0, -1)]
+        affinity = ["x" + str(i) for i in range(18, 0, -1)]
+        # if instruction.address != 0x908: 
+        if True: 
+            print("nah scratch that")
+            return "# nah"
 
         free = sorted(
             list(free),
             key=lambda x: affinity.index(x) if x in affinity else len(affinity))
+
 
         codecache = list()
         save = list()
         restore = list()
         save_rflags = "unopt"
         save_rax = True
-        r1 = [True, "%rdi"]
-        r2 = [True, "%rsi"]
+        r1 = [True, "x0"]
+        r2 = [True, "x1"]
         push_cnt = 0
+
+        is_rep_stos = False
+        if instruction.mnemonic.startswith("rep stos"):
+            is_rep_stos = True
+            lexp = instruction.op_str.split(",", 1)[1]
+        elif len(instruction.cs.operands) == 1:
+            lexp = instruction.op_str
+        elif len(instruction.cs.operands) > 2:
+            print("[*] Found op len > 2: %s" % (instruction))
+            op1 = instruction.op_str.split(",", 1)[1]
+            lexp = op1.rsplit(",", 1)[0]
+        elif midx == 0:
+            lexp = instruction.op_str.rsplit(",", 1)[0]
+        else:
+            lexp = instruction.op_str.split(",", 1)[1]
+
+        if lexp.startswith("*"):
+            lexp = lexp[1:]
+
+        debug(f"I think the lexp is {lexp}")
 
         if "rflags" in free:
             save_rflags = False
@@ -156,12 +172,14 @@ class Instrument():
                 r1 = [False, "%{}".format(free[1])]
 
             if r2[1] == r1[1]:
-                r1 = [True, "%rsi"]
+                r1 = [True, "x1"]
 
             if save_rflags:
                 save_rflags = "opt"
                 save_rax = "rax" not in free
 
+        # this has to do with red zones (kernel x64 does not have them)
+        # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f219372
         if is_leaf and (r1[0] or r2[0] or save_rflags):
             save.append(sp.LEAF_STACK_ADJUST)
             restore.append(sp.LEAF_STACK_UNADJUST)
@@ -208,7 +226,11 @@ class Instrument():
                     sp.MEM_FLAG_SAVE_OPT))
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
-        if push_cnt > 0:
+        if push_cnt > 0 and '%rsp' in lexp:
+            # In this case we have a stack-relative load but the value of the stack
+            # pointer has changed because we pushed some registers to the stack
+            # to save them. Adjust the displacement of the access to take this
+            # into account
             save.append("leaq {}(%rsp), %rsp".format(push_cnt * 8))
             restore.insert(0, "leaq -{}(%rsp), %rsp".format(push_cnt * 8))
 
@@ -223,36 +245,14 @@ class Instrument():
         else:
             assert False, "Reached unreachable code!"
 
+        debug(f"Memcheck {acsz}:\n" + memcheck)
+
         codecache.extend(save)
         codecache.append(memcheck)
         codecache.append(
             copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
         codecache.extend(restore)
 
-        # XXX: Bug in capstone?
-        if any([
-            instruction.mnemonic.startswith(x) for x in
-            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
-        ]):
-            midx = 1
-
-        is_rep_stos = False
-        if instruction.mnemonic.startswith("rep stos"):
-            is_rep_stos = True
-            lexp = instruction.op_str.split(",", 1)[1]
-        elif len(instruction.cs.operands) == 1:
-            lexp = instruction.op_str
-        elif len(instruction.cs.operands) > 2:
-            print("[*] Found op len > 2: %s" % (instruction))
-            op1 = instruction.op_str.split(",", 1)[1]
-            lexp = op1.rsplit(",", 1)[0]
-        elif midx == 0:
-            lexp = instruction.op_str.rsplit(",", 1)[0]
-        else:
-            lexp = instruction.op_str.split(",", 1)[1]
-
-        if lexp.startswith("*"):
-            lexp = lexp[1:]
 
         args = dict()
         args["lexp"] = lexp
@@ -267,7 +267,9 @@ class Instrument():
         args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
 
         args["addr"] = instruction.address
-        enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
+        enter_lbl = "%s_%s" % (sp.ASAN_MEM_ENTER, instruction.address)
+
+        args['acctype'] = 'load' if bool_load else 'store'
 
         codecache = '\n'.join(codecache)
         comment = "{}: {}".format(str(instruction), str(free))
@@ -276,15 +278,17 @@ class Instrument():
             copycache = copy.copy(codecache)
             extend_args_check = copy.copy(args)
             extend_args_check["lexp"] = "(%rdi, %rcx)"
-            extend_args_check["addr"] = "%d_2" % (instruction.address)
+            extend_args_check["addr"] = '{}_2'.format(instruction.address)
             copycache = copycache.format(**extend_args_check)
             original_exit = copy.copy(
                 sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address)
 
             new_exit = copy.copy(sp.MEM_EXIT_LABEL)[0].format(
-                addr="%d_2" % (instruction.address))
+                addr='{}_2'.format(instruction.address))
             copycache = copycache.replace(original_exit, new_exit)
             codecache = codecache + "\n" + copycache
+
+        debug("Memcheck after:\n" + codecache.format(**args))
 
         return InstrumentedInstruction(codecache.format(**args),
                                        enter_lbl, comment)
@@ -314,7 +318,6 @@ class Instrument():
                     pass
 
                 mem, midx = instruction.get_mem_access_op()
-                debug(str(mem) + str(midx))
                 # This is not a memory access
                 if not mem:
                     continue
@@ -322,8 +325,7 @@ class Instrument():
                 acsz, bool_load = get_access_size_arm(instruction.cs)
                 debug(f"{instruction} --- acsz: {acsz}, load: {bool_load}")
 
-                # XXX: add 16 bytes access, _access16()
-                if acsz not in [1, 2, 4, 8]:
+                if acsz not in [1, 2, 4, 8, 16]:
                     print("[*] Maybe missed an access: %s -- %d" %
                           (instruction, acsz))
                     continue
@@ -334,11 +336,8 @@ class Instrument():
                     print("[x] Missing free reglist in cache. Regenerate!")
                     free_registers = list()
 
-                debug(f"free registers {free_registers}")
-                debug(f"ASAN GOTCHA on {instruction}")
-
                 iinstr = self.get_mem_instrumentation(
-                    acsz, instruction, midx, free_registers, is_leaf)
+                    acsz, instruction, midx, free_registers, is_leaf, bool_load)
 
                 debug(f"now is {iinstr}")
 
@@ -487,6 +486,10 @@ class Instrument():
         instruction.instrument_before(instrument)
 
     def instrument_stack(self):
+
+        #XXX: check the kernel version, it is a bit different
+
+
         # Detect stack canary and insert red zones only for functions with
         # stack canaries.
         # Need to unpoison the stack before any CF leaves this function, e.g.,
