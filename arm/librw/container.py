@@ -153,6 +153,7 @@ class Function():
 
     def disasm(self):
         assert not self.cache
+        #XXX: GLOBALS accessed with "adrp x0, <label>" are broken!
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
             self.cache.append(InstructionWrapper(decoded))
 

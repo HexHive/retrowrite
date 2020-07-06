@@ -14,7 +14,7 @@ from arm.librw.container import (DataCell, InstrumentedInstruction, DataSection,
 from arm.librw.analysis.stackframe import StackFrameAnalysis
 from arm.librw.util.logging import *
 from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm
-ASAN_SHADOW_OFF = 68719476736
+ASAN_SHADOW_OFF = 68719476736 # 0x1000000000
 
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
 ASAN_INIT_LOC = 0x1000000000000000
@@ -595,6 +595,7 @@ class Instrument():
                 fn.cache.insert(idx + code[0], code[1])
 
     def do_instrument(self):
+        return
         #self.instrument_globals()
         self.instrument_stack()
         self.instrument_mem_accesses()

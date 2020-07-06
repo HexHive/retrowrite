@@ -39,6 +39,7 @@ class Rewriter():
         "__stack_chk_fail",
         "__cxa_atexit",
         "__cxa_finalize",
+        "call_weak_fn" #not really sure about this, but imho we should'nt touch it
     ]
 
     DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
@@ -202,7 +203,10 @@ class Symbolizer():
                         function.bbstarts.add(target)
                         instruction.op_str = ".L%x" % (target)
                     elif target in container.plt:
-                        instruction.op_str = "{}@PLT".format(
+                        #XXX: figure out why @PLT is wrong, gcc does not like it
+                        # instruction.op_str = "{}@PLT".format(
+                            # container.plt[target])
+                        instruction.op_str = "{}".format(
                             container.plt[target])
                     else:
                         gotent = container.is_target_gotplt(target)
