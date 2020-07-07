@@ -63,9 +63,17 @@ MEM_LOAD_COMMON = [
 
 
 ASAN_REPORT = [
-    "\tmov x0, {clob1}",
-    "\tbl __asan_report_{acctype}{acsz}_noabort",
+    "\tmov      x0, {clob1}",
+    "\tbl       __asan_report_{acctype}{acsz}_noabort",
 ]
+
+LEXP_SHIFT = """
+    lsl	{To}, {shift_reg}, {amnt}
+    add {To}, {From}, 0
+"""
+
+LEXP_ADD = "\tadd {To}, {From}, {amnt}"
+
 
 # MEM_LOAD_SZ = [
     # "\tandl $7, {clob1_32}",

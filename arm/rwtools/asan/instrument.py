@@ -121,7 +121,8 @@ class Instrument():
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(18, 0, -1)]
         # if instruction.address != 0x908: 
-        if instruction.address != 0x798: 
+        # if instruction.address != 0x798: 
+        if acsz != 8: 
             print("nah scratch that")
             return "# nah"
 
@@ -133,6 +134,7 @@ class Instrument():
         codecache = list()
         save = list()
         restore = list()
+        fix_lexp = list()
         save_rflags = "unopt"
         save_rax = True
         # r1 = [True, "x0"]
@@ -141,7 +143,7 @@ class Instrument():
         asan_regs = []
         for i in range(3):
             if len(free) > i:
-                asan_regs += [[False, free[i]]]
+                asan_regs += [free[i]]
             else:
                 print("Not enough free registers! Quitting...")
                 exit(1)
@@ -166,10 +168,28 @@ class Instrument():
         if lexp.startswith("*"):
             lexp = lexp[1:]
 
-        #XXX: what about ldr x0, [x0], 14 ???
-        lexp = lexp.strip(" []")
+        debug(f"Starting lexp: {lexp}")
 
-        debug(f"I think the lexp is {lexp}")
+        cs = instruction.cs
+        mem = instruction.cs.operands[1].mem
+
+        lexp = asan_regs[0] # the first free register
+
+        # ldr x0, [x1, x2, LSL#3]
+        if instruction.cs.operands[1].shift.value != 0:
+            amnt = instruction.cs.operands[1].shift.value
+            fix_lexp += [sp.LEXP_SHIFT.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=cs.reg_name(mem.index))]
+        # ldr x0, [x1, x2]
+        if mem.index != 0:
+            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.index), amnt=cs.reg_name(mem.base))]
+        # ldr x0, [x1, #12]
+        if mem.disp != 0:
+            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
+        # ldr x0, [x1]
+        if mem.disp == 0 and mem.index == 0 and instruction.cs.operands[1].shift.value == 0:
+            lexp = cs.reg_name(mem.base)
+
+        debug(f"I think the lexp is {lexp}, fixed with {fix_lexp}")
 
         if "rflags" in free:
             save_rflags = False
@@ -198,11 +218,12 @@ class Instrument():
             restore.append(sp.LEAF_STACK_UNADJUST)
             push_cnt += 32
 
-        for r in asan_regs:
-            if r[0]:
-                save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r[1]))
-                restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r[1]))
-                push_cnt += 1
+        # XXX: saving registers!
+        # for r in asan_regs:
+            # if r[0]:
+                # save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r[1]))
+                # restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r[1]))
+                # push_cnt += 1
 
 
         # XXX:
@@ -261,6 +282,8 @@ class Instrument():
         debug(f"Memcheck {acsz}:\n" + memcheck)
 
         codecache.extend(save)
+        if len(fix_lexp): 
+            codecache.append('\n'.join(fix_lexp))
         codecache.append(memcheck)
         codecache.append(
             copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
@@ -272,14 +295,13 @@ class Instrument():
         args["acsz"] = acsz
         args["acsz_1"] = acsz - 1
 
-        args["clob1"] = asan_regs[0][1]
-        args["clob1_32"] = self._get_subreg32(asan_regs[0][1])
-        args["clob2"] = asan_regs[2][1]
-        args["clob2_32"] = self._get_subreg32(asan_regs[0][1])
+        args["tgt"] = asan_regs[0]
+        args["tgt_32"] = self._get_subreg32(asan_regs[0])
+        args["clob1"] = asan_regs[1]
+        args["clob1_32"] = self._get_subreg32(asan_regs[1])
+        args["clob2"] = asan_regs[2]
+        args["clob2_32"] = self._get_subreg32(asan_regs[2])
 
-        args["tgt"] = asan_regs[1][1]
-        args["tgt_32"] = self._get_subreg32(asan_regs[1][1])
-        # args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
 
         args["addr"] = instruction.address
         enter_lbl = "%s_%s" % (sp.ASAN_MEM_ENTER, instruction.address)
