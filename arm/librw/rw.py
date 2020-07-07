@@ -388,19 +388,15 @@ class Symbolizer():
     def symbolize_data_sections(self, container, context=None):
         # Section specific relocation
         for secname, section in container.sections.items():
-            debug(f"SECTION CHANGED FROM: \n {section}")
             for rel in section.relocations:
                 self._handle_relocation(container, section, rel)
-            debug(f"TO: \n {section}")
 
         # .dyn relocations
         dyn = container.relocations[".dyn"]
         for rel in dyn:
             section = container.section_of_address(rel['offset'])
             if section:
-                debug(f"SECTION CHANGED FROM: \n {section}")
                 self._handle_relocation(container, section, rel)
-                debug(f"TO: \n {section}")
             else:
                 print("[x] Couldn't find valid section {:x}".format(
                     rel['offset']))

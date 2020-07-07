@@ -30,98 +30,122 @@ MODULE_DEINIT = [
     "    retq",
 ]
 
+# MEM_LOAD_COMMON = [
+    # "\tleaq {lexp}, {clob1}",
+    # "\tmovq {clob1}, {tgt}",
+    # "\tshrq $3, {tgt}",
+    # "\tmovb 2147450880({tgt}), {tgt_8}",
+    # "\ttestb {tgt_8}, {tgt_8}",
+    # "\tje {0}_{{addr}}".format(ASAN_MEM_EXIT),
+# ]
+
 MEM_LOAD_COMMON = [
-    "\tleaq {lexp}, {clob1}",
-    "\tmovq {clob1}, {tgt}",
-    "\tshrq $3, {tgt}",
-    "\tmovb 2147450880({tgt}), {tgt_8}",
-    "\ttestb {tgt_8}, {tgt_8}",
-    "\tje {0}_{{addr}}".format(ASAN_MEM_EXIT),
+    "\tmov	x3, x0",
+    "\tlsr	x2, x3, 3",
+    "\tmov	x1, 68719476736",
+    "\tadd	x1, x2, x1",
+    "\tldrsb	w1, [x1]",
+    "\tcmp	w1, 0",
+    "\tbeq	{0}_{{addr}}".format(ASAN_MEM_EXIT),
+    "\tmov	x0, x3",
+    "\tbl	__asan_report_store8",
 ]
 
-MEM_LOAD_SZ = [
-    "\tandl $7, {clob1_32}",
-    "\taddl ${acsz_1}, {clob1_32}",
-    "\tmovsbl {tgt_8}, {tgt_32}",
-    "\tcmpl {tgt_32}, {clob1_32}",
-    "\tjl {0}_{{addr}}".format(ASAN_MEM_EXIT),
-    "\tcallq __asan_report_load{acsz}@PLT",
+MEM_LOAD_COMMON = [
+    "\tmov	{clob1}, {lexp}",
+    "\tlsr	{clob2}, {clob1}, 3",
+    "\tmov	{tgt}, 68719476736",
+    "\tadd	{tgt}, {clob2}, {tgt}",
+    "\tldrsb	{tgt_32}, [{tgt}]",
+    "\tcmp	{tgt_32}, 0",
+    "\tbeq	{0}_{{addr}}".format(ASAN_MEM_EXIT),
 ]
+
 
 ASAN_REPORT = [
     "\tmov x0, {clob1}",
     "\tbl __asan_report_{acctype}{acsz}_noabort",
 ]
 
-MEM_REG_SAVE = [
-    # Save Regs
-    "\tpushq {reg}",
-]
+# MEM_LOAD_SZ = [
+    # "\tandl $7, {clob1_32}",
+    # "\taddl ${acsz_1}, {clob1_32}",
+    # "\tmovsbl {tgt_8}, {tgt_32}",
+    # "\tcmpl {tgt_32}, {clob1_32}",
+    # "\tjl {0}_{{addr}}".format(ASAN_MEM_EXIT),
+    # "\tcallq __asan_report_load{acsz}@PLT",
+# ]
 
-MEM_REG_REG_SAVE_RESTORE = [
-    "\tmov {src}, {dst}",
-]
 
-MEM_FLAG_SAVE = [
-    "\tpushf",
-]
+# MEM_REG_SAVE = [
+    # # Save Regs
+    # "\tpushq {reg}",
+# ]
 
-MEM_FLAG_SAVE_OPT = [
-    # Save Flags
-    "\tlahf",
-    "\tseto %al",
-    "\tpushq %rax",
-]
+# MEM_REG_REG_SAVE_RESTORE = [
+    # "\tmov {src}, {dst}",
+# ]
 
-MEM_FLAG_RESTORE = [
-    "\tpopf",
-]
+# MEM_FLAG_SAVE = [
+    # "\tpushf",
+# ]
 
-MEM_FLAG_RESTORE_OPT = [
-    # Restore Flags
-    "\tpopq %rax",
-    "\tadd $0x7f, %al",
-    "\tsahf",
-]
+# MEM_FLAG_SAVE_OPT = [
+    # # Save Flags
+    # "\tlahf",
+    # "\tseto %al",
+    # "\tpushq %rax",
+# ]
+
+# MEM_FLAG_RESTORE = [
+    # "\tpopf",
+# ]
+
+# MEM_FLAG_RESTORE_OPT = [
+    # # Restore Flags
+    # "\tpopq %rax",
+    # "\tadd $0x7f, %al",
+    # "\tsahf",
+# ]
 
 MEM_EXIT_LABEL = [
     "{0}_{{addr}}:".format(ASAN_MEM_EXIT),
 ]
 
-MEM_REG_RESTORE = [
-    # Restore Regs
-    "\tpopq {reg}",
-]
+# MEM_REG_RESTORE = [
+    # # Restore Regs
+    # "\tpopq {reg}",
+# ]
 
-STACK_POISON_BASE = [
-    "\tleaq {pbase}, {reg}",
-    "\tshrq $3, {reg}",
-]
+# STACK_POISON_BASE = [
+    # "\tleaq {pbase}, {reg}",
+    # "\tshrq $3, {reg}",
+# ]
 
-STACK_POISON_SLOT = "\tmovb $0xff, {off}({reg})"
-STACK_UNPOISON_SLOT = "\tmovb $0x0, {off}({reg})"
-STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
-STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
+# STACK_POISON_SLOT = "\tmovb $0xff, {off}({reg})"
+# STACK_UNPOISON_SLOT = "\tmovb $0x0, {off}({reg})"
+# STACK_ENTER_LBL = ".ASAN_STACK_ENTER_{addr}"
+# STACK_EXIT_LBL = ".ASAN_STACK_EXIT_{addr}"
 
-CANARY_CHECK = "%fs:0x28"
-LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
-LEAF_STACK_UNADJUST = "\tleaq 256(%rsp), %rsp"
+# CANARY_CHECK = "%fs:0x28"
+# LEAF_STACK_ADJUST = "leaq -256(%rsp), %rsp"
+# LEAF_STACK_UNADJUST = "\tleaq 256(%rsp), %rsp"
 
-LONGJMP_UNPOISON = [
-    "\tpushq %r8",
-    "\tpushq {reg}",
-    "\tleaq 16(%rsp), %rsp",
-    "\tmov 0x30(%rdi), %r8",
-    "\tror $0x11, %r8",
-    "\txor %fs:0x30, %r8",
-    ".ASAN_LONGJMP_{addr}:",
-    "\tmovq %r8, {reg}",
-    "\tshrq $3, {reg}",
-    "\tmovb $0, {off}({reg})",
-    "\tsubq $8, %r8",
-    "\tcmp %r8, %rsp",
-    "\tjne .ASAN_LONGJMP_{addr}",
-    "\tleaq -16(%rsp), %rsp",
-    "\tpopq {reg}",
-    "\tpopq %r8",
-]
+# LONGJMP_UNPOISON = [
+    # "\tpushq %r8",
+    # "\tpushq {reg}",
+    # "\tleaq 16(%rsp), %rsp",
+    # "\tmov 0x30(%rdi), %r8",
+    # "\tror $0x11, %r8",
+    # "\txor %fs:0x30, %r8",
+    # ".ASAN_LONGJMP_{addr}:",
+    # "\tmovq %r8, {reg}",
+    # "\tshrq $3, {reg}",
+    # "\tmovb $0, {off}({reg})",
+    # "\tsubq $8, %r8",
+    # "\tcmp %r8, %rsp",
+    # "\tjne .ASAN_LONGJMP_{addr}",
+    # "\tleaq -16(%rsp), %rsp",
+    # "\tpopq {reg}",
+    # "\tpopq %r8",
+# ]

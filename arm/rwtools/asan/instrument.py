@@ -46,7 +46,7 @@ class Instrument():
         self.skip_instrument = set()
 
     def _get_subreg32(self, regname):
-        return self.regmap[regname][0]
+        return self.regmap[regname]
 
     def instrument_init_array(self):
         #XXX: yet todo
@@ -105,9 +105,9 @@ class Instrument():
     def _access8(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
 
-        common[3] = "\tcmpb $0, 2147450880({tgt})"
-        common[4] = common[5]
-        common[5] = sp.MEM_LOAD_SZ[-1]
+        # common[3] = "\tcmpb $0, 2147450880({tgt})"
+        # common[4] = common[5]
+        # common[5] = sp.MEM_LOAD_SZ[-1]
 
         # rest = [rest[0], rest[1]]
         # save = [save[0]]
@@ -121,7 +121,7 @@ class Instrument():
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(18, 0, -1)]
         # if instruction.address != 0x908: 
-        if True: 
+        if instruction.address != 0x798: 
             print("nah scratch that")
             return "# nah"
 
@@ -135,8 +135,17 @@ class Instrument():
         restore = list()
         save_rflags = "unopt"
         save_rax = True
-        r1 = [True, "x0"]
-        r2 = [True, "x1"]
+        # r1 = [True, "x0"]
+        # r2 = [True, "x1"]
+        # r3 = [True, "x2"]
+        asan_regs = []
+        for i in range(3):
+            if len(free) > i:
+                asan_regs += [[False, free[i]]]
+            else:
+                print("Not enough free registers! Quitting...")
+                exit(1)
+
         push_cnt = 0
 
         is_rep_stos = False
@@ -157,6 +166,9 @@ class Instrument():
         if lexp.startswith("*"):
             lexp = lexp[1:]
 
+        #XXX: what about ldr x0, [x0], 14 ???
+        lexp = lexp.strip(" []")
+
         debug(f"I think the lexp is {lexp}")
 
         if "rflags" in free:
@@ -166,65 +178,66 @@ class Instrument():
         if "rax" in free:
             save_rax = False
 
-        if len(free) > 0:
-            r2 = [False, "%{}".format(free[0])]
-            if len(free) > 1:
-                r1 = [False, "%{}".format(free[1])]
+        # XXX:
+        # if len(free) > 0:
+            # r2 = [False, "%{}".format(free[0])]
+            # if len(free) > 1:
+                # r1 = [False, "%{}".format(free[1])]
 
-            if r2[1] == r1[1]:
-                r1 = [True, "x1"]
+            # if r2[1] == r1[1]:
+                # r1 = [True, "x1"]
 
-            if save_rflags:
-                save_rflags = "opt"
-                save_rax = "rax" not in free
+            # if save_rflags:
+                # save_rflags = "opt"
+                # save_rax = "rax" not in free
 
         # this has to do with red zones (kernel x64 does not have them)
         # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f219372
-        if is_leaf and (r1[0] or r2[0] or save_rflags):
+        if is_leaf and (any([r[0] for r in asan_regs]) or save_rflags):
             save.append(sp.LEAF_STACK_ADJUST)
             restore.append(sp.LEAF_STACK_UNADJUST)
             push_cnt += 32
 
-        if r1[0]:
-            save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r1[1]))
-            restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r1[1]))
-            push_cnt += 1
+        for r in asan_regs:
+            if r[0]:
+                save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r[1]))
+                restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r[1]))
+                push_cnt += 1
 
-        if r2[0]:
-            save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r2[1]))
-            restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r2[1]))
-            push_cnt += 1
 
-        if save_rflags == "unopt":
-            save.append(copy.copy(sp.MEM_FLAG_SAVE)[0])
-            restore.insert(0, copy.copy(sp.MEM_FLAG_RESTORE)[0])
-            push_cnt += 1
-        elif save_rflags == "opt":
-            push_cnt += 1
-            if save_rax:
-                save.append(copy.copy(
-                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
-                                                           dst=r2[1]))
-                save.extend(copy.copy(
-                    sp.MEM_FLAG_SAVE_OPT))
+        # XXX:
+        # XXX:
+        # XXX:
+        # if save_rflags == "unopt":
+            # save.append(copy.copy(sp.MEM_FLAG_SAVE)[0])
+            # restore.insert(0, copy.copy(sp.MEM_FLAG_RESTORE)[0])
+            # push_cnt += 1
+        # elif save_rflags == "opt":
+            # push_cnt += 1
+            # if save_rax:
+                # save.append(copy.copy(
+                    # sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
+                                                           # dst=r2[1]))
+                # save.extend(copy.copy(
+                    # sp.MEM_FLAG_SAVE_OPT))
 
-                save.append(copy.copy(
-                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
-                                                           src=r2[1]))
+                # save.append(copy.copy(
+                    # sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
+                                                           # src=r2[1]))
 
-                restore.insert(0, copy.copy(
-                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
-                                                           src=r2[1]))
+                # restore.insert(0, copy.copy(
+                    # sp.MEM_REG_REG_SAVE_RESTORE)[0].format(dst="%rax",
+                                                           # src=r2[1]))
 
-                restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
+                # restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
-                restore.insert(0, copy.copy(
-                    sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
-                                                           dst=r2[1]))
-            else:
-                save.extend(copy.copy(
-                    sp.MEM_FLAG_SAVE_OPT))
-                restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
+                # restore.insert(0, copy.copy(
+                    # sp.MEM_REG_REG_SAVE_RESTORE)[0].format(src="%rax",
+                                                           # dst=r2[1]))
+            # else:
+                # save.extend(copy.copy(
+                    # sp.MEM_FLAG_SAVE_OPT))
+                # restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
         if push_cnt > 0 and '%rsp' in lexp:
             # In this case we have a stack-relative load but the value of the stack
@@ -259,12 +272,14 @@ class Instrument():
         args["acsz"] = acsz
         args["acsz_1"] = acsz - 1
 
-        args["clob1"] = r1[1]
-        args["clob1_32"] = "%{}".format(self._get_subreg32(r1[1][1:]))
+        args["clob1"] = asan_regs[0][1]
+        args["clob1_32"] = self._get_subreg32(asan_regs[0][1])
+        args["clob2"] = asan_regs[2][1]
+        args["clob2_32"] = self._get_subreg32(asan_regs[0][1])
 
-        args["tgt"] = r2[1]
-        args["tgt_32"] = "%{}".format(self._get_subreg32(r2[1][1:]))
-        args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
+        args["tgt"] = asan_regs[1][1]
+        args["tgt_32"] = self._get_subreg32(asan_regs[1][1])
+        # args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
 
         args["addr"] = instruction.address
         enter_lbl = "%s_%s" % (sp.ASAN_MEM_ENTER, instruction.address)
@@ -310,8 +325,8 @@ class Instrument():
                 if instruction.address in self.skip_instrument:
                     continue
                 # Do not instrument stack canaries
-                if instruction.op_str.startswith(sp.CANARY_CHECK):
-                    continue
+                # XXX: if instruction.op_str.startswith(sp.CANARY_CHECK):
+                    # XXX: continue
 
                 # XXX: THIS IS A TODO for more accurate check.
                 if instruction.mnemonic.startswith("rep stos"):
@@ -595,11 +610,11 @@ class Instrument():
                 fn.cache.insert(idx + code[0], code[1])
 
     def do_instrument(self):
-        return
         #self.instrument_globals()
-        self.instrument_stack()
         self.instrument_mem_accesses()
-        self.instrument_init_array()
+        #XXX: ARM, fix those two functions
+        # self.instrument_stack()
+        # self.instrument_init_array()
 
     def dump_stats(self):
         count = 0
