@@ -180,10 +180,10 @@ class Instrument():
             amnt = instruction.cs.operands[1].shift.value
             fix_lexp += [sp.LEXP_SHIFT.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=cs.reg_name(mem.index))]
         # ldr x0, [x1, x2]
-        if mem.index != 0:
+        elif mem.index != 0:
             fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.index), amnt=cs.reg_name(mem.base))]
         # ldr x0, [x1, #12]
-        if mem.disp != 0:
+        elif mem.disp != 0:
             fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
         # ldr x0, [x1]
         if mem.disp == 0 and mem.index == 0 and instruction.cs.operands[1].shift.value == 0:

@@ -69,7 +69,7 @@ ASAN_REPORT = [
 
 LEXP_SHIFT = """
     lsl	{To}, {shift_reg}, {amnt}
-    add {To}, {From}, 0
+    add {To}, {To}, {From}
 """
 
 LEXP_ADD = "\tadd {To}, {From}, {amnt}"
