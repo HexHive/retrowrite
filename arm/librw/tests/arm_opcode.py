@@ -40,6 +40,7 @@ def test_mem_access_size():
     assert get_access_size_arm(instr("stp x0, x1, [x0]")) == (16, is_store)
     assert get_access_size_arm(instr("ldp x0, x1, [x0]")) == (16, is_load)
     assert get_access_size_arm(instr("str q0, [x0]"))     == (16, is_store)
+    assert get_access_size_arm(instr("strh w0, [x0]"))    == (2, is_store)
 
 
 def test_free_registers():

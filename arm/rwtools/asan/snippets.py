@@ -30,42 +30,94 @@ MODULE_DEINIT = [
     "    retq",
 ]
 
-# MEM_LOAD_COMMON = [
-    # "\tleaq {lexp}, {clob1}",
-    # "\tmovq {clob1}, {tgt}",
-    # "\tshrq $3, {tgt}",
-    # "\tmovb 2147450880({tgt}), {tgt_8}",
-    # "\ttestb {tgt_8}, {tgt_8}",
-    # "\tje {0}_{{addr}}".format(ASAN_MEM_EXIT),
-# ]
-
-MEM_LOAD_COMMON = [
-    "\tmov	x3, x0",
-    "\tlsr	x2, x3, 3",
-    "\tmov	x1, 68719476736",
-    "\tadd	x1, x2, x1",
-    "\tldrsb	w1, [x1]",
-    "\tcmp	w1, 0",
-    "\tbeq	{0}_{{addr}}".format(ASAN_MEM_EXIT),
-    "\tmov	x0, x3",
-    "\tbl	__asan_report_store8",
-]
-
-MEM_LOAD_COMMON = [
-    "\tmov	{clob1}, {lexp}",
-    "\tlsr	{clob2}, {clob1}, 3",
-    "\tmov	{tgt}, 68719476736",
-    "\tadd	{tgt}, {clob2}, {tgt}",
-    "\tldrsb	{tgt_32}, [{tgt}]",
-    "\tcmp	{tgt_32}, 0",
-    "\tbeq	{0}_{{addr}}".format(ASAN_MEM_EXIT),
-]
 
 
-ASAN_REPORT = [
-    "\tmov      x0, {clob1}",
-    "\tbl       __asan_report_{acctype}{acsz}_noabort",
-]
+### WARNING:
+# the following snippets were copy-pasted from gcc -fsanitize=address, _without_ optimization,
+# so there is probably a faster/shorter alternative!
+
+MEM_LOAD_1 = """                                                      
+    mov	    {clob1}, {lexp}
+    lsr	    {clob2}, {clob1}, 3
+    mov	    {tgt}, 68719476736
+    add	    {tgt}, {clob2}, {tgt}
+    ldrsb   {tgt_32}, [{tgt}]
+    cmp	    {tgt_32}, 0
+    cset    {clob2_32}, ne
+    and	    {clob2_32}, {clob2_32}, 255
+    and	    {clob3}, {clob1}, 7
+    sxtb    {clob3_32}, {clob3_32}
+    cmp	    {clob3_32}, {tgt_32}
+    cset    {tgt_32}, ge
+    and	    {tgt_32}, {tgt_32}, 255
+    and	    {tgt_32}, {clob2_32}, {tgt_32}
+    and	    {tgt_32}, {tgt_32}, 255
+    cmp	    {tgt_32}, 0
+    beq	    .LC_ASAN_EX_{addr}
+"""                                                             
+                                        
+                                                                                 
+MEM_LOAD_2 = """                                                      
+    mov	    {clob1}, {lexp}
+    lsr	    {clob2}, {clob1}, 3
+    mov	    {tgt}, 68719476736
+    add	    {tgt}, {clob2}, {tgt}
+    ldrsb   {tgt_32}, [{tgt}]
+    cmp	    {tgt_32}, 0
+    cset    {clob2_32}, ne
+    and	    {clob2_32}, {clob2_32}, 255
+    and	    {clob3}, {clob1}, 7
+    sxtb    {clob3_32}, {clob3_32}
+    add     {clob3_32}, {clob3_32}, 1
+    sxtb    {clob3_32}, {clob3_32}
+    cmp	    {clob3_32}, {tgt_32}
+    cset    {tgt_32}, ge
+    and	    {tgt_32}, {tgt_32}, 255
+    and	    {tgt_32}, {clob2_32}, {tgt_32}
+    and	    {tgt_32}, {tgt_32}, 255
+    cmp	    {tgt_32}, 0
+    beq	    .LC_ASAN_EX_{addr}
+"""                                                             
+
+MEM_LOAD_4 = """                                                      
+    mov	    {clob1}, {lexp}
+    lsr	    {clob2}, {clob1}, 3
+    mov	    {tgt}, 68719476736
+    add	    {tgt}, {clob2}, {tgt}
+    ldrsb   {tgt_32}, [{tgt}]
+    cmp	    {tgt_32}, 0
+    cset    {clob2_32}, ne
+    and	    {clob2_32}, {clob2_32}, 255
+    and	    {clob3}, {clob1}, 7
+    sxtb    {clob3_32}, {clob3_32}
+    add     {clob3_32}, {clob3_32}, 3
+    sxtb    {clob3_32}, {clob3_32}
+    cmp	    {clob3_32}, {tgt_32}
+    cset    {tgt_32}, ge
+    and	    {tgt_32}, {tgt_32}, 255
+    and	    {tgt_32}, {clob2_32}, {tgt_32}
+    and	    {tgt_32}, {tgt_32}, 255
+    cmp	    {tgt_32}, 0
+    beq	    .LC_ASAN_EX_{addr}
+"""                                                             
+	
+MEM_LOAD_8 = """
+    mov	{clob1}, {lexp}
+    lsr	{clob2}, {clob1}, 3
+    mov	{tgt}, 68719476736
+    add	{tgt}, {clob2}, {tgt}
+    ldrsb	{tgt_32}, [{tgt}]
+    cmp	{tgt_32}, 0
+    beq	.LC_ASAN_EX_{addr}
+"""
+
+	
+	
+
+ASAN_REPORT = """
+    mov      x0, {clob1}
+    bl       __asan_report_{acctype}{acsz}_noabort
+"""
 
 LEXP_SHIFT = """
     lsl	{To}, {shift_reg}, {amnt}
@@ -75,14 +127,6 @@ LEXP_SHIFT = """
 LEXP_ADD = "\tadd {To}, {From}, {amnt}"
 
 
-# MEM_LOAD_SZ = [
-    # "\tandl $7, {clob1_32}",
-    # "\taddl ${acsz_1}, {clob1_32}",
-    # "\tmovsbl {tgt_8}, {tgt_32}",
-    # "\tcmpl {tgt_32}, {clob1_32}",
-    # "\tjl {0}_{{addr}}".format(ASAN_MEM_EXIT),
-    # "\tcallq __asan_report_load{acsz}@PLT",
-# ]
 
 
 # MEM_REG_SAVE = [

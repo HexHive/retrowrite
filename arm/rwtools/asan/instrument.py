@@ -81,51 +81,33 @@ class Instrument():
         self.rewriter.container.add_function(finifn)
 
     def _access1(self):
-        common = copy.copy(sp.MEM_LOAD_COMMON)
-        ac1 = copy.copy(sp.MEM_LOAD_SZ)
-
-        del ac1[1]
-
-        return "\n".join(common + ac1 + sp.ASAN_REPORT)
+        common = copy.copy(sp.MEM_LOAD_1)
+        return common + sp.ASAN_REPORT
 
     def _access2(self):
-        common = copy.copy(sp.MEM_LOAD_COMMON)
-        ac1 = copy.copy(sp.MEM_LOAD_SZ)
-
-        ac1[1] = "\tincl {clob1_32}"
-
-        return "\n".join(common + ac1 + sp.ASAN_REPORT)
+        common = copy.copy(sp.MEM_LOAD_2)
+        return common + sp.ASAN_REPORT
 
     def _access4(self):
-        common = copy.copy(sp.MEM_LOAD_COMMON)
-        ac1 = copy.copy(sp.MEM_LOAD_SZ)
-
-        return "\n".join(common + ac1 + sp.ASAN_REPORT)
+        common = copy.copy(sp.MEM_LOAD_4)
+        return common + sp.ASAN_REPORT
 
     def _access8(self):
-        common = copy.copy(sp.MEM_LOAD_COMMON)
-
-        # common[3] = "\tcmpb $0, 2147450880({tgt})"
-        # common[4] = common[5]
-        # common[5] = sp.MEM_LOAD_SZ[-1]
-
-        # rest = [rest[0], rest[1]]
-        # save = [save[0]]
-
-        return "\n".join(common + sp.ASAN_REPORT)
+        common = copy.copy(sp.MEM_LOAD_8)
+        return common + sp.ASAN_REPORT
 
     def _access16(self):
         raise NotImplementedError
 
     def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf, bool_load):
-        # we prefer high registers, less likely to go wrong
-        affinity = ["x" + str(i) for i in range(18, 0, -1)]
         # if instruction.address != 0x908: 
         # if instruction.address != 0x798: 
-        if acsz != 8: 
+        if acsz == 16: 
             print("nah scratch that")
             return "# nah"
 
+        # we prefer high registers, less likely to go wrong
+        affinity = ["x" + str(i) for i in range(18, 0, -1)]
         free = sorted(
             list(free),
             key=lambda x: affinity.index(x) if x in affinity else len(affinity))
@@ -137,18 +119,15 @@ class Instrument():
         fix_lexp = list()
         save_rflags = "unopt"
         save_rax = True
-        # r1 = [True, "x0"]
-        # r2 = [True, "x1"]
-        # r3 = [True, "x2"]
+
         asan_regs = []
-        for i in range(3):
+        for i in range(4):
             if len(free) > i:
                 asan_regs += [free[i]]
             else:
                 print("Not enough free registers! Quitting...")
                 exit(1)
 
-        push_cnt = 0
 
         is_rep_stos = False
         if instruction.mnemonic.startswith("rep stos"):
@@ -213,6 +192,7 @@ class Instrument():
 
         # this has to do with red zones (kernel x64 does not have them)
         # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f219372
+        push_cnt = 0
         if is_leaf and (any([r[0] for r in asan_regs]) or save_rflags):
             save.append(sp.LEAF_STACK_ADJUST)
             restore.append(sp.LEAF_STACK_UNADJUST)
@@ -301,6 +281,8 @@ class Instrument():
         args["clob1_32"] = self._get_subreg32(asan_regs[1])
         args["clob2"] = asan_regs[2]
         args["clob2_32"] = self._get_subreg32(asan_regs[2])
+        args["clob3"] = asan_regs[3]
+        args["clob3_32"] = self._get_subreg32(asan_regs[3])
 
 
         args["addr"] = instruction.address
