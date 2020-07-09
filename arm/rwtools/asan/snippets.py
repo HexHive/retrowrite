@@ -102,13 +102,23 @@ MEM_LOAD_4 = """
 """                                                             
 	
 MEM_LOAD_8 = """
-    mov	{clob1}, {lexp}
-    lsr	{clob2}, {clob1}, 3
-    mov	{tgt}, 68719476736
-    add	{tgt}, {clob2}, {tgt}
-    ldrsb	{tgt_32}, [{tgt}]
-    cmp	{tgt_32}, 0
-    beq	.LC_ASAN_EX_{addr}
+    mov     {clob1}, {lexp}
+    lsr     {clob2}, {clob1}, 3
+    mov     {tgt}, 68719476736
+    add     {tgt}, {clob2}, {tgt}
+    ldrsb   {tgt_32}, [{tgt}]
+    cmp	    {tgt_32}, 0
+    beq	    .LC_ASAN_EX_{addr}
+"""
+
+MEM_LOAD_16 = """
+    mov	    {clob1}, {lexp}
+    lsr	    {clob2}, {clob1}, 3
+    mov	    {tgt}, 68719476736
+    add	    {tgt}, {clob2}, {tgt}
+    ldrsh   {tgt_32}, [{tgt}]
+    cmp	    {tgt_32}, 0
+    beq	    .LC_ASAN_EX_{addr}
 """
 
 	
@@ -160,9 +170,7 @@ LEXP_ADD = "\tadd {To}, {From}, {amnt}"
     # "\tsahf",
 # ]
 
-MEM_EXIT_LABEL = [
-    "{0}_{{addr}}:".format(ASAN_MEM_EXIT),
-]
+MEM_EXIT_LABEL = ".LC_ASAN_EX_{addr}:"
 
 # MEM_REG_RESTORE = [
     # # Restore Regs

@@ -91,25 +91,50 @@ def simple_asan_store8():
            str x1, [x0, x1, LSL#3]
     """ + end_main
     assert b"heap-buffer-overflow" in retrowrite_and_exec(code)
-    
 
-def asan_store_1_2_4_8_16():
-    # code = start_main + """
-           # mov x0, 0x100
-           # bl malloc
-           # str x1, [x0, 0x100]
-    # """ + end_main
-    # output = retrowrite_and_exec(code)
-    # assert all([x in output for x in [b"buffer-overflow", b"WRITE of size 8"]])
+
+def asan_load_16():
+    code = start_main + """
+           mov x0, 0x100
+           bl malloc
+           ldp x0, x1, [x0, 0x100]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"READ of size 16"]])
 
     code = start_main + """
            mov x0, 0x100
            bl malloc
-           strh x1, [x0, 0x100]
+           ldp x0, x1, [x0, 0xf8]
     """ + end_main
     output = retrowrite_and_exec(code)
-    # print(output)
-    assert all([x in output for x in [b"buffer-overflow", b"WRITE of size 2"]])
+    assert all([x in output for x in [b"heap-buffer-overflow", b"READ of size 16"]])
+
+
+def asan_store_1_2_4_8_16():
+    code = start_main + """
+           mov x0, 0x100
+           bl malloc
+           stp x0, x1, [x0, 0x100]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 16"]])
+
+    code = start_main + """
+           mov x0, 0x100
+           bl malloc
+           str x1, [x0, 0x100]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 8"]])
+
+    code = start_main + """
+           mov x0, 0x100
+           bl malloc
+           strh w1, [x0, 0x100]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 2"]])
 
     code = start_main + """
            mov x0, 0x100
@@ -117,21 +142,22 @@ def asan_store_1_2_4_8_16():
            str w1, [x0, 0x100]
     """ + end_main
     output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"buffer-overflow", b"WRITE of size 4"]])
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 4"]])
 
     code = start_main + """
            mov x0, 0x100
            bl malloc
-           strsb w1, [x0, 0x100]
+           strb w1, [x0, 0x100]
     """ + end_main
     output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"buffer-overflow", b"WRITE of size 1"]])
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
 
 
 
 
 
 if __name__ == "__main__":
+    run_test(asan_load_16)
     run_test(asan_store_1_2_4_8_16)
     run_test(simple_asan_store8)
     run_test(simple_asan_load8)

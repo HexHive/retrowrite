@@ -6,7 +6,7 @@ import json
 from archinfo import ArchAArch64
 
 from capstone.x86_const import X86_REG_RSP
-from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET, CS_OP_REG
+from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET, CS_OP_REG, CS_OP_MEM
 
 from . import snippets as sp
 from arm.librw.container import (DataCell, InstrumentedInstruction, DataSection,
@@ -97,14 +97,14 @@ class Instrument():
         return common + sp.ASAN_REPORT
 
     def _access16(self):
-        raise NotImplementedError
+        common = copy.copy(sp.MEM_LOAD_16)
+        return common + sp.ASAN_REPORT
 
     def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf, bool_load):
-        # if instruction.address != 0x908: 
-        # if instruction.address != 0x798: 
-        if acsz == 16: 
-            print("nah scratch that")
-            return "# nah"
+        if "sp" in instruction.reg_reads() and "sp" in instruction.reg_writes():
+            debug("we do not instrument push/pop for now")
+            return "# push/pop"
+
 
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(18, 0, -1)]
@@ -119,6 +119,7 @@ class Instrument():
         fix_lexp = list()
         save_rflags = "unopt"
         save_rax = True
+        is_rep_stos = False
 
         asan_regs = []
         for i in range(4):
@@ -129,34 +130,19 @@ class Instrument():
                 exit(1)
 
 
-        is_rep_stos = False
-        if instruction.mnemonic.startswith("rep stos"):
-            is_rep_stos = True
-            lexp = instruction.op_str.split(",", 1)[1]
-        elif len(instruction.cs.operands) == 1:
-            lexp = instruction.op_str
-        elif len(instruction.cs.operands) > 2:
-            print("[*] Found op len > 2: %s" % (instruction))
-            op1 = instruction.op_str.split(",", 1)[1]
-            lexp = op1.rsplit(",", 1)[0]
-        elif midx == 0:
-            lexp = instruction.op_str.rsplit(",", 1)[0]
-        else:
-            lexp = instruction.op_str.split(",", 1)[1]
 
-        if lexp.startswith("*"):
-            lexp = lexp[1:]
-
-        debug(f"Starting lexp: {lexp}")
+        for op in instruction.cs.operands:
+            if op.type == CS_OP_MEM:
+                mem_op = op
 
         cs = instruction.cs
-        mem = instruction.cs.operands[1].mem
+        mem = mem_op.mem
 
         lexp = asan_regs[0] # the first free register
 
         # ldr x0, [x1, x2, LSL#3]
-        if instruction.cs.operands[1].shift.value != 0:
-            amnt = instruction.cs.operands[1].shift.value
+        if mem_op.shift.value != 0:
+            amnt = mem_op.shift.value
             fix_lexp += [sp.LEXP_SHIFT.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=cs.reg_name(mem.index))]
         # ldr x0, [x1, x2]
         elif mem.index != 0:
@@ -165,10 +151,8 @@ class Instrument():
         elif mem.disp != 0:
             fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
         # ldr x0, [x1]
-        if mem.disp == 0 and mem.index == 0 and instruction.cs.operands[1].shift.value == 0:
+        if mem.disp == 0 and mem.index == 0 and mem_op.shift.value == 0:
             lexp = cs.reg_name(mem.base)
-
-        debug(f"I think the lexp is {lexp}, fixed with {fix_lexp}")
 
         if "rflags" in free:
             save_rflags = False
@@ -256,6 +240,8 @@ class Instrument():
             memcheck = self._access4()
         elif acsz == 8:
             memcheck = self._access8()
+        elif acsz == 16:
+            memcheck = self._access16()
         else:
             assert False, "Reached unreachable code!"
 
@@ -265,8 +251,9 @@ class Instrument():
         if len(fix_lexp): 
             codecache.append('\n'.join(fix_lexp))
         codecache.append(memcheck)
-        codecache.append(
-            copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
+        codecache.append(sp.MEM_EXIT_LABEL)
+        # codecache.append(
+            # copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
         codecache.extend(restore)
 
 
