@@ -10,6 +10,7 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 
 from arm.librw.util.logging import *
 from arm.librw.util.arm_util import _is_jump_conditional
+from arm.librw.container import InstrumentedInstruction
 
 
 class Rewriter():
@@ -304,75 +305,103 @@ class Symbolizer():
 
         return False
 
+    def _adjust_global_access(self, container, function, edx, inst):
+        # global variable addresses are dynamically built in multiple instructions
+        # here we try to resolve the address with some capstone trickery and shady assumptions
+        reg_name = inst.reg_writes()[0]
+        debug(f"we have an adrp at {inst.address} on {reg_name}")
+        write_instr, read_instr  = None, None
+        dereference_resolved = False
+        fix_immediate = True
+        for inst2 in function.cache[edx:]:
+            if inst2.address <= inst.address: continue
+            if reg_name in inst2.reg_reads():
+                debug(f"read in {inst2}!!!")
+                # resolved_address = inst.address - (inst.address % 0x1000)
+                resolved_address = original = inst.cs.operands[1].imm
+                if inst2.mnemonic == "add":
+                    assert inst2.cs.operands[2].type == CS_OP_IMM
+                    assert all([op.shift.value == 0 for op in inst2.cs.operands])
+                    resolved_address += inst2.cs.operands[2].imm
+                if inst2.mnemonic == "ldr":
+                    assert inst2.cs.operands[1].type == CS_OP_MEM
+                    assert all([op.shift.value == 0 for op in inst2.cs.operands])
+                    resolved_address += inst2.cs.operands[1].mem.disp
+                    dereference_resolved = True
+
+                if reg_name in inst2.reg_writes():
+                    fix_immediate = False
+                break
+            if reg_name in inst2.reg_writes():
+                debug(f"wrote in {inst2}!!!")
+
+        debug(f"Final resolved address {resolved_address}")
+
+        is_an_import = False
+        for relocation in container.relocations[".dyn"]:
+            if relocation['st_value'] == resolved_address or relocation['offset'] == resolved_address:
+                is_an_import = relocation['name']
+                break
+            elif resolved_address in container.plt:
+                is_an_import = container.plt[resolved_address]
+                break
+
+        inst.mnemonic = "ldr"
+        print(inst2)
+        reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
+
+        # if fix_immediate and original < (4095 << 12):
+            # assert original % 0x1000 == 0
+            # inst.instrument_before(InstrumentedInstruction(
+                # f"\tadd {reg_name}, sp, {original >> 12}, LSL 12"))
+        if fix_immediate:
+            inst.instrument_before(InstrumentedInstruction(
+                f"\tadrp %s, .LC%x" % (reg_name, original)))
+            # bits = 0xffff
+            # masked = original & bits
+            # inst.instrument_before(InstrumentedInstruction(
+                # f"\tmov {reg_name}, {masked}"))
+            # i = 0
+            # while original > bits:
+                # i += 16
+                # bits = bits << 16
+                # masked = (original & bits) >> i
+                # inst.instrument_before(InstrumentedInstruction(
+                    # f"\tmovk {reg_name}, {masked}, lsl {i}"))
+
+        inst2.mnemonic = "nop"
+        inst2.op_str = ""
+        if is_an_import:
+            inst.op_str =  reg_name2 + f", =%s" % (is_an_import)
+        else:
+            inst.op_str =  reg_name2 + f", =.LC%x" % (resolved_address)
+            if dereference_resolved:
+                inst2.mnemonic = "ldr"
+                inst2.op_str = f"{reg_name2}, [{reg_name2}]"
+
+        # resolved_address, adjust = self._adjust_target(
+            # container, resolved_address)
+        # inst.op_str = inst.op_str.replace(
+            # hex(value), "%d+.LC%x" % (adjust, resolved_address))
+        # print("[*] Adjusted: %x -- %d+.LC%x" %
+              # (inst.address, adjust, resolved_address))
+
+        if container.is_in_section(".rodata", resolved_address):
+            self.pot_sw_bases[function.start].add(resolved_address)
+
+
+
+
+
+
     def symbolize_mem_accesses(self, container, context):
         for _, function in container.functions.items():
             for edx, inst in enumerate(function.cache):
                 if inst.address in self.symbolized:
                     continue
 
-                # global variable addresses are dynamically built in multiple instructions
-                # here we try to resolve the address with some capstone trickery and shady assumptions
                 if inst.mnemonic == "adrp":
-                    reg_name = inst.reg_writes()[0]
-                    debug(f"we have an adrp at {inst.address} on {reg_name}")
-                    write_instr, read_instr  = None, None
-                    dereference_resolved = False
-                    for inst2 in function.cache[edx:]:
-                        if inst2.address <= inst.address: continue
-                        if reg_name in inst2.reg_reads():
-                            debug(f"read in {inst2}!!!")
-                            # resolved_address = inst.address - (inst.address % 0x1000)
-                            resolved_address = inst.cs.operands[1].imm
-                            if inst2.mnemonic == "add":
-                                assert inst2.cs.operands[2].type == CS_OP_IMM
-                                assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                                resolved_address += inst2.cs.operands[2].imm
-                            if inst2.mnemonic == "ldr":
-                                assert inst2.cs.operands[1].type == CS_OP_MEM
-                                assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                                resolved_address += inst2.cs.operands[1].mem.disp
-                                dereference_resolved = True
-                            break
-                        if reg_name in inst2.reg_writes():
-                            debug(f"wrote in {inst2}!!!")
-
-                    debug(f"Final resolved address {resolved_address}")
-
-                    is_an_import = False
-                    for relocation in container.relocations[".dyn"]:
-                        if relocation['st_value'] == resolved_address or relocation['offset'] == resolved_address:
-                            is_an_import = relocation['name']
-                            break
-                        elif resolved_address in container.plt:
-                            is_an_import = container.plt[resolved_address]
-                            break
-
-                    inst2.mnemonic = "nop"
-                    inst2.op_str = ""
-                    inst.mnemonic = "ldr"
-                    reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
-                    if is_an_import:
-                        inst.op_str =  reg_name2 + f", =%s" % (is_an_import)
-                    else:
-                        inst.op_str =  reg_name2 + f", =.LC%x" % (resolved_address)
-                        if dereference_resolved:
-                            inst2.mnemonic = "ldr"
-                            inst2.op_str = f"{reg_name2}, [{reg_name2}]"
-
-                    # resolved_address, adjust = self._adjust_target(
-                        # container, resolved_address)
-                    # inst.op_str = inst.op_str.replace(
-                        # hex(value), "%d+.LC%x" % (adjust, resolved_address))
-                    # print("[*] Adjusted: %x -- %d+.LC%x" %
-                          # (inst.address, adjust, resolved_address))
-
-                    if container.is_in_section(".rodata", resolved_address):
-                        self.pot_sw_bases[function.start].add(resolved_address)
-
-
-
-
-
+                    self._adjust_global_access(container, function, edx, inst)
 
                 mem_access, _ = inst.get_mem_access_op()
                 if not mem_access:

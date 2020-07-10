@@ -158,9 +158,10 @@ class Function():
             ins = InstructionWrapper(decoded)
 
             # we need to fix cbnz bc it is pc-relative addressing and capstone does not give us that
+            #XXX: move to symbolize_cf_transfer
             if ins.mnemonic == "cbnz" or ins.mnemonic == "cbz":
-                ins.op_str = "{}, {}".format(ins.cs.reg_name(ins.cs.operands[0].reg),
-                        ins.cs.operands[1].imm - ins.address)
+                ins.op_str = "%s, .LC%x" % (ins.cs.reg_name(ins.cs.operands[0].reg),
+                        ins.cs.operands[1].imm)
 
             self.cache.append(ins)
 
