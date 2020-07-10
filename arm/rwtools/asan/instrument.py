@@ -131,12 +131,10 @@ class Instrument():
 
 
 
-        for op in instruction.cs.operands:
-            if op.type == CS_OP_MEM:
-                mem_op = op
+        mem, mem_op_idx = instruction.get_mem_access_op()
+        mem_op = instruction.cs.operands[mem_op_idx]
 
         cs = instruction.cs
-        mem = mem_op.mem
 
         lexp = asan_regs[0] # the first free register
 

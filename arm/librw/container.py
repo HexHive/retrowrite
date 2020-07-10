@@ -29,6 +29,7 @@ class Container():
         self.globals = None
         self.relocations = defaultdict(list)
         self.loader = None
+        self.ignore_function_addrs = list()
         # PLT information
         self.plt_base = None
         self.plt = dict()
@@ -153,9 +154,16 @@ class Function():
 
     def disasm(self):
         assert not self.cache
-        #XXX: GLOBALS accessed with "adrp x0, <label>" are broken!
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
-            self.cache.append(InstructionWrapper(decoded))
+            ins = InstructionWrapper(decoded)
+
+            # we need to fix cbnz bc it is pc-relative addressing and capstone does not give us that
+            if ins.mnemonic == "cbnz" or ins.mnemonic == "cbz":
+                ins.op_str = "{}, {}".format(ins.cs.reg_name(ins.cs.operands[0].reg),
+                        ins.cs.operands[1].imm - ins.address)
+
+            self.cache.append(ins)
+
 
     def is_valid_instruction(self, address):
         assert self.cache, "Function not disassembled!"

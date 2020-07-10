@@ -122,7 +122,8 @@ MEM_LOAD_16 = """
 """
 
 	
-	
+MEM_EXIT_LABEL = ".LC_ASAN_EX_{addr}:"
+
 
 ASAN_REPORT = """
     mov      x0, {clob1}
@@ -170,7 +171,6 @@ LEXP_ADD = "\tadd {To}, {From}, {amnt}"
     # "\tsahf",
 # ]
 
-MEM_EXIT_LABEL = ".LC_ASAN_EX_{addr}:"
 
 # MEM_REG_RESTORE = [
     # # Restore Regs
