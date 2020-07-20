@@ -171,7 +171,9 @@ Activate the virtualenv (from root of the repository):
 * Instrument Binary with Binary-Address Sanitizer (BASan)  :`retrowrite --asan --kernel </path/to/module.ko> </path/to/output/module_asan.ko>`
 * Generate Symbolized Assembly that may be modified by hand or post-processed by existing tools: `retrowrite </path/to/module.ko> <path/to/output/asm/files>`
 
+##### Fuzzing
 
+For fuzzing campaign please see [fuzzing/](fuzzing/) folder.
 
 # Developer Guide
 
