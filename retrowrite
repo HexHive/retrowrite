@@ -1,0 +1,161 @@
+#!/usr/bin/env python
+
+import argparse
+import json
+import tempfile
+import subprocess
+
+
+
+def load_analysis_cache(loader, outfile):
+    with open(outfile + ".analysis_cache") as fd:
+        analysis = json.load(fd)
+    print("[*] Loading analysis cache")
+    for func, info in analysis.items():
+        for key, finfo in info.items():
+            loader.container.functions[int(func)].analysis[key] = dict()
+            for k, v in finfo.items():
+                try:
+                    addr = int(k)
+                except ValueError:
+                    addr = k
+                loader.container.functions[int(func)].analysis[key][addr] = v
+
+def save_analysis_cache(loader, outfile):
+    analysis = dict()
+
+    for addr, func in loader.container.functions.items():
+        analysis[addr] = dict()
+        analysis[addr]["free_registers"] = dict()
+        for k, info in func.analysis["free_registers"].items():
+            analysis[addr]["free_registers"][k] = list(info)
+
+    with open(outfile + ".analysis_cache", "w") as fd:
+        json.dump(analysis, fd)
+
+
+def asan(rw, loader, args):
+    StackFrameAnalysis.analyze(loader.container)
+    if args.cache:
+        try:
+            load_analysis_cache(loader, args.outfile)
+        except IOError:
+            print("[*] Analyzing free registers")
+            RegisterAnalysis.analyze(loader.container)
+            save_analysis_cache(loader, args.outfile)
+    else:
+        print("[*] Analyzing free registers")
+        RegisterAnalysis.analyze(loader.container)
+
+
+    instrumenter = Instrument(rw)
+    instrumenter.do_instrument()
+    instrumenter.dump_stats()
+
+def asank(rw, loader, args):
+    StackFrameAnalysis.analyze(loader.container)
+
+    with tempfile.NamedTemporaryFile(mode='w') as cf_file:
+        with tempfile.NamedTemporaryFile(mode='r') as regs_file:
+            rw.dump_cf_info(cf_file)
+            cf_file.flush()
+
+            subprocess.check_call(['cftool', cf_file.name, regs_file.name])
+
+            analysis = json.load(regs_file)
+
+            for func, info in analysis.items():
+                for key, finfo in info.items():
+                    fn = loader.container.get_function_by_name(func)
+                    fn.analysis[key] = dict()
+                    for k, v in finfo.items():
+                        try:
+                            addr = int(k)
+                        except ValueError:
+                            addr = k
+                        fn.analysis[key][addr] = v
+
+    return rw
+if __name__ == "__main__":
+    argp = argparse.ArgumentParser(description='Process some integers.')
+
+    argp.add_argument("bin", type=str, help="Input binary to load")
+    argp.add_argument("outfile", type=str, help="Symbolized ASM output")
+
+    argp.add_argument("-a", "--asan", action='store_true',
+                      help="Add binary address sanitizer instrumentation")
+    # python3 -m rwtools.asan.asantool /bin/ls ls-basan-instrumented
+
+    argp.add_argument("-s", "--assembly", action="store_true",
+                      help="Generate Symbolized Assembly")
+    # python3 -m librw.rw </path/to/binary> <path/to/output/asm/files>
+    argp.add_argument("-k", "--kernel", action='store_true',
+                      help="Instrument a kernel module")
+    argp.add_argument(
+        "--kcov", action='store_true', help="Instrument the kernel module with kcov")
+    argp.add_argument("-c", "--cache", action='store_true',
+                      help="Save/load register analysis cache (only used with --asan)")
+
+
+    args = argp.parse_args()
+
+    if args.kernel:
+        from librw.krw import Rewriter
+        from librw import krw
+        from librw.analysis.kregister import RegisterAnalysis
+        from librw.analysis.kstackframe import StackFrameAnalysis
+        from rwtools.kasan.instrument import Instrument
+        from rwtools.kasan.asantool import KcovInstrument
+        from rwtools.kasan import asantool
+        from librw.kloader import Loader
+        from librw.analysis import kregister
+    else:
+        from librw.rw import Rewriter
+        from librw.analysis.register import RegisterAnalysis
+        from librw.analysis.stackframe import StackFrameAnalysis
+        from rwtools.asan.instrument import Instrument
+        from librw.loader import Loader
+        from librw.analysis import register
+
+
+
+
+    loader = Loader(args.bin)
+
+    flist = loader.flist_from_symtab()
+    loader.load_functions(flist)
+
+    slist = loader.slist_from_symtab()
+    if args.kernel:
+        loader.load_data_sections(slist, krw.is_data_section)
+    else:
+        loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
+
+    reloc_list = loader.reloc_list_from_symtab()
+    loader.load_relocations(reloc_list)
+
+    global_list = loader.global_data_list_from_symtab()
+    loader.load_globals_from_glist(global_list)
+
+    loader.container.attach_loader(loader)
+
+    rw = Rewriter(loader.container, args.outfile)
+    rw.symbolize()
+
+
+    if args.asan:
+        if args.kernel:
+            rewriter = asank(rw, loader, args)
+            instrumenter = Instrument(rewriter)
+            instrumenter.do_instrument()
+
+            if args.kcov:
+                kcov_instrumenter = KcovInstrument(rewriter)
+                kcov_instrumenter.do_instrument()
+            rewriter.dump()
+        else:
+            asan(rw, loader, args)
+            rw.dump()
+    else:
+
+        rw.dump()

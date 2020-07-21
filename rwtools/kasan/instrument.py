@@ -9,11 +9,11 @@ from capstone.x86_const import X86_REG_RSP
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_RET
 
 from . import snippets as sp
-from librw.container import (DataCell, InstrumentedInstruction, DataSection,
+from librw.kcontainer import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
-from librw.analysis.stackframe import StackFrameAnalysis
+from librw.analysis.kstackframe import StackFrameAnalysis
 
-ASAN_SHADOW_OFF = 2147450880
+ASAN_SHADOW_OFF = 0xffffe00000000000
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
 ASAN_INIT_LOC = 0x1000000000000000
 ASAN_DEINIT_LOC = 0x2000000000000000
@@ -21,6 +21,9 @@ ASAN_DEINIT_LOC = 0x2000000000000000
 
 class Instrument():
     CANARY_ANALYSIS_KEY = 'stack_canary_expression'
+    CALLER_SAVED_REGS = [
+        "rax", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11"
+    ]
 
     def __init__(self, rewriter, stackrz_sz=32, globalrz_sz=64):
         self.rewriter = rewriter
@@ -101,35 +104,36 @@ class Instrument():
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        del ac1[1]
+        del ac1[4]
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access2(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        ac1[1] = "\tincl {clob1_32}"
+        ac1[4] = "\tincb {clob1_8}"
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access4(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
         ac1 = copy.copy(sp.MEM_LOAD_SZ)
 
-        return "\n".join(common + ac1)
+        return "\n".join(common + ac1 + sp.ASAN_REPORT)
 
     def _access8(self):
         common = copy.copy(sp.MEM_LOAD_COMMON)
 
-        common[3] = "\tcmpb $0, 2147450880({tgt})"
-        common[4] = common[5]
-        common[5] = sp.MEM_LOAD_SZ[-1]
+        # Change load + test to compare with memory
+        common[4] = "\tcmpb $0, ({tgt})"
+        common[5] = common[6]
+        del common[6]
 
         # rest = [rest[0], rest[1]]
         # save = [save[0]]
 
-        return "\n".join(common)
+        return "\n".join(common + sp.ASAN_REPORT)
 
     def _access16(self):
         raise NotImplementedError
@@ -151,6 +155,31 @@ class Instrument():
         r2 = [True, "%rsi"]
         push_cnt = 0
 
+        # XXX: Bug in capstone?
+        if any([
+            instruction.mnemonic.startswith(x) for x in
+            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
+        ]):
+            midx = 1
+
+        is_rep_stos = False
+        if instruction.mnemonic.startswith("rep stos"):
+            is_rep_stos = True
+            lexp = instruction.op_str.split(",", 1)[1]
+        elif len(instruction.cs.operands) == 1:
+            lexp = instruction.op_str
+        elif len(instruction.cs.operands) > 2:
+            print("[*] Found op len > 2: %s" % (instruction))
+            op1 = instruction.op_str.split(",", 1)[1]
+            lexp = op1.rsplit(",", 1)[0]
+        elif midx == 0:
+            lexp = instruction.op_str.rsplit(",", 1)[0]
+        else:
+            lexp = instruction.op_str.split(",", 1)[1]
+
+        if lexp.startswith("*"):
+            lexp = lexp[1:]
+
         if "rflags" in free:
             save_rflags = False
             free.remove("rflags")
@@ -170,10 +199,12 @@ class Instrument():
                 save_rflags = "opt"
                 save_rax = "rax" not in free
 
-        if is_leaf and (r1[0] or r2[0] or save_rflags):
-            save.append(sp.LEAF_STACK_ADJUST)
-            restore.append(sp.LEAF_STACK_UNADJUST)
-            push_cnt += 32
+        # Linux on x86_64 doesn't use red zones
+        # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f21937231034f554bdd7/arch/x86/Makefile#L132
+        # if is_leaf and (r1[0] or r2[0] or save_rflags):
+        #     save.append(sp.LEAF_STACK_ADJUST)
+        #     restore.append(sp.LEAF_STACK_UNADJUST)
+        #     push_cnt += 32
 
         if r1[0]:
             save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r1[1]))
@@ -216,9 +247,21 @@ class Instrument():
                     sp.MEM_FLAG_SAVE_OPT))
                 restore = copy.copy(sp.MEM_FLAG_RESTORE_OPT) + restore
 
-        if push_cnt > 0:
-            save.append("leaq {}(%rsp), %rsp".format(push_cnt * 8))
-            restore.insert(0, "leaq -{}(%rsp), %rsp".format(push_cnt * 8))
+        if push_cnt > 0 and '%rsp' in lexp:
+            # In this case we have a stack-relative load but the value of the stack
+            # pointer has changed because we pushed some registers to the stack
+            # to save them. Adjust the displacement of the access to take this
+            # into account
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + push_cnt * 8
+
+            if hex(disp) in lexp:
+                lexp = lexp.replace(hex(disp), hex(adjusted_disp))
+            elif str(disp) in lexp:
+                lexp = lexp.replace(str(disp), hex(adjusted_disp))
+            else:
+                assert False, 'Can\'t find displacement in lexp'
+
 
         if acsz == 1:
             memcheck = self._access1()
@@ -237,30 +280,6 @@ class Instrument():
             copy.copy(sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address))
         codecache.extend(restore)
 
-        # XXX: Bug in capstone?
-        if any([
-            instruction.mnemonic.startswith(x) for x in
-            ["sar", "shl", "shl", "stos", "shr", "rep stos"]
-        ]):
-            midx = 1
-
-        is_rep_stos = False
-        if instruction.mnemonic.startswith("rep stos"):
-            is_rep_stos = True
-            lexp = instruction.op_str.split(",", 1)[1]
-        elif len(instruction.cs.operands) == 1:
-            lexp = instruction.op_str
-        elif len(instruction.cs.operands) > 2:
-            print("[*] Found op len > 2: %s" % (instruction))
-            op1 = instruction.op_str.split(",", 1)[1]
-            lexp = op1.rsplit(",", 1)[0]
-        elif midx == 0:
-            lexp = instruction.op_str.rsplit(",", 1)[0]
-        else:
-            lexp = instruction.op_str.split(",", 1)[1]
-
-        if lexp.startswith("*"):
-            lexp = lexp[1:]
 
         args = dict()
         args["lexp"] = lexp
@@ -269,13 +288,18 @@ class Instrument():
 
         args["clob1"] = r1[1]
         args["clob1_32"] = "%{}".format(self._get_subreg32(r1[1][1:]))
+        args["clob1_8"] = "%{}".format(self._get_subreg8l(r1[1][1:]))
 
         args["tgt"] = r2[1]
         args["tgt_32"] = "%{}".format(self._get_subreg32(r2[1][1:]))
         args["tgt_8"] = "%{}".format(self._get_subreg8l(r2[1][1:]))
 
         args["addr"] = instruction.address
-        enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
+        enter_lbl = "%s_%s" % (sp.ASAN_MEM_ENTER, instruction.address)
+
+        args['save_regs'] = ''
+        args['restore_regs'] = ''
+        args['acctype'] = 'load' if midx == 0 else 'store'
 
         codecache = '\n'.join(codecache)
         comment = "{}: {}".format(str(instruction), str(free))
@@ -284,13 +308,13 @@ class Instrument():
             copycache = copy.copy(codecache)
             extend_args_check = copy.copy(args)
             extend_args_check["lexp"] = "(%rdi, %rcx)"
-            extend_args_check["addr"] = "%d_2" % (instruction.address)
+            extend_args_check["addr"] = '{}_2'.format(instruction.address)
             copycache = copycache.format(**extend_args_check)
             original_exit = copy.copy(
                 sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address)
 
             new_exit = copy.copy(sp.MEM_EXIT_LABEL)[0].format(
-                addr="%d_2" % (instruction.address))
+                addr='{}_2'.format(instruction.address))
             copycache = copycache.replace(original_exit, new_exit)
             codecache = codecache + "\n" + copycache
 
@@ -298,7 +322,12 @@ class Instrument():
                                        enter_lbl, comment)
 
     def instrument_mem_accesses(self):
-        for _, fn in self.rewriter.container.functions.items():
+        for fn in self.rewriter.container.iter_functions():
+
+            # DEBUG
+            if fn.name == 'btrfs_run_delayed_refs':
+                continue
+
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):
                 # Do not instrument instrumented instructions
@@ -310,19 +339,30 @@ class Instrument():
                 # Do not instrument lea
                 if instruction.mnemonic.startswith("lea"):
                     continue
+                # Do not instrument prefetches
+                if instruction.mnemonic.startswith("prefetch"):
+                    continue
                 if instruction.address in self.skip_instrument:
                     continue
                 # Do not instrument stack canaries
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
                     continue
 
-                # XXX: THIS IS A TODO for more accurate check.
+                # TODO: figure out why this doen't work
+                if instruction.mnemonic.startswith("rep mov"):
+                    continue
                 if instruction.mnemonic.startswith("rep stos"):
-                    pass
+                    continue
+
 
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
                 if not mem:
+                    continue
+
+                # Don't instrument instructions with a segment override because
+                # lea doesn't take the segment base into account
+                if mem.segment != 0:
                     continue
 
                 acsz = instruction.cs.operands[midx].size
@@ -342,7 +382,7 @@ class Instrument():
                     acsz, instruction, midx, free_registers, is_leaf)
 
                 # Save some stats
-                self.memcheck_sites[fn.start].append(idx)
+                self.memcheck_sites[str(fn.address)].append(idx)
                 instruction.instrument_before(iinstr)
 
     def instrument_globals(self):
@@ -407,13 +447,30 @@ class Instrument():
 
         return meta
 
-    def poison_stack(self, args, need_save):
+    def poison_stack(self, args, need_save, instruction, midx):
         instrumentation = list()
 
-        # Save the register we're about to clobber
-        if need_save:
+        # Save the registers we're about to clobber
+        if need_save > 1:
             instrumentation.append(
-                copy.copy(sp.MEM_REG_SAVE)[0])
+                copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg1}'))
+
+        if need_save > 0:
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + need_save * 8
+
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
+
+            if '%rsp' in args['pbase']:
+                if hex(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(hex(disp), hex(adjusted_disp))
+                elif str(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(str(disp), hex(adjusted_disp))
+                else:
+                    import pdb; pdb.set_trace()
+                    assert False, 'Can\'t find displacement in pbase'
+
 
         # Add instrumentation to poison
         instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
@@ -422,22 +479,41 @@ class Instrument():
         instrumentation.append(
             copy.copy(sp.STACK_POISON_SLOT))
 
-        # Restore clobbered register
-        if need_save:
+        # Restore clobbered registers
+        if need_save > 0:
             instrumentation.append(
-                copy.copy(sp.MEM_REG_RESTORE)[0])
+                copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
+
+        if need_save > 1:
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg1}'))
 
         code_str = "\n".join(instrumentation).format(**args)
         return InstrumentedInstruction(
             code_str, sp.STACK_ENTER_LBL.format(**args), None)
 
-    def unpoison_stack(self, args, need_save):
+    def unpoison_stack(self, args, need_save, instruction, midx):
         instrumentation = list()
 
-        # Save the register we're about to clobber
-        if need_save:
+        # Save the registers we're about to clobber
+        if need_save > 1:
             instrumentation.append(
-                copy.copy(sp.MEM_REG_SAVE)[0])
+                copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg1}'))
+
+        if need_save > 0:
+            disp = instruction.cs.operands[midx].value.mem.disp
+            adjusted_disp = disp + need_save * 8
+
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_SAVE)[0].replace('{reg}', '{reg2}'))
+
+            if '%rsp' in args['pbase']:
+                if hex(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(hex(disp), hex(adjusted_disp))
+                elif str(disp) in args['pbase']:
+                    args['pbase'] = args['pbase'].replace(str(disp), hex(adjusted_disp))
+                else:
+                    assert False, 'Can\'t find displacement in pbase'
 
         # Add instrumentation to poison
         instrumentation.extend(copy.copy(sp.STACK_POISON_BASE))
@@ -446,10 +522,14 @@ class Instrument():
         instrumentation.append(
             copy.copy(sp.STACK_UNPOISON_SLOT))
 
-        # Restore clobbered register
-        if need_save:
+        # Restore clobbered registers
+        if need_save > 0:
             instrumentation.append(
-                copy.copy(sp.MEM_REG_RESTORE)[0])
+                copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg2}'))
+
+        if need_save > 1:
+            instrumentation.append(
+                copy.copy(sp.MEM_REG_RESTORE)[0].replace('{reg}', '{reg1}'))
 
         code_str = "\n".join(instrumentation).format(**args)
         return InstrumentedInstruction(
@@ -491,22 +571,23 @@ class Instrument():
         # Need to unpoison the stack before any CF leaves this function, e.g.,
         # ret and jmp to a different function.
         need_red = list()
-        for addr, fn in self.rewriter.container.functions.items():
+        for fn in self.rewriter.container.iter_functions():
+            addr = fn.address
             # Heuristic:
-            # Check if there is a set to canary in the first 20 instructions.
-            for idx, instruction in enumerate(fn.cache[:20]):
+            # Check if there is a set to canary in the first 25 instructions.
+            for idx, instruction in enumerate(fn.cache[:25]):
                 if instruction.op_str.startswith(sp.CANARY_CHECK):
                     need_red.append((addr, idx))
                     break
 
-        for addr, fn in self.rewriter.container.functions.items():
+        for fn in self.rewriter.container.iter_functions():
             for idx, instruction in enumerate(fn.cache):
                 if instruction.mnemonic.startswith("callq"):
                     if instruction.op_str.startswith("__longjmp"):
                         self.handle_longjmp(instruction)
 
         for addr, cidx in need_red:
-            fn = self.rewriter.container.functions[addr]
+            fn = self.rewriter.container.function_of_address(addr)
             print("[*] %s needs redzone stack" % (fn.name))
             is_poisoned = False
             inserts = list()
@@ -534,17 +615,24 @@ class Instrument():
                     pbase = store_exp
 
                     free_registers = self.get_free_regs(fn, idx)
-                    need_save = True
+                    need_save = 2
                     clob1 = "%rbx"
-                    if len(free_registers) > 0:
+                    clob2 = "%r12"
+
+                    if len(free_registers) > 1:
                         clob1 = free_registers[0]
-                        need_save = False
+                        clob2 = free_registers[1]
+                        need_save = 0
+                    elif len(free_registers) == 1:
+                        clob1 = free_registers[0]
+                        needs_save = 1
 
                     args = dict(
-                        reg=clob1, pbase=pbase,
+                        reg1=clob1, reg2=clob2, pbase=pbase,
                         addr=instruction.address)
 
-                    poisoni = self.poison_stack(args, need_save)
+                    _, midx = nexti.get_mem_access_op()
+                    poisoni = self.poison_stack(args, need_save, nexti, midx)
                     instruction.instrument_before(poisoni)
                     is_poisoned = True
                 else:
@@ -558,7 +646,7 @@ class Instrument():
                         continue
                     # Check if we're xor'ing with the canary
                     op0 = nexti.op_str.split(",", 1)[0]
-                    if op0 != "%fs:0x28":
+                    if op0 != "%gs:0x28":
                         continue
                     # Ok, now we're sure to be loading from the canary, unpoison.
                     canary_loc = instruction.op_str.split(",", 1)[0]
@@ -569,17 +657,23 @@ class Instrument():
                     pbase = canary_loc
 
                     free_registers = self.get_free_regs(fn, idx)
-                    need_save = True
+                    need_save = 2
                     clob1 = "%rbx"
-                    if len(free_registers) > 0:
+                    clob2 = "%r15"
+
+                    if len(free_registers) > 1:
                         clob1 = free_registers[0]
-                        need_save = False
+                        clob2 = free_registers[1]
+                        need_save = 0
+                    elif len(free_registers) == 1:
+                        clob1 = free_registers[0]
+                        need_save = 1
 
                     args = dict(
-                        reg=clob1, pbase=pbase,
+                        reg1=clob1, reg2=clob2, pbase=pbase,
                         addr=instruction.address)
 
-                    unpoisoni = self.unpoison_stack(args, need_save)
+                    unpoisoni = self.unpoison_stack(args, need_save, instruction, midx)
                     instruction.instrument_before(unpoisoni)
 
             for idx, code in enumerate(inserts):
@@ -589,7 +683,7 @@ class Instrument():
         #self.instrument_globals()
         self.instrument_stack()
         self.instrument_mem_accesses()
-        self.instrument_init_array()
+        # self.instrument_init_array()
 
     def dump_stats(self):
         count = 0
@@ -599,7 +693,7 @@ class Instrument():
 
         for addr, sites in self.memcheck_sites.items():
             count += len(sites)
-            fn = self.rewriter.container.functions[addr]
+            fn = self.rewriter.container.function_of_address(addr)
             for site in sites:
 
                 if site in fn.analysis['free_registers']:
@@ -627,7 +721,6 @@ class Instrument():
         rflags_stats[0] = count - rflags_stats[0]
 
         print("[*] Instrumented: {} locations".format(count))
-        print("Number of free registers:", free_reg_sz)
         print(json.dumps(free_reg_cnt))
         print(
             "rflags live: {}, rflags + 0 regs: {}, rflags + rax: {},".format(

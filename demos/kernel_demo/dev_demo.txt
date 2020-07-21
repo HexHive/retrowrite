@@ -1,0 +1,7 @@
+include <linux/module.h>
+include <linux/fs.h>
+
+resource fd_demo[fd]
+
+openat$demo(fd const[AT_FDCWD], file ptr[in, string["/dev/demo"]], flags flags[open_flags], mode const[0]) fd_demo
+write$demo(fd fd_demo, data ptr[in, array[int8]], size bytesize[data])

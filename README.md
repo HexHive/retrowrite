@@ -8,42 +8,24 @@ technical details. There's also a
 and [36c3 video](https://media.ccc.de/v/36c3-10880-no_source_no_problem_high_speed_binary_fuzzing)
 to get you started.
 
-Retrowrite ships with two utilities to support binary rewriting:
-* **rwtools.asan.asantool:** Instrument binary with binary-only Address Sanitizer (BASan).
-* **librw.rw :** Generate symbolized assembly files from binaries
+This project contains 2 different version of retrowrite :
+* [Retrowrite](#retrowrite-1) to rewrite classic userspace binaries, and
+* [KRetrowrite](#kretrowrite) to rewrite and fuzz kernel modules.
 
+The two versions can be used independently of each other or at the same time.
+In case you want to use both please follow the instructions for KRetrowrite.
 
-
-# Quick Usage Guide
-
-This section highlights the steps to get you up to speed to use retrowrite for
-rewriting PIC binaries.
-
-
-## Setup
+## General setup
 
 Retrowrite is implemented in python3 (3.6). Make sure python3 and python3-venv
 is installed on system. Retrowrite depends on
-[capstone](https://github.com/aquynh/capstone). The capstone
-shipped with distribution is not compatible with this version. The setup
+[capstone](https://github.com/aquynh/capstone). The version
+available from the Ubuntu 18.04 repositories 
+is not compatible with this version. The setup
 script pulls the latest version of capstone from the repository and builds it.
 Make sure that your system meets the requirements to build capstone.
 
-Run `setup.sh`:
-
-* `./setup.sh`
-
-Activate the virtualenv (from root of the repository):
-
-* `source retro/bin/activate`
-
-(Bonus) To exit virtualenv when you're done with retrowrite:
-* `deactivate`
-
-
-## Usage
-
-### Requirements for target binary
+#### Requirements for target binary
 
 The target binary
 * must be compiled as position independent code (PIC/PIE)
@@ -53,24 +35,72 @@ The target binary
 * must not contain C++ exceptions (i.e., C++ exception tables are not
   recovered and simply stripped during lifting)
 
+#### Command line helper
 
-### Commands
+The individual tools also have command line help which describes all the
+options, and may be accessed with `-h`. 
+To start with use retrowrite command:
 
-The individual tools also have commandline help which describes all the
-options, and may be accessed with `-h`. The below steps should quickly get you
-started with using retrowrite.
+```bash
+(retro) $ retrowrite --help
+usage: retrowrite [-h] [-a] [-s] [-k] [--kcov] [-c] bin outfile
+
+positional arguments:
+  bin             Input binary to load
+  outfile         Symbolized ASM output
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -a, --asan      Add binary address sanitizer instrumentation
+  -s, --assembly  Generate Symbolized Assembly
+  -k, --kernel    Instrument a kernel module
+  --kcov          Instrument the kernel module with kcov
+  -c, --cache     Save/load register analysis cache (only used with --asan)
+
+```
+
+## Retrowrite
+### Quick Usage Guide
+
+This section highlights the steps to get you up to speed to use userspace retrowrite for rewriting PIC binaries.
+
+Retrowrite ships with an utility with the following features:
+* Generate symbolized assembly files from binaries without source code
+* BASan: Instrument binary with binary-only Address Sanitizer 
+* Support for symbolizing (linux) kernel modules 
+* KCovariance instrumentation support
+
+### Setup
+
+Run `setup.sh`:
+
+* `./setup.sh user`
+
+Activate the virtualenv (from root of the repository):
+
+* `source retro/bin/activate`
+
+(Bonus) To exit virtualenv when you're done with retrowrite:
+* `deactivate`
 
 
-#### a. Instrument Binary with Binary-Address Sanitizer (BASan)
+### Usage
 
-`python3 -m rwtools.asan.asantool </path/to/binary/> </path/to/output/binary>`
+#### Commands
+
+
+
+
+##### a. Instrument Binary with Binary-Address Sanitizer (BASan)
+
+`retrowrite --asan </path/to/binary/> </path/to/output/binary>`
 
 Note: Make sure that the binary is position-independent and is not stripped.
 This can be checked using `file` command (the output should say `ELF shared object`).
 
 Example, create an instrumented version of `/bin/ls`:
 
-`python3 -m rwtools.asan.asantool /bin/ls ls-basan-instrumented`
+`retrowrite --asan /bin/ls ls-basan-instrumented`
 
 This will generate an assembly (`.s`) file that can be assembled and linked
 using any compiler, example:
@@ -78,24 +108,24 @@ using any compiler, example:
 `gcc ls-basan-instrumented.s -lasan -o ls-basan-instrumented`
 
 
-#### b. Generate Symbolized Assembly
+##### b. Generate Symbolized Assembly
 
 To generate symbolized assembly that may be modified by hand or post-processed
 by existing tools:
 
-`python3 -m librw.rw </path/to/binary> <path/to/output/asm/files>`
+`retrowrite </path/to/binary> <path/to/output/asm/files>`
 
 Post-modification, the asm files may be assembled to working binaries as
-described above. 
+described above.
 
 While retrowrite is interoperable with other tools, we
-strongly encourage researchers to use retrowrite API for their binary
+strongly encourage researchers to use the retrowrite API for their binary
 instrumentation / modification needs! This saves the additional effort of
 having to load and parse binaries or assembly files. Check the developer
 sections for more details on getting started.
 
 
-#### c. Instrument Binary with AFL
+##### c. Instrument Binary with AFL
 
 To generate an AFL instrumented binary, first generate the symbolized assembly
 as described above. Then, recompile the symbolized assembly with `afl-gcc` from
@@ -104,7 +134,46 @@ as described above. Then, recompile the symbolized assembly with `afl-gcc` from
 ```
 $ AFL_AS_FORCE_INSTRUMENT=1 afl-gcc foo.s -o foo
 ```
+ or `afl-clang`.
 
+
+## Docker / Reproducing Results
+
+See [fuzzing/docker](fuzzing/docker) for more information on building a docker image for
+fuzzing and reproducing results.
+
+
+
+# KRetrowrite
+### Quick Usage Guide
+### Setup
+
+Run `setup.sh`:
+
+* `./setup.sh kernel`
+
+
+Activate the virtualenv (from root of the repository):
+
+* `source retro/bin/activate`
+
+(Bonus) To exit virtualenv when you're done with retrowrite:
+* `deactivate`
+
+
+### Usage
+
+
+#### Commands
+
+##### Classic instrumentation
+
+* Instrument Binary with Binary-Address Sanitizer (BASan)  :`retrowrite --asan --kernel </path/to/module.ko> </path/to/output/module_asan.ko>`
+* Generate Symbolized Assembly that may be modified by hand or post-processed by existing tools: `retrowrite </path/to/module.ko> <path/to/output/asm/files>`
+
+##### Fuzzing
+
+For fuzzing campaign please see [fuzzing/](fuzzing/) folder.
 
 # Developer Guide
 
@@ -114,14 +183,15 @@ Individual transformation passes that build on top this rewriting framework,
 such as our binary-only Address Sanitizer (BASan) is contained as individual
 tools in `rwtools/`.
 
+The files and folder starting with `k` are linked with the kernel retrowrite version.
 
-# Docker / Reproducing Results
+# Demos
 
-See [docker](docker) for more information on building a docker image for
-fuzzing and reproducing results.
+In the [demos/](demos/) folder, you will find examples for userspace and kernel retrowrite
+([demos/user_demo](demos/user_demo) and [demos/kernel_demo](demos/kernel_demo) respectively).
 
 
-# Cite
+## Cite
 
 The following publications cover different parts of the RetroWrite project:
 

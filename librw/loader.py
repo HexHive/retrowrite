@@ -16,6 +16,7 @@ class Loader():
         self.fd = open(fname, 'rb')
         self.elffile = ELFFile(self.fd)
         self.container = Container()
+        print(self.elffile['e_type'])
 
     def load_functions(self, fnlist):
         section = self.elffile.get_section_by_name(".text")

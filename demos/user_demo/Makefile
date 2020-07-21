@@ -5,7 +5,7 @@ heap: heap.c
 	${CC} ${OPT} heap.c -o heap
 
 heap.asan: heap
-	PYTHONPATH=../ python3 -m rwtools.asan.asantool ./heap ./heap.asan
+	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./heap ./heap.asan
 	${CC} heap.asan.s -lasan -o heap.asan
 
 .PHONY=heaptest
@@ -19,7 +19,7 @@ stack: stack.c
 	${CC} ${OPT} stack.c -o stack
 
 stack.asan: stack
-	PYTHONPATH=../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
+	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
 	${CC} stack.asan.s -lasan -o stack.asan
 
 .PHONY=stacktest

@@ -1,0 +1,17 @@
+set timeout -1
+
+set LINUX_DIR [lindex $argv 0]
+set IMAGE_PATH [lindex $argv 1]
+set LOCAL_DIR [lindex $argv 2]
+set KRWDIR [lindex $argv 3]
+
+spawn "$KRWDIR/fuzzing/kernel/vms_files/run_qemu_cov.sh" $LINUX_DIR $IMAGE_PATH $LOCAL_DIR
+
+expect "syzkaller login: "
+send "root\r"
+
+expect "root@syzkaller:~# "
+
+send "mkdir -p /mnt/input && mount -t 9p -o trans=virtio,version=9p2000.L,ro input /mnt/input && cp /mnt/input/run_cov.sh . && bash run_cov.sh\r"
+
+expect eof
