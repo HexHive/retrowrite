@@ -185,28 +185,6 @@ tools in `rwtools/`.
 
 The files and folder starting with `k` are linked with the kernel retrowrite version.
 
-list of retrowrite files :
-* [librw/container.py](librw/container.py) :
-* [librw/disasm.py](librw/disasm.py)
-* [librw/loader.py](librw/loader.py) :
-* [librw/rw.py](librw/rw.py) :
-* [librw/analysis/register.py](librw/analysis/register.py) :
-* [librw/analysis/stackframe.py](librw/analysis/stackframe.py) :
-* [rwtools/asan/asantool.py](rwtools/asan/asantool.py) :
-* [rwtools/asan/snippets.py](rwtools/asan/snippets.py) :
-* [rwtools/asan/instrument.py](rwtools/asan/instrument.py) :
-
-* [librw/kcontainer.py](librw/kcontainer.py)
-* [librw/kloader.py](librw/kloader.py) :
-* [librw/krw.py](librw/krw.py) :
-* [librw/analysis/kregister.py](librw/analysis/kregister.py) :
-* [librw/analysis/kstackframe.py](librw/analysis/kstackframe.py) :
-* [rwtools/kcov/instrument.py](rwtools/kcov/instrument.py) :
-* [rwtools/kcov/kcovtool.py](rwtools/kcov/kcovtool.py) :
-* [rwtools/kasan/asantool.py](rwtools/kasan/asantool.py) :
-* [rwtools/kasan/snippets.py](rwtools/kasan/snippets.py) :
-* [rwtools/kasan/instrument.py](rwtools/kasan/instrument.py) :
-
 # Demos
 
 In the [demos/](demos/) folder, you will find examples for userspace and kernel retrowrite
