@@ -89,6 +89,7 @@ class Symbolizer():
     def __init__(self):
         self.bases = set()
         self.pot_sw_bases = defaultdict(set)
+        self.xrefs = defaultdict(list)
         self.symbolized = set()
 
     # TODO: Use named symbols instead of generic labels when possible.
@@ -239,6 +240,7 @@ class Symbolizer():
                     function.nexts[inst_idx].append("undef")
 
     def symbolize_switch_tables(self, container, context):
+        return 0
         rodata = container.sections.get(".rodata", None)
         if not rodata:
             return
@@ -247,34 +249,72 @@ class Symbolizer():
 
         for faddr, swbases in self.pot_sw_bases.items():
             fn = container.functions[faddr]
+
+            #XXX: jump tables do not work like this anymore :(
+            # for swbase in sorted(swbases, reverse=True):
+                # value = rodata.read_at(swbase, 4)
+                # if not value:
+                    # continue
+
+                # value = (value + swbase) & 0xffffffff
+                # debug(hex(swbase) +  hex(value))
+                # # if not fn.is_valid_instruction(value):
+                    # # continue
+
+                # debug(hex(swbase))
+                # # We have a valid switch base now.
+                # swlbl = ".LC%x-.LC%x" % (value, swbase)
+                # rodata.replace(swbase, 4, swlbl)
+
+                # # Symbolize as long as we can
+                # for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
+                    # if any([x in all_bases for x in range(slot, slot + 4)]):
+                        # break
+
+                    # value = rodata.read_at(slot, 4)
+                    # if not value:
+                        # break
+
+                    # value = (value + swbase) & 0xFFFFFFFF
+                    # if not fn.is_valid_instruction(value):
+                        # break
+
+                    # swlbl = ".LC%x-.LC%x" % (value, swbase)
+                    # rodata.replace(slot, 4, swlbl)
+
             for swbase in sorted(swbases, reverse=True):
-                value = rodata.read_at(swbase, 4)
-                if not value:
-                    continue
+                if swbase != 0x1c00: continue
+                for addr in self.xrefs[swbase]:
+                    debug(f"OMG {hex(addr)}")
 
-                value = (value + swbase) & 0xffffffff
-                if not fn.is_valid_instruction(value):
-                    continue
+                    value = rodata.read_at(swbase, 1)
+                    # if not value:
+                        # continue
 
-                # We have a valid switch base now.
-                swlbl = ".LC%x-.LC%x" % (value, swbase)
-                rodata.replace(swbase, 4, swlbl)
+                    value = (value*4 + addr) & 0xffffffff
+                    # if not fn.is_valid_instruction(value):
+                        # continue
 
-                # Symbolize as long as we can
-                for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
-                    if any([x in all_bases for x in range(slot, slot + 4)]):
-                        break
+                    # We have a valid switch base now.
+                    swlbl = ".LC%x-.LC%x" % (value, addr)
+                    rodata.replace(swbase, 4, swlbl)
 
-                    value = rodata.read_at(slot, 4)
-                    if not value:
-                        break
+                    # Symbolize as long as we can
+                    for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
+                        if any([x in all_bases for x in range(slot, slot + 4)]):
+                            break
 
-                    value = (value + swbase) & 0xFFFFFFFF
-                    if not fn.is_valid_instruction(value):
-                        break
+                        value = rodata.read_at(slot, 4)
+                        if not value:
+                            break
 
-                    swlbl = ".LC%x-.LC%x" % (value, swbase)
-                    rodata.replace(slot, 4, swlbl)
+                        value = (value + swbase) & 0xFFFFFFFF
+                        if not fn.is_valid_instruction(value):
+                            break
+
+                        swlbl = ".LC%x-.LC%x" % (value, swbase)
+                        rodata.replace(slot, 4, swlbl)
+        # exit(1)
 
     def _adjust_target(self, container, target):
         # Find the nearest section
@@ -309,85 +349,80 @@ class Symbolizer():
         # global variable addresses are dynamically built in multiple instructions
         # here we try to resolve the address with some capstone trickery and shady assumptions
         reg_name = inst.reg_writes()[0]
-        debug(f"we have an adrp at {inst.address} on {reg_name}")
-        write_instr, read_instr  = None, None
+        original = inst.cs.operands[1].imm
         dereference_resolved = False
-        fix_immediate = True
+        to_fix = []
         for inst2 in function.cache[edx:]:
             if inst2.address <= inst.address: continue
             if reg_name in inst2.reg_reads():
                 debug(f"read in {inst2}!!!")
-                # resolved_address = inst.address - (inst.address % 0x1000)
-                resolved_address = original = inst.cs.operands[1].imm
-                if inst2.mnemonic == "add":
-                    assert inst2.cs.operands[2].type == CS_OP_IMM
-                    assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                    resolved_address += inst2.cs.operands[2].imm
-                if inst2.mnemonic == "ldr":
-                    assert inst2.cs.operands[1].type == CS_OP_MEM
-                    assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                    resolved_address += inst2.cs.operands[1].mem.disp
-                    dereference_resolved = True
-
-                if reg_name in inst2.reg_writes():
-                    fix_immediate = False
-                break
+                to_fix += [inst2]
             if reg_name in inst2.reg_writes():
                 debug(f"wrote in {inst2}!!!")
-
-        debug(f"Final resolved address {resolved_address}")
-
-        is_an_import = False
-        for relocation in container.relocations[".dyn"]:
-            if relocation['st_value'] == resolved_address or relocation['offset'] == resolved_address:
-                is_an_import = relocation['name']
-                break
-            elif resolved_address in container.plt:
-                is_an_import = container.plt[resolved_address]
                 break
 
-        inst.mnemonic = "ldr"
-        print(inst2)
-        reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
+        inst.mnemonic = "adrp"
+        inst.op_str = "%s, .LC%x" % (reg_name, original)
 
-        # if fix_immediate and original < (4095 << 12):
-            # assert original % 0x1000 == 0
-            # inst.instrument_before(InstrumentedInstruction(
-                # f"\tadd {reg_name}, sp, {original >> 12}, LSL 12"))
-        if fix_immediate:
-            inst.instrument_before(InstrumentedInstruction(
-                f"\tadrp %s, .LC%x" % (reg_name, original)))
-            # bits = 0xffff
-            # masked = original & bits
-            # inst.instrument_before(InstrumentedInstruction(
-                # f"\tmov {reg_name}, {masked}"))
-            # i = 0
-            # while original > bits:
-                # i += 16
-                # bits = bits << 16
-                # masked = (original & bits) >> i
-                # inst.instrument_before(InstrumentedInstruction(
-                    # f"\tmovk {reg_name}, {masked}, lsl {i}"))
-
-        inst2.mnemonic = "nop"
-        inst2.op_str = ""
-        if is_an_import:
-            inst.op_str =  reg_name2 + f", =%s" % (is_an_import)
-        else:
-            inst.op_str =  reg_name2 + f", =.LC%x" % (resolved_address)
-            if dereference_resolved:
+        for inst2 in to_fix:
+            resolved_address = original = inst.cs.operands[1].imm
+            if inst2.mnemonic == "add":
+                # assert inst2.cs.operands[2].type == CS_OP_IMM
+                if not inst2.cs.operands[2].type == CS_OP_IMM:
+                    continue
+                assert inst2.cs.operands[2].type == CS_OP_IMM
+                assert all([op.shift.value == 0 for op in inst2.cs.operands])
+                resolved_address += inst2.cs.operands[2].imm
                 inst2.mnemonic = "ldr"
-                inst2.op_str = f"{reg_name2}, [{reg_name2}]"
+                dereference_resolved = False
+            elif inst2.mnemonic == "ldr":
+                assert inst2.cs.operands[1].type == CS_OP_MEM
+                if not all([op.shift.value == 0 for op in inst2.cs.operands]):
+                    continue
+                resolved_address += inst2.cs.operands[1].mem.disp
+                dereference_resolved = True
+            elif inst2.mnemonic == "str":
+                # assert inst2.cs.operands[1].type == CS_OP_MEM
+                # if not all([op.shift.value == 0 for op in inst2.cs.operands]):
+                # continue
+                resolved_address += inst2.cs.operands[1].mem.disp
+                dereference_resolved = True
+            else:
+                continue
 
-        # resolved_address, adjust = self._adjust_target(
-            # container, resolved_address)
-        # inst.op_str = inst.op_str.replace(
-            # hex(value), "%d+.LC%x" % (adjust, resolved_address))
-        # print("[*] Adjusted: %x -- %d+.LC%x" %
-              # (inst.address, adjust, resolved_address))
 
-        if container.is_in_section(".rodata", resolved_address):
-            self.pot_sw_bases[function.start].add(resolved_address)
+            is_an_import = False
+            for rel in container.relocations[".dyn"]:
+                if rel['st_value'] == resolved_address or rel['offset'] == resolved_address:
+                    is_an_import = rel['name']
+                    break
+                elif resolved_address in container.plt:
+                    is_an_import = container.plt[resolved_address]
+                    break
+
+
+
+            reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
+            reg_name3 = inst2.cs.reg_name(inst2.cs.operands[1].reg)
+            debug(reg_name2)
+
+            if inst2.mnemonic == "str":
+                inst2.mnemonic =  "ldr"
+                inst2.op_str =  reg_name3 + f", =.LC%x" % (resolved_address)
+                inst2.instrument_after(InstrumentedInstruction(
+                    f"str {reg_name2}, [{reg_name3}]"))
+            elif is_an_import:
+                inst2.op_str =  reg_name2 + f", =%s" % (is_an_import)
+            else:
+                inst2.op_str =  reg_name2 + f", =.LC%x" % (resolved_address)
+                if dereference_resolved:
+                    if reg_name2.startswith("w"): reg_name2 = 'x' + reg_name2[1:] #XXX: fix this ugly hack
+                    inst2.instrument_after(InstrumentedInstruction(
+                        f"ldr {reg_name2}, [{reg_name2}]"))
+
+            self.xrefs[resolved_address] += [inst2.address]
+            if container.is_in_section(".rodata", resolved_address):
+                self.pot_sw_bases[function.start].add(resolved_address)
 
 
 
@@ -402,6 +437,10 @@ class Symbolizer():
 
                 if inst.mnemonic == "adrp":
                     self._adjust_global_access(container, function, edx, inst)
+
+                if inst.mnemonic == "adr":
+                    inst.op_str = inst.op_str.replace("#0x%x" % inst.cs.operands[1].imm, ".LC%x" % inst.cs.operands[1].imm)
+
 
                 mem_access, _ = inst.get_mem_access_op()
                 if not mem_access:

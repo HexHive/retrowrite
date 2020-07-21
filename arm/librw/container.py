@@ -162,6 +162,8 @@ class Function():
             if ins.mnemonic == "cbnz" or ins.mnemonic == "cbz":
                 ins.op_str = "%s, .LC%x" % (ins.cs.reg_name(ins.cs.operands[0].reg),
                         ins.cs.operands[1].imm)
+            if ins.mnemonic == "tbnz" or ins.mnemonic == "tbz":
+                ins.op_str = ins.op_str.replace("#0x%x" % ins.cs.operands[2].imm, ".LC%x" % ins.cs.operands[2].imm)
 
             self.cache.append(ins)
 
@@ -332,9 +334,13 @@ class DataSection():
         bytes_read = [x.value for x in self.cache[cacheoff:cacheoff + sz]]
         bytes_read_padded = bytes_read + [0]*(sz - len(bytes_read))
 
-        value = struct.unpack("<I", bytes(bytes_read_padded))[0]
-
-        return value
+        if sz == 4:
+            value = struct.unpack("<I", bytes(bytes_read_padded))[0]
+            return value
+        elif sz == 1:
+            return bytes_read[0]
+        else:
+            assert False
 
     def replace(self, address, sz, value):
         cacheoff = address - self.base
