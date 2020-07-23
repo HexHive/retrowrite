@@ -32,5 +32,10 @@ def get_access_size_arm(instruction):
             return (regsz, bool_load)
     return (acsz, bool_load)
 
+def is_reg_32bits(reg):
+    assert reg[0] in "wxhq"
+    return reg[0] == 'w'
+
+
 def _is_jump_conditional(opcode):
     return opcode.startswith("b.")

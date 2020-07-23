@@ -363,6 +363,8 @@ class Symbolizer():
 
         inst.mnemonic = "adrp"
         inst.op_str = "%s, .LC%x" % (reg_name, original)
+        inst.mnemonic = "" # we don't really want an ADRP in the middle of code, if possible
+        inst.op_str = ""
 
         for inst2 in to_fix:
             resolved_address = original = inst.cs.operands[1].imm

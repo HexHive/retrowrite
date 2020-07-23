@@ -13,7 +13,7 @@ from arm.librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 from arm.librw.analysis.stackframe import StackFrameAnalysis
 from arm.librw.util.logging import *
-from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm
+from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm, is_reg_32bits
 ASAN_SHADOW_OFF = 68719476736 # 0x1000000000
 
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
@@ -46,6 +46,7 @@ class Instrument():
         self.skip_instrument = set()
 
     def _get_subreg32(self, regname):
+        if is_reg_32bits(regname): return regname
         return self.regmap[regname]
 
     def instrument_init_array(self):
@@ -141,10 +142,13 @@ class Instrument():
         # ldr x0, [x1, x2, LSL#3]
         if mem_op.shift.value != 0:
             amnt = mem_op.shift.value
-            fix_lexp += [sp.LEXP_SHIFT.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=cs.reg_name(mem.index))]
+            to = asan_regs[0]
+            shift_reg = cs.reg_name(mem.index)
+            if is_reg_32bits(shift_reg): to = self._get_subreg32(asan_regs[0])
+            fix_lexp += [sp.LEXP_SHIFT.format(To=to, Res=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=shift_reg)]
         # ldr x0, [x1, x2]
         elif mem.index != 0:
-            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.index), amnt=cs.reg_name(mem.base))]
+            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=cs.reg_name(mem.index))]
         # ldr x0, [x1, #12]
         elif mem.disp != 0:
             fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
