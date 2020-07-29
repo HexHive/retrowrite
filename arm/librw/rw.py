@@ -9,8 +9,9 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 
 from arm.librw.util.logging import *
-from arm.librw.util.arm_util import _is_jump_conditional
+from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg
 from arm.librw.container import InstrumentedInstruction
+from arm.librw.emulation import Path
 
 
 class Rewriter():
@@ -154,22 +155,21 @@ class Symbolizer():
             self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
+        self.reverse_nexts(container)
         # Symbolize remaining memory accesses
-        self.symbolize_mem_accesses(container, context)
         self.symbolize_switch_tables(container, context)
+        self.symbolize_mem_accesses(container, context)
 
 
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
-            addr_to_idx = dict()
+            function.addr_to_idx = dict()
             for inst_idx, instruction in enumerate(function.cache):
-                addr_to_idx[instruction.address] = inst_idx
+                function.addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
-                # XXX: ARM
-                # ARM64_GRP_CALL
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
-                is_call = CS_GRP_CALL in instruction.cs.groups
+                is_call = "bl" in instruction.cs.mnemonic
 
                 if not (is_jmp or is_call):
                     # Simple, next is idx + 1
@@ -183,7 +183,6 @@ class Symbolizer():
 
                 instruction.cf_leaves_fn = False
 
-                # XXX: Capstone does not recognize "bl" (branch and link) as a call
                 if is_jmp and _is_jump_conditional(instruction.mnemonic):
                     if inst_idx + 1 < len(function.cache):
                         # Add natural flow edge
@@ -201,17 +200,17 @@ class Symbolizer():
                         # Out of function bounds, no idea what to do!
                         function.nexts[inst_idx].append("undef")
 
-                # XXX: what if we jump on a register value i.e. we don't know the target?
-                if instruction.cs.operands[0].type == CS_OP_IMM:
-                    target = instruction.cs.operands[0].imm
+                target = 0
+                if instruction.cs.operands[-1].type == CS_OP_IMM: # b 0xf20
+                    target = instruction.cs.operands[-1].imm
+                elif instruction.cs.operands[-1].type == CS_OP_REG: # br x0
+                    function.switches += [instruction.address]
+                if target:
                     # Check if the target is in .text section.
                     if container.is_in_section(".text", target):
                         function.bbstarts.add(target)
-                        instruction.op_str = ".L%x" % (target)
+                        instruction.op_str = instruction.op_str.replace("#0x%x" % target, ".LC%x" % target)
                     elif target in container.plt:
-                        #XXX: figure out why @PLT is wrong, gcc does not like it
-                        # instruction.op_str = "{}@PLT".format(
-                            # container.plt[target])
                         instruction.op_str = "{}".format(
                             container.plt[target])
                     else:
@@ -230,8 +229,8 @@ class Symbolizer():
                             print("[x] Missed call target: %x" % (target))
 
                     if is_jmp:
-                        if target in addr_to_idx:
-                            idx = addr_to_idx[target]
+                        if target in function.addr_to_idx:
+                            idx = function.addr_to_idx[target]
                             function.nexts[inst_idx].append(idx)
                         else:
                             instruction.cf_leaves_fn = True
@@ -239,11 +238,84 @@ class Symbolizer():
                 elif is_jmp:
                     function.nexts[inst_idx].append("undef")
 
+    def reverse_nexts(self, container):
+        for _, function in container.functions.items():
+            function.prevs = {}
+            for idx, nexts in function.nexts.items():
+                for nexti in nexts:
+                    function.prevs[nexti] = function.prevs.get(nexti, [])
+                    function.prevs[nexti].append(idx)
+
+    def resolve_register_value(self, register, function, instr):
+        debug(f"Instructions leading up to {hex(instr.address)}")
+        inst_idx = function.addr_to_idx[instr.address]
+        reg_name = instr.cs.reg_name(register)
+        paths = [Path(function, inst_idx, reg_pool=[register], exprvalue=f"{reg_name}")]
+        paths_finished = []
+        while len(paths) > 0:
+            p = paths[0]
+            if inst_idx == 0:  # we got to the start of the function
+                paths_finished += [paths[0]]
+                del paths[0]
+                continue
+
+            prevs = function.prevs[inst_idx]
+            if len(prevs) > 1:
+                print("MULTIPLE prevs: ", prevs)
+            inst_idx = prevs[0]
+            instr = function.cache[inst_idx]
+            regs_write = instr.cs.regs_access()[1]
+            if any([reg in p.reg_pool for reg in regs_write]):
+                p.emulate(instr)
+                debug(f"step: {instr.cs} - expr: {p.expr}")
+
+        for p in paths_finished:
+            p.expr.simplify()
+            debug("FINAL " + str(p.expr))
+            return p.expr
+
+
     def symbolize_switch_tables(self, container, context):
-        return 0
         rodata = container.sections.get(".rodata", None)
         if not rodata:
-            return
+            assert False
+        for _, function in container.functions.items():
+            for jump in function.switches:
+                inst_idx = function.addr_to_idx[jump]
+                instr = function.cache[inst_idx]
+                reg = instr.cs.operands[0].reg
+                debug(f"Analyzing switch on {instr.cs}, {instr.cs.reg_name(reg)}")
+                expr = self.resolve_register_value(reg, function, instr)
+
+
+                if expr.left.mem and expr.left.right == None: # [addr]
+                    addr = int(str(expr.left.left))
+                    value = rodata.read_at(addr, 8)
+                    swlbl = ".LC%x" % (value,)
+                    rodata.replace(addr, 8, swlbl)
+                    continue
+
+                # Super advanced pattern matching
+                # import IPython; IPython.embed() 
+                base_case = expr.left.left
+                debug(f"BASE CASE: {base_case}")
+                size = expr.left.right.left.mem
+                jmptbl = int(str(expr.left.right.left.left))
+                shift = expr.left.right.right
+                debug(f"SHIFT: {shift}")
+                debug(f"JMPTBL: {jmptbl}")
+                debug(f"SIZE: {size}")
+
+                cases = 10
+                for i in range(cases):
+                    value = rodata.read_at(jmptbl + i*size, size, signed=True)
+                    debug("VALUE:" + str(value))
+                    addr = base_case + value*4
+                    swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
+                    rodata.replace(jmptbl + i*size, size, swlbl)
+
+
+
 
         all_bases = set([x for _, y in self.pot_sw_bases.items() for x in y])
 
@@ -348,18 +420,46 @@ class Symbolizer():
     def _adjust_global_access(self, container, function, edx, inst):
         # global variable addresses are dynamically built in multiple instructions
         # here we try to resolve the address with some capstone trickery and shady assumptions
-        reg_name = inst.reg_writes()[0]
+
         original = inst.cs.operands[1].imm
+        reg_name = inst.reg_writes()[0]
+
+        possible_sections = []
+        for name,s in container.sections.items():
+            if s.base // 0x1000 == original // 0x1000 or \
+               s.base <= original < s.base + s.sz:
+                possible_sections += [name]
+
+        if len(possible_sections) == 1:
+            secname = possible_sections[0]
+            diff = container.sections[secname].base - original
+            op = '-' if diff > 0 else '+'
+            inst.mnemonic = "ldr"
+            inst.op_str = "%s, =(%s %c 0x%x)" % (reg_name, secname, op, abs(diff))
+            return
+
+        debug(f"Global access at {inst}, multiple sections possible: {possible_sections}, trying to resolve address...")
+
+
         dereference_resolved = False
         to_fix = []
-        for inst2 in function.cache[edx:]:
-            if inst2.address <= inst.address: continue
+        visited = [0]*function.sz
+        from collections import deque
+        paths = deque(function.nexts[edx])
+        while len(paths):
+            idx = paths.pop()
+            if not isinstance(idx, int): continue
+            if visited[idx]: continue
+            visited[idx] = 1
+            inst2 = function.cache[idx]
             if reg_name in inst2.reg_reads():
-                debug(f"read in {inst2}!!!")
                 to_fix += [inst2]
-            if reg_name in inst2.reg_writes():
-                debug(f"wrote in {inst2}!!!")
-                break
+            if reg_name in inst2.reg_writes_common():
+                continue  # we overwrote the register we're trying to resolve, so abandon this path
+            for n in function.nexts[idx]:
+                paths.append(n)
+
+
 
         inst.mnemonic = "adrp"
         inst.op_str = "%s, .LC%x" % (reg_name, original)
@@ -383,7 +483,7 @@ class Symbolizer():
                     continue
                 resolved_address += inst2.cs.operands[1].mem.disp
                 dereference_resolved = True
-            elif inst2.mnemonic == "str":
+            elif inst2.mnemonic.startswith("str"):
                 # assert inst2.cs.operands[1].type == CS_OP_MEM
                 # if not all([op.shift.value == 0 for op in inst2.cs.operands]):
                 # continue
@@ -406,16 +506,18 @@ class Symbolizer():
 
             reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
             reg_name3 = inst2.cs.reg_name(inst2.cs.operands[1].reg)
-            debug(reg_name2)
 
-            if inst2.mnemonic == "str":
+            if inst2.mnemonic.startswith("str"):
+                old_mnemonic = inst2.mnemonic
                 inst2.mnemonic =  "ldr"
                 inst2.op_str =  reg_name3 + f", =.LC%x" % (resolved_address)
                 inst2.instrument_after(InstrumentedInstruction(
-                    f"str {reg_name2}, [{reg_name3}]"))
+                    f"{old_mnemonic} {reg_name2}, [{reg_name3}]"))
             elif is_an_import:
                 inst2.op_str =  reg_name2 + f", =%s" % (is_an_import)
             else:
+                if is_reg_32bits(reg_name2): # because of a gcc bug? we cannot have ldr w0, =.label, only x0
+                    reg_name2 = get_64bits_reg(reg_name2)
                 inst2.op_str =  reg_name2 + f", =.LC%x" % (resolved_address)
                 if dereference_resolved:
                     if reg_name2.startswith("w"): reg_name2 = 'x' + reg_name2[1:] #XXX: fix this ugly hack
@@ -521,7 +623,6 @@ class Symbolizer():
             if int(value) in container.ignore_function_addrs:
                 return
             section.replace(rel['offset'], 8, label)
-            debug(f"replaced {hex(rel['offset'])} with {label}")
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
             # NOP
             pass

@@ -1,4 +1,7 @@
-from capstone import CS_OP_REG
+from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM, CS_OP_REG
+
+cs = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+cs.detail = True
 
 def get_reg_size_arm(regname):
     sizes = {
@@ -36,6 +39,13 @@ def is_reg_32bits(reg):
     assert reg[0] in "wxhq"
     return reg[0] == 'w'
 
+def get_64bits_reg(reg):
+    assert reg[0] == "w"
+    return "x" + reg[1:]
+
 
 def _is_jump_conditional(opcode):
-    return opcode.startswith("b.")
+    return opcode.startswith("b.") or opcode.startswith("cb") or opcode.startswith("tb")
+
+def reg_name(reg):
+    return cs.reg_name(reg)

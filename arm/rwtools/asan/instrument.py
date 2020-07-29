@@ -309,21 +309,12 @@ class Instrument():
                 # Do not instrument instrumented instructions
                 if isinstance(instruction, InstrumentedInstruction):
                     continue
-                # Do not instrument nops
-                if instruction.mnemonic.startswith("nop"):
-                    continue
-                # Do not instrument lea
-                if instruction.mnemonic.startswith("lea"):
-                    continue
                 if instruction.address in self.skip_instrument:
                     continue
+
                 # Do not instrument stack canaries
                 # XXX: if instruction.op_str.startswith(sp.CANARY_CHECK):
                     # XXX: continue
-
-                # XXX: THIS IS A TODO for more accurate check.
-                if instruction.mnemonic.startswith("rep stos"):
-                    pass
 
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
@@ -341,7 +332,7 @@ class Instrument():
                 if idx in fn.analysis['free_registers']:
                     free_registers = fn.analysis['free_registers'][idx]
                 else:
-                    print("[x] Missing free reglist in cache. Regenerate!")
+                    print("[x] Missing free reglist in cache for function "+fn.name)
                     free_registers = list()
 
                 iinstr = self.get_mem_instrumentation(

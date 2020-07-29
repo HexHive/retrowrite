@@ -25,12 +25,12 @@ class RegisterAnalysis(object):
         # XXX: ARM
         # Caller saved register list, These are registers that cannot be
         # clobbered and therefore are 'used'.
-        self.used_regs['ret'] = set([
-            "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
-            "rax", "rdx", "r10", "r11", "r8", "r9", "rcx", "rdi", "rsi"])
-        self.used_regs['call'] = set([
-            "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
-            "rdi", "rsi", "rdx", "rcx", "r8", "r9", "rax"])
+        # self.used_regs['ret'] = set([
+            # "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
+            # "rax", "rdx", "r10", "r11", "r8", "r9", "rcx", "rdi", "rsi"])
+        # self.used_regs['call'] = set([
+            # "rbx", "rsp", "rbp", "r12", "r13", "r14", "r15",
+            # "rdi", "rsi", "rdx", "rcx", "r8", "r9", "rax"])
 
     def _init_reg_pool(self):
         # Possible extension: add xmm registers into the pool
@@ -110,7 +110,11 @@ class RegisterAnalysis(object):
     def analyze(container):
         for addr, function in container.functions.items():
             ra = RegisterAnalysis()
+            print("Analyzing function " + function.name)
             ra.analyze_function(function)
+            if len(ra.free_regs) < 4: 
+                print(ra.free_regs)
+                # exit(1)
             function.analysis[RegisterAnalysis.KEY] = ra.free_regs
 
     def analyze_function(self, function):

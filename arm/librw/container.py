@@ -136,10 +136,13 @@ class Function():
         self.bytes = bytes
         self.bbstarts = set()
         self.bind = bind
+        self.switches = list()
+        self.addr_to_idx = dict()
 
         # Populated during symbolization.
         # Invalidated by any instrumentation.
         self.nexts = defaultdict(list)
+        self.prevs = defaultdict(list)
 
         self.bbstarts.add(start)
 
@@ -156,15 +159,6 @@ class Function():
         assert not self.cache
         for decoded in disasm.disasm_bytes(self.bytes, self.start):
             ins = InstructionWrapper(decoded)
-
-            # we need to fix cbnz bc it is pc-relative addressing and capstone does not give us that
-            #XXX: move to symbolize_cf_transfer
-            if ins.mnemonic == "cbnz" or ins.mnemonic == "cbz":
-                ins.op_str = "%s, .LC%x" % (ins.cs.reg_name(ins.cs.operands[0].reg),
-                        ins.cs.operands[1].imm)
-            if ins.mnemonic == "tbnz" or ins.mnemonic == "tbz":
-                ins.op_str = ins.op_str.replace("#0x%x" % ins.cs.operands[2].imm, ".LC%x" % ins.cs.operands[2].imm)
-
             self.cache.append(ins)
 
 
@@ -272,6 +266,12 @@ class InstructionWrapper():
         regs = self.cs.regs_access()[1]
         return [self.cs.reg_name(x) for x in regs]
 
+    def reg_writes_common(self):
+        if self.mnemonic.startswith("bl"): # assume the function called uses all temporary registers
+            return ["x"+str(i) for i in range(19)] 
+        regs = self.cs.regs_access()[1]
+        return [self.cs.reg_name(x) for x in regs]
+
     def instrument_before(self, iinstr, order=None):
         if order:
             self.before.insert(order, iinstr)
@@ -323,7 +323,7 @@ class DataSection():
             'sz': sz,
         })
 
-    def read_at(self, address, sz):
+    def read_at(self, address, sz, signed=False):
         cacheoff = address - self.base
         if any([
                 not isinstance(x.value, int)
@@ -334,13 +334,15 @@ class DataSection():
         bytes_read = [x.value for x in self.cache[cacheoff:cacheoff + sz]]
         bytes_read_padded = bytes_read + [0]*(sz - len(bytes_read))
 
-        if sz == 4:
-            value = struct.unpack("<I", bytes(bytes_read_padded))[0]
-            return value
-        elif sz == 1:
-            return bytes_read[0]
-        else:
-            assert False
+        # https://docs.python.org/2/library/struct.html
+        if sz == 1: letter = "B"
+        elif sz == 2: letter = "H"
+        elif sz == 4: letter = "I"
+        elif sz == 8: letter = "Q"
+        if signed: letter = letter.lower()
+        if letter == 'b': letter = 'c' # special case
+
+        return struct.unpack("<" + letter, bytes(bytes_read_padded))[0]
 
     def replace(self, address, sz, value):
         cacheoff = address - self.base
