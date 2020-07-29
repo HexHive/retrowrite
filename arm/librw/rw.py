@@ -89,7 +89,6 @@ class Rewriter():
 class Symbolizer():
     def __init__(self):
         self.bases = set()
-        self.pot_sw_bases = defaultdict(set)
         self.xrefs = defaultdict(list)
         self.symbolized = set()
 
@@ -145,7 +144,6 @@ class Symbolizer():
                         hex(value), ".LC%x" % (ripbase + value))
                     if ".rodata" in rel["name"]:
                         self.bases.add(ripbase + value)
-                        self.pot_sw_bases[fn.start].add(ripbase + value)
                 else:
                     print("[*] Possible incorrect handling of relocation!")
                     value = mem_access.disp
@@ -287,106 +285,41 @@ class Symbolizer():
                 debug(f"Analyzing switch on {instr.cs}, {instr.cs.reg_name(reg)}")
                 expr = self.resolve_register_value(reg, function, instr)
 
+                # Super advanced pattern matching
+                # import IPython; IPython.embed() 
 
-                if expr.left.mem and expr.left.right == None: # [addr]
+                # x0
+                if isinstance(expr.left, str):
+                    continue
+
+                # [addr]
+                if expr.left.mem and expr.left.right == None: 
                     addr = int(str(expr.left.left))
                     value = rodata.read_at(addr, 8)
                     swlbl = ".LC%x" % (value,)
                     rodata.replace(addr, 8, swlbl)
                     continue
 
-                # Super advanced pattern matching
-                # import IPython; IPython.embed() 
-                base_case = expr.left.left
-                debug(f"BASE CASE: {base_case}")
-                size = expr.left.right.left.mem
-                jmptbl = int(str(expr.left.right.left.left))
-                shift = expr.left.right.right
-                debug(f"SHIFT: {shift}")
-                debug(f"JMPTBL: {jmptbl}")
-                debug(f"SIZE: {size}")
+                # first_case_addr + [ jmptbl_addr + ??? ]
+                if expr.left.right and expr.left.right.left and expr.left.right.left.mem:
+                    base_case = expr.left.left
+                    debug(f"BASE CASE: {base_case}")
+                    size = expr.left.right.left.mem
+                    jmptbl = int(str(expr.left.right.left.left))
+                    shift = expr.left.right.right
+                    debug(f"SHIFT: {shift}")
+                    debug(f"JMPTBL: {jmptbl}")
+                    debug(f"SIZE: {size}")
 
-                cases = 10
-                for i in range(cases):
-                    value = rodata.read_at(jmptbl + i*size, size, signed=True)
-                    debug("VALUE:" + str(value))
-                    addr = base_case + value*4
-                    swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
-                    rodata.replace(jmptbl + i*size, size, swlbl)
-
-
+                    cases = 10
+                    for i in range(cases):
+                        value = rodata.read_at(jmptbl + i*size, size, signed=True)
+                        debug("VALUE:" + str(value))
+                        addr = base_case + value*4
+                        swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
+                        rodata.replace(jmptbl + i*size, size, swlbl)
 
 
-        all_bases = set([x for _, y in self.pot_sw_bases.items() for x in y])
-
-        for faddr, swbases in self.pot_sw_bases.items():
-            fn = container.functions[faddr]
-
-            #XXX: jump tables do not work like this anymore :(
-            # for swbase in sorted(swbases, reverse=True):
-                # value = rodata.read_at(swbase, 4)
-                # if not value:
-                    # continue
-
-                # value = (value + swbase) & 0xffffffff
-                # debug(hex(swbase) +  hex(value))
-                # # if not fn.is_valid_instruction(value):
-                    # # continue
-
-                # debug(hex(swbase))
-                # # We have a valid switch base now.
-                # swlbl = ".LC%x-.LC%x" % (value, swbase)
-                # rodata.replace(swbase, 4, swlbl)
-
-                # # Symbolize as long as we can
-                # for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
-                    # if any([x in all_bases for x in range(slot, slot + 4)]):
-                        # break
-
-                    # value = rodata.read_at(slot, 4)
-                    # if not value:
-                        # break
-
-                    # value = (value + swbase) & 0xFFFFFFFF
-                    # if not fn.is_valid_instruction(value):
-                        # break
-
-                    # swlbl = ".LC%x-.LC%x" % (value, swbase)
-                    # rodata.replace(slot, 4, swlbl)
-
-            for swbase in sorted(swbases, reverse=True):
-                if swbase != 0x1c00: continue
-                for addr in self.xrefs[swbase]:
-                    debug(f"OMG {hex(addr)}")
-
-                    value = rodata.read_at(swbase, 1)
-                    # if not value:
-                        # continue
-
-                    value = (value*4 + addr) & 0xffffffff
-                    # if not fn.is_valid_instruction(value):
-                        # continue
-
-                    # We have a valid switch base now.
-                    swlbl = ".LC%x-.LC%x" % (value, addr)
-                    rodata.replace(swbase, 4, swlbl)
-
-                    # Symbolize as long as we can
-                    for slot in range(swbase + 4, rodata.base + rodata.sz, 4):
-                        if any([x in all_bases for x in range(slot, slot + 4)]):
-                            break
-
-                        value = rodata.read_at(slot, 4)
-                        if not value:
-                            break
-
-                        value = (value + swbase) & 0xFFFFFFFF
-                        if not fn.is_valid_instruction(value):
-                            break
-
-                        swlbl = ".LC%x-.LC%x" % (value, swbase)
-                        rodata.replace(slot, 4, swlbl)
-        # exit(1)
 
     def _adjust_target(self, container, target):
         # Find the nearest section
@@ -417,7 +350,24 @@ class Symbolizer():
 
         return False
 
+    def _adjust_adrp_section_pointer(self, container, secname, original, instruction):
+        # we adjust things like adrp x0, 0x10000 (start of .bss)
+        # to stuff like  ldr x0, =(.bss - (offset))
+        # to make global variables work
+        assert instruction.mnemonic == "adrp"
+        if secname == ".text":
+            base = container.loader.elffile.get_section_by_name(".text")["sh_addr"]
+        else:
+            base = container.sections[secname].base
+        reg_name = instruction.reg_writes()[0]
+        diff = base - original
+        op = '-' if diff > 0 else '+'
+        instruction.mnemonic = "ldr"
+        instruction.op_str = "%s, =(%s %c 0x%x)" % (reg_name, secname, op, abs(diff))
+
+
     def _adjust_global_access(self, container, function, edx, inst):
+        # there is an adrp somewhere in the code, this means global variable...
         # global variable addresses are dynamically built in multiple instructions
         # here we try to resolve the address with some capstone trickery and shady assumptions
 
@@ -432,16 +382,15 @@ class Symbolizer():
 
         if len(possible_sections) == 1:
             secname = possible_sections[0]
-            diff = container.sections[secname].base - original
-            op = '-' if diff > 0 else '+'
-            inst.mnemonic = "ldr"
-            inst.op_str = "%s, =(%s %c 0x%x)" % (reg_name, secname, op, abs(diff))
-            return
+            if secname != ".got":  # there are import relocations in the .got, skip it
+                self._adjust_adrp_section_pointer(container, secname, original, inst)
+                return
 
         debug(f"Global access at {inst}, multiple sections possible: {possible_sections}, trying to resolve address...")
 
+        # if we got here, it's bad, as we're not sure which section the global variable is in.
+        # We try to resolve all possible addresses by simulating all possible control flow paths.
 
-        dereference_resolved = False
         to_fix = []
         visited = [0]*function.sz
         from collections import deque
@@ -452,6 +401,9 @@ class Symbolizer():
             if visited[idx]: continue
             visited[idx] = 1
             inst2 = function.cache[idx]
+            # if inst2.address == 0x2050:
+                # self.resolve_register_value(inst2.cs.regs_access()[0][0], function, inst2)
+                # exit(1)
             if reg_name in inst2.reg_reads():
                 to_fix += [inst2]
             if reg_name in inst2.reg_writes_common():
@@ -460,38 +412,56 @@ class Symbolizer():
                 paths.append(n)
 
 
-
-        inst.mnemonic = "adrp"
-        inst.op_str = "%s, .LC%x" % (reg_name, original)
-        inst.mnemonic = "" # we don't really want an ADRP in the middle of code, if possible
-        inst.op_str = ""
-
+        resolved_addresses = []
         for inst2 in to_fix:
-            resolved_address = original = inst.cs.operands[1].imm
             if inst2.mnemonic == "add":
-                # assert inst2.cs.operands[2].type == CS_OP_IMM
-                if not inst2.cs.operands[2].type == CS_OP_IMM:
-                    continue
                 assert inst2.cs.operands[2].type == CS_OP_IMM
                 assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                resolved_address += inst2.cs.operands[2].imm
-                inst2.mnemonic = "ldr"
-                dereference_resolved = False
+                resolved_addresses += [(inst2, original + inst2.cs.operands[2].imm)]
             elif inst2.mnemonic == "ldr":
                 assert inst2.cs.operands[1].type == CS_OP_MEM
                 if not all([op.shift.value == 0 for op in inst2.cs.operands]):
                     continue
-                resolved_address += inst2.cs.operands[1].mem.disp
-                dereference_resolved = True
+                resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
             elif inst2.mnemonic.startswith("str"):
-                # assert inst2.cs.operands[1].type == CS_OP_MEM
-                # if not all([op.shift.value == 0 for op in inst2.cs.operands]):
-                # continue
-                resolved_address += inst2.cs.operands[1].mem.disp
-                dereference_resolved = True
+                resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
             else:
                 continue
 
+        possible_sections = set()
+        for _, addr in resolved_addresses:
+            sec = container.section_of_address(addr)
+            if sec: possible_sections.add(sec.name)
+
+        print(resolved_addresses, str(list(possible_sections)))
+        if len(possible_sections) == 1:
+            secname = list(possible_sections)[0]
+            if secname != ".got":
+                self._adjust_adrp_section_pointer(container, secname, original, inst)
+                debug(f"We're good, false alarm, the only possible section is: {secname}. Nice!")
+                return
+
+
+        # if we got here, it's *very* bad, as we're *still* not sure which section the global variable is in.
+        # As our last hope we try to ugly-hack-patch all instructions that use the register with the
+        # global address loaded (instructions in the to_fix list)
+
+
+        # we don't really want an ADRP in the middle of code, if possible
+        # so we erase it
+        inst.mnemonic = ""
+        inst.op_str = ""
+
+        for inst2, resolved_address in resolved_addresses:
+
+            if inst2.mnemonic not in ["add", "ldr"] and not inst2.mnemonic.startswith("str"):
+                debug(f"Warning: skipping {inst2} as not supported in global address emulation")
+                continue
+
+            dereference_resolved = True
+            if inst2.mnemonic == "add":
+                inst2.mnemonic = "ldr"
+                dereference_resolved = False
 
             is_an_import = False
             for rel in container.relocations[".dyn"]:
@@ -501,8 +471,7 @@ class Symbolizer():
                 elif resolved_address in container.plt:
                     is_an_import = container.plt[resolved_address]
                     break
-
-
+            print(inst2.cs, is_an_import)
 
             reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
             reg_name3 = inst2.cs.reg_name(inst2.cs.operands[1].reg)
@@ -525,8 +494,6 @@ class Symbolizer():
                         f"ldr {reg_name2}, [{reg_name2}]"))
 
             self.xrefs[resolved_address] += [inst2.address]
-            if container.is_in_section(".rodata", resolved_address):
-                self.pot_sw_bases[function.start].add(resolved_address)
 
 
 
@@ -596,8 +563,6 @@ class Symbolizer():
                             print("[*] Adjusted: %x -- %d+.LC%x" %
                                   (inst.address, adjust, target))
 
-                    if container.is_in_section(".rodata", target):
-                        self.pot_sw_bases[function.start].add(target)
                     debug(f"TO:   {inst}")
 
     def _handle_relocation(self, container, section, rel):
@@ -623,6 +588,17 @@ class Symbolizer():
             if int(value) in container.ignore_function_addrs:
                 return
             section.replace(rel['offset'], 8, label)
+        elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_GLOB_DAT"]:
+            debug(rel['addend'])
+            debug(rel['offset'])
+            debug(rel['st_value'])
+            debug(rel)
+            # exit(1)
+            # value = rel['addend']
+            # label = ".LC%x" % value
+            # if int(value) in container.ignore_function_addrs:
+                # return
+            # section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
             # NOP
             pass

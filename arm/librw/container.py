@@ -104,7 +104,9 @@ class Container():
         for _, section in self.sections.items():
             if section.base <= addr < section.base + section.sz:
                 return section
-        # XXX: This does not check for .text section
+        # check for .text, as container.sections has only datasections
+        if self.is_in_section(".text", addr):
+            return self.loader.elffile.get_section_by_name(".text")
         return None
 
     def function_of_address(self, addr):
@@ -256,6 +258,8 @@ class InstructionWrapper():
         # Handle nop
         if self.mnemonic.startswith("nop"):
             return []
+        if self.mnemonic.startswith("movz"):
+            return []   # strange behaviour from capstone, movz does not read any regs
         regs = self.cs.regs_access()[0]
         return [self.cs.reg_name(x) for x in regs]
 
@@ -269,8 +273,7 @@ class InstructionWrapper():
     def reg_writes_common(self):
         if self.mnemonic.startswith("bl"): # assume the function called uses all temporary registers
             return ["x"+str(i) for i in range(19)] 
-        regs = self.cs.regs_access()[1]
-        return [self.cs.reg_name(x) for x in regs]
+        return self.reg_writes()
 
     def instrument_before(self, iinstr, order=None):
         if order:
