@@ -16,7 +16,11 @@ class Loader():
         self.fd = open(fname, 'rb')
         self.elffile = ELFFile(self.fd)
         self.container = Container()
-        print(self.elffile['e_type'])
+
+    def is_pie(self):
+        base_address = next(seg for seg in self.elffile.iter_segments() 
+                                        if seg['p_type'] == "PT_LOAD")['p_vaddr']
+        return self.elffile['e_type'] == 'ET_DYN' and base_address == 0
 
     def load_functions(self, fnlist):
         section = self.elffile.get_section_by_name(".text")
