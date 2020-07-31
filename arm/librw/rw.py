@@ -11,7 +11,7 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 from arm.librw.util.logging import *
 from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg
 from arm.librw.container import InstrumentedInstruction
-from arm.librw.emulation import Path
+from arm.librw.emulation import Path, Expr
 
 
 class Rewriter():
@@ -264,6 +264,7 @@ class Symbolizer():
             instr = function.cache[inst_idx]
             regs_write = instr.cs.regs_access()[1]
             if any([reg in p.reg_pool for reg in regs_write]):
+                debug(f"next: {instr.cs}")
                 p.emulate(instr)
                 debug(f"step: {instr.cs} - expr: {p.expr}")
 
@@ -293,7 +294,7 @@ class Symbolizer():
                     continue
 
                 # [addr]
-                if expr.left.mem and expr.left.right == None: 
+                elif expr.left.mem and expr.left.right == None: 
                     addr = int(str(expr.left.left))
                     value = rodata.read_at(addr, 8)
                     swlbl = ".LC%x" % (value,)
@@ -301,7 +302,8 @@ class Symbolizer():
                     continue
 
                 # first_case_addr + [ jmptbl_addr + ??? ]
-                if expr.left.right and expr.left.right.left and expr.left.right.left.mem:
+                elif isinstance(expr.left.right, Expr) and expr.left.right.left \
+                    and expr.left.right.left.mem and isinstance(expr.left.right.left.left, int):
                     base_case = expr.left.left
                     debug(f"BASE CASE: {base_case}")
                     size = expr.left.right.left.mem
@@ -318,6 +320,11 @@ class Symbolizer():
                         addr = base_case + value*4
                         swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
                         rodata.replace(jmptbl + i*size, size, swlbl)
+
+                else:
+                    critical(f"JUMP TABLE at {hex(instr.address)} impossible to recognize!")
+                    critical(f"Potential crashes in function {function.name}")
+                    critical(f"final expression: {expr}")
 
 
 
