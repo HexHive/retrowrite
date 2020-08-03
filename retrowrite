@@ -4,8 +4,8 @@ import argparse
 import json
 import tempfile
 import subprocess
-
-
+import os
+import sys
 
 def load_analysis_cache(loader, outfile):
     with open(outfile + ".analysis_cache") as fd:
@@ -95,8 +95,8 @@ if __name__ == "__main__":
         "--kcov", action='store_true', help="Instrument the kernel module with kcov")
     argp.add_argument("-c", "--cache", action='store_true',
                       help="Save/load register analysis cache (only used with --asan)")
-
-
+    argp.add_argument("--ignorepie", dest="ignorepie", action='store_true', help="Ignore position-independent-executable check (use with caution)")
+    argp.set_defaults(ignorepie=False)
     args = argp.parse_args()
 
     if args.kernel:
@@ -121,6 +121,11 @@ if __name__ == "__main__":
 
 
     loader = Loader(args.bin)
+    if loader.is_pie() == False and args.ignorepie == False:
+        print("***** RetroWrite requires a position-independent executable. *****")
+        print("It looks like %s is not position independent" % args.bin)
+        print("If you really want to continue, because you think retrowrite has made a mistake, pass --ignorepie.")
+        sys.exit(1)
 
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
