@@ -1,4 +1,5 @@
 import argparse
+import sys
 from collections import defaultdict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
@@ -388,10 +389,17 @@ if __name__ == "__main__":
 
     argp.add_argument("bin", type=str, help="Input binary to load")
     argp.add_argument("outfile", type=str, help="Symbolized ASM output")
+    argp.add_argument("--ignorepie", dest="ignorepie", action='store_true', help="Ignore position-independent-executable check (use with caution)")
+    argp.set_defaults(ignorepie=False)
 
     args = argp.parse_args()
 
     loader = Loader(args.bin)
+
+    if loader.is_pie() == False and args.ignorepie == False:
+        print("RetroWrite requires a position-independent executable.")
+        print("It looks like %s is not position independent" % args.bin)
+        sys.Exit(1)
 
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
