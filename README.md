@@ -56,8 +56,20 @@ optional arguments:
   -k, --kernel    Instrument a kernel module
   --kcov          Instrument the kernel module with kcov
   -c, --cache     Save/load register analysis cache (only used with --asan)
+  --ignorepie     Ignore position-independent-executable check (use with
+                  caution)
 
 ```
+
+In case you load a non position independent code you will get the following message:
+```
+(retro) $ retrowrite stack stack.c 
+***** RetroWrite requires a position-independent executable. *****
+It looks like stack is not position independent
+If you really want to continue, because you think retrowrite has made a mistake, pass --ignorepie.
+```
+In the case you think retrowrite is mistaking you can use the argument `--ignorepie`.
+
 
 ## Retrowrite
 ### Quick Usage Guide
@@ -107,6 +119,9 @@ using any compiler, example:
 
 `gcc ls-basan-instrumented.s -lasan -o ls-basan-instrumented`
 
+**debug** in case you get the error `undefined reference to \`__asan_init_v4'` , 
+replace "asan_init_v4" by "asan_init", the following command can help you do that:
+```sed -i 's/asan_init_v4/asan_init/g'```
 
 ##### b. Generate Symbolized Assembly
 
