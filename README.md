@@ -119,9 +119,9 @@ using any compiler, example:
 
 `gcc ls-basan-instrumented.s -lasan -o ls-basan-instrumented`
 
-**debug** in case you get the error `undefined reference to \`__asan_init_v4'` , 
-replace "asan_init_v4" by "asan_init", the following command can help you do that:
-```sed -i 's/asan_init_v4/asan_init/g'```
+**debug** in case you get the error ```undefined reference to `__asan_init_v4'``` , 
+replace "asan_init_v4" by "asan_init" in the assembly file, the following command can help you do that:
+```sed -i 's/asan_init_v4/asan_init/g' ls-basan-instrumented.s```
 
 ##### b. Generate Symbolized Assembly
 
