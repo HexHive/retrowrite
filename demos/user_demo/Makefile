@@ -1,11 +1,14 @@
 CC=clang
-OPT=-O0 -ggdb -Wall -Wpedantic -Wextra -fPIC
+OPT=-O0 -ggdb -Wall -Wpedantic -Wextra -fPIC -fPIE -pie
+
+all: heap stack
 
 heap: heap.c
 	${CC} ${OPT} heap.c -o heap
 
 heap.asan: heap
 	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./heap ./heap.asan
+	sed -i 's/asan_init_v4/asan_init/g' heap.asan.s
 	${CC} heap.asan.s -lasan -o heap.asan
 
 .PHONY=heaptest
@@ -20,6 +23,7 @@ stack: stack.c
 
 stack.asan: stack
 	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
+	sed -i 's/asan_init_v4/asan_init/g' stack.asan.s
 	${CC} stack.asan.s -lasan -o stack.asan
 
 .PHONY=stacktest
