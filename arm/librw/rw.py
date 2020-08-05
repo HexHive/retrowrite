@@ -273,6 +273,17 @@ class Symbolizer():
             debug("FINAL " + str(p.expr))
             return p.expr
 
+    def _memory_read(self, container, addr, size, signed=False):
+        sec = container.section_of_address(addr)
+        if sec.name != ".rodata": 
+            debug(f"WARNING: changing value not in rodata but in {sec.name}")
+        return sec.read_at(addr, size, signed)
+
+    def _memory_replace(self, container, addr, size, value):
+        sec = container.section_of_address(addr)
+        if sec.name != ".rodata": 
+            debug(f"WARNING: changing value not in rodata but in {sec.name}")
+        sec.replace(addr, size, value)
 
     def symbolize_switch_tables(self, container, context):
         rodata = container.sections.get(".rodata", None)
@@ -296,9 +307,9 @@ class Symbolizer():
                 # [addr]
                 elif expr.left.mem and expr.left.right == None: 
                     addr = int(str(expr.left.left))
-                    value = rodata.read_at(addr, 8)
-                    swlbl = ".LC%x" % (value,)
-                    rodata.replace(addr, 8, swlbl)
+                    value = self._memory_read(container, addr, 8)
+                    # swlbl = ".LC%x" % (value,)
+                    # self._memory_replace(container, addr, 8, swlbl)
                     continue
 
                 # first_case_addr + [ jmptbl_addr + ??? ]
@@ -315,11 +326,11 @@ class Symbolizer():
 
                     cases = 10
                     for i in range(cases):
-                        value = rodata.read_at(jmptbl + i*size, size, signed=True)
+                        value = self._memory_read(container, jmptbl + i*size, size, signed=True)
                         debug("VALUE:" + str(value))
-                        addr = base_case + value*4
+                        addr = base_case + value*(2**shift)
                         swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
-                        rodata.replace(jmptbl + i*size, size, swlbl)
+                        self._memory_replace(container, jmptbl + i*size, size, swlbl)
 
                 else:
                     critical(f"JUMP TABLE at {hex(instr.address)} impossible to recognize!")
@@ -362,10 +373,10 @@ class Symbolizer():
         # to stuff like  ldr x0, =(.bss - (offset))
         # to make global variables work
         assert instruction.mnemonic == "adrp"
-        if secname == ".text":
-            base = container.loader.elffile.get_section_by_name(".text")["sh_addr"]
-        else:
-            base = container.sections[secname].base
+        # if secname == ".text":
+            # base = container.loader.elffile.get_section_by_name(".text")["sh_addr"]
+        # else:
+        base = container.sections[secname].base
         reg_name = instruction.reg_writes()[0]
         diff = base - original
         op = '-' if diff > 0 else '+'
@@ -389,7 +400,7 @@ class Symbolizer():
 
         if len(possible_sections) == 1:
             secname = possible_sections[0]
-            if secname != ".got":  # there are import relocations in the .got, skip it
+            if secname not in [".got", ".text"]:  # there are import relocations in the .got, skip it + .text can get instrumented
                 self._adjust_adrp_section_pointer(container, secname, original, inst)
                 return
 
@@ -398,17 +409,24 @@ class Symbolizer():
         # if we got here, it's bad, as we're not sure which section the global variable is in.
         # We try to resolve all possible addresses by simulating all possible control flow paths.
 
+        print("aH")
         to_fix = []
         visited = [0]*function.sz
         from collections import deque
         paths = deque(function.nexts[edx])
+        backs = {}
+        b = 0
         while len(paths):
             idx = paths.pop()
             if not isinstance(idx, int): continue
             if visited[idx]: continue
             visited[idx] = 1
             inst2 = function.cache[idx]
-            # if inst2.address == 0x2050:
+            # if inst.address == 0x27b0:
+                # print(inst.cs)
+                # print(inst2.cs)
+            if inst2.address == 0x3970:
+                b = idx
                 # self.resolve_register_value(inst2.cs.regs_access()[0][0], function, inst2)
                 # exit(1)
             if reg_name in inst2.reg_reads():
@@ -416,8 +434,24 @@ class Symbolizer():
             if reg_name in inst2.reg_writes_common():
                 continue  # we overwrote the register we're trying to resolve, so abandon this path
             for n in function.nexts[idx]:
+                if not isinstance(n, int): continue
+                if not visited[n]: 
+                    backs[n] = idx
                 paths.append(n)
 
+        # if inst.address == 0x27b0:
+            # while b:
+                # inst = function.cache[b]
+                # print(inst.cs)
+                # if b not in backs:
+                    # break
+                # b = backs[b]
+            # exit(1)
+
+
+        # if inst.address == 0x27b0:
+            # print([f.cs for f in to_fix])
+            # exit(1)
 
         resolved_addresses = []
         for inst2 in to_fix:
@@ -425,7 +459,7 @@ class Symbolizer():
                 assert inst2.cs.operands[2].type == CS_OP_IMM
                 assert all([op.shift.value == 0 for op in inst2.cs.operands])
                 resolved_addresses += [(inst2, original + inst2.cs.operands[2].imm)]
-            elif inst2.mnemonic == "ldr":
+            elif inst2.mnemonic.startswith("ldr"):
                 assert inst2.cs.operands[1].type == CS_OP_MEM
                 if not all([op.shift.value == 0 for op in inst2.cs.operands]):
                     continue
@@ -435,15 +469,27 @@ class Symbolizer():
             else:
                 continue
 
+        # if inst.address == 0x4e90:
+            # print([f.cs for f in to_fix])
+            # print(resolved_addresses)
+            # exit(1)
+
         possible_sections = set()
-        for _, addr in resolved_addresses:
+        for e, (i, addr) in enumerate(resolved_addresses):
             sec = container.section_of_address(addr)
-            if sec: possible_sections.add(sec.name)
+            if sec: 
+                debug(f"{i.cs}, section {sec.name}")
+                possible_sections.add(sec.name)
+            else: 
+                debug(f"WARNING: no section possible for resolved address at {i.cs}, ignoring")
+                resolved_addresses.pop(e)
+                # exit(1)
+
 
         print(resolved_addresses, str(list(possible_sections)))
         if len(possible_sections) == 1:
             secname = list(possible_sections)[0]
-            if secname != ".got":
+            if secname not in [".got", ".text"]:
                 self._adjust_adrp_section_pointer(container, secname, original, inst)
                 debug(f"We're good, false alarm, the only possible section is: {secname}. Nice!")
                 return
@@ -452,6 +498,8 @@ class Symbolizer():
         # if we got here, it's *very* bad, as we're *still* not sure which section the global variable is in.
         # As our last hope we try to ugly-hack-patch all instructions that use the register with the
         # global address loaded (instructions in the to_fix list)
+
+        debug(f"WARNING: trying to fix each instruction manually...")
 
 
         # we don't really want an ADRP in the middle of code, if possible

@@ -10,8 +10,8 @@ from arm.librw.util.logging import *
 class SzPfx():
     PREFIXES = {
         1: '.byte',
-        2: '.word',
-        4: '.long',
+        2: '.hword', # on ARM words are 4 bytes, so we use half word
+        4: '.word',
         8: '.quad',
         16: '.xmmword',
     }
@@ -328,6 +328,10 @@ class DataSection():
 
     def read_at(self, address, sz, signed=False):
         cacheoff = address - self.base
+
+        if cacheoff >= len(self.cache):
+            critical("[x] Could not read value in section {} addr {}".format(self.name, address))
+            return
         if any([
                 not isinstance(x.value, int)
                 for x in self.cache[cacheoff:cacheoff + sz]
@@ -337,13 +341,13 @@ class DataSection():
         bytes_read = [x.value for x in self.cache[cacheoff:cacheoff + sz]]
         bytes_read_padded = bytes_read + [0]*(sz - len(bytes_read))
 
+        
         # https://docs.python.org/2/library/struct.html
-        if sz == 1: letter = "B"
+        if sz == 1: return bytes_read_padded[0]
         elif sz == 2: letter = "H"
         elif sz == 4: letter = "I"
         elif sz == 8: letter = "Q"
         if signed: letter = letter.lower()
-        if letter == 'b': letter = 'c' # special case
 
         return struct.unpack("<" + letter, bytes(bytes_read_padded))[0]
 
@@ -351,7 +355,7 @@ class DataSection():
         cacheoff = address - self.base
 
         if cacheoff >= len(self.cache):
-            print("[x] Could not replace value in {}".format(self.name))
+            critical("[x] Could not replace value in {} addr {}".format(self.name, address))
             return
 
         self.cache[cacheoff].value = value
