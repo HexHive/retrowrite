@@ -58,6 +58,8 @@ optional arguments:
   -c, --cache     Save/load register analysis cache (only used with --asan)
   --ignore-no-pie     Ignore position-independent-executable check (use with
                   caution)
+  --ignore-stripped  Ignore stripped executable check (use with caution)
+
 
 ```
 
