@@ -18,6 +18,10 @@ class Loader():
         self.elffile = ELFFile(self.fd)
         self.container = Container()
 
+    # this function is checking if the module is suited for retrowrite rewriting (PIE/PIC)
+    def is_pie(self):
+        return self.elffile['e_type'] == 'ET_REL'
+
     # Create a function object for each function in fnlist and add it to the
     # container
     def load_functions(self, fnlist):
