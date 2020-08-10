@@ -21,6 +21,19 @@ class Loader():
     # this function is checking if the module is suited for retrowrite rewriting (PIE/PIC)
     def is_pie(self):
         return self.elffile['e_type'] == 'ET_REL'
+    
+    def is_stripped(self):
+        # Get the symbol table entry for the respective symbol
+        symtab = self.elffile.get_section_by_name('.symtab')
+        if not symtab:
+            print('No symbol table available, this file is probably stripped!')
+            return True
+
+        sym = symtab.get_symbol_by_name("init_module")[0]
+        if not sym:
+            print('Symbol {} not found')
+            return True
+        return False
 
     # Create a function object for each function in fnlist and add it to the
     # container
