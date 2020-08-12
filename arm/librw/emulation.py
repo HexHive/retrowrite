@@ -75,17 +75,17 @@ class Path:
             return
 
         ops = instr.cs.operands
-        regs_written = instr.cs.regs_access()[1]
-        # print(f"removing {reg_name(reg_written)} from pool")
+        regs_written = instr.reg_writes_common()
         for r in regs_written:
             if r not in self.reg_pool: continue
             self.reg_pool.remove(r)
 
-        regs_read = instr.cs.regs_access()[0]
+        regs_read = instr.reg_reads()
         for reg in regs_read:
-            # print(f"adding {reg_name(reg)} to pool")
             self.reg_pool.add(reg)
 
+        if instr.mnemonic in ["bl"]:
+            return
 
         if instr.mnemonic == "add" or instr.mnemonic == "sub":
             operation = "+" if instr.mnemonic == "add" else "-"
@@ -109,14 +109,42 @@ class Path:
             first = ops[1].reg
             self.expr.replace(result, first if ops[0].type == CS_OP_IMM else reg_name(first))
 
+        elif instr.mnemonic in ["sxtw"]:
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            self.expr.replace(result, first)
+
+        # https://modexp.wordpress.com/2018/10/30/arm64-assembly/
+        elif instr.mnemonic in ["sbfiz"]:
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            second = ops[2].imm
+            third = ops[3].imm
+            mask = (1 << (third)) - 1
+            self.expr.replace(result, Expr(Expr(first, mask, "&"), second, "<<"))
+
+
         elif instr.mnemonic in ["lsl"]:
             result = reg_name(ops[0].reg)
             first = reg_name(ops[1].reg)
             second = reg_name(ops[2].reg) if ops[2].type == CS_OP_REG else ops[2].imm
             self.expr.replace(result, Expr(first, second, op="<<"))
 
+        elif instr.mnemonic in ["stp"]:
+            if "]," in instr.op_str: assert False
+            if "!" in instr.op_str:
+                mem, mem_op_idx = instr.get_mem_access_op()
+                mem_op = instr.cs.operands[mem_op_idx]
+                if mem.index != 0 or mem_op.shift.type != 0: assert False
+                first = reg_name(mem.base)
+                second = reg_name(mem.index) if mem.index != 0 else ""
+                self.expr.replace(first, Expr(first, second, "+"))
+            return # we don't care about stores for now, only if they do pre-indexing
+
+
         elif instr.mnemonic.startswith("ldp"):
             if "!" in instr.op_str: assert False
+            if "]," in instr.op_str: assert False
             results = (reg_name(ops[0].reg), reg_name(ops[1].reg))
             mem, mem_op_idx = instr.get_mem_access_op()
             mem_op = instr.cs.operands[mem_op_idx]
@@ -134,7 +162,7 @@ class Path:
             self.expr.replace(results[1], final2) # replace the second register written
 
         elif instr.mnemonic.startswith("ldr"):
-            if "!" in instr.op_str: assert False
+            if "]," in instr.op_str: assert False
             result = reg_name(ops[0].reg)
             mem, mem_op_idx = instr.get_mem_access_op()
             mem_op = instr.cs.operands[mem_op_idx]
@@ -143,6 +171,9 @@ class Path:
             if mem_op.shift.type == 1:
                 second = Expr(second, mem_op.shift.value, op="<<")
             elif mem.disp != 0:
+                if "!" in instr.op_str: 
+                    if mem.index != 0 or mem_op.shift.type != 0: assert False
+                    self.expr.replace(first, Expr(first, second, "+"))
                 second = mem.disp
             if second == "":
                 final = Expr(first)

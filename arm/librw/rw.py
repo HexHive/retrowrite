@@ -13,7 +13,6 @@ from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64b
 from arm.librw.container import InstrumentedInstruction
 from arm.librw.emulation import Path, Expr
 
-
 class Rewriter():
     GCC_FUNCTIONS = [
         "_start",
@@ -81,6 +80,15 @@ class Rewriter():
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             results.append("\t.text\n%s" % (function))
+
+        # fake_got = {}
+        # for rel in container.relocations[".dyn"]:
+            # if rel['type'] == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_GLOB_DAT"]:
+                # fake_got[rel['offset']] = rel['name']
+
+        # results.append("\t.text\n.globl fake_got\n.fake_got:")
+        # print(rel.keys())
+        # exit(1)
 
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
@@ -157,6 +165,7 @@ class Symbolizer():
         # Symbolize remaining memory accesses
         self.symbolize_switch_tables(container, context)
         self.symbolize_mem_accesses(container, context)
+
 
 
     def symbolize_cf_transfer(self, container, context=None):
@@ -248,21 +257,23 @@ class Symbolizer():
         debug(f"Instructions leading up to {hex(instr.address)}")
         inst_idx = function.addr_to_idx[instr.address]
         reg_name = instr.cs.reg_name(register)
-        paths = [Path(function, inst_idx, reg_pool=[register], exprvalue=f"{reg_name}")]
+        visited = [False]*len(function.cache)
+        paths = [Path(function, inst_idx, reg_pool=[reg_name], exprvalue=f"{reg_name}")]
         paths_finished = []
         while len(paths) > 0:
             p = paths[0]
-            if inst_idx == 0:  # we got to the start of the function
+            if inst_idx == 0 or visited[inst_idx] or len(p.reg_pool) == 0:  # we got to the start of the function
                 paths_finished += [paths[0]]
                 del paths[0]
                 continue
 
+            visited[inst_idx] = True
             prevs = function.prevs[inst_idx]
             if len(prevs) > 1:
                 print("MULTIPLE prevs: ", prevs)
             inst_idx = prevs[0]
             instr = function.cache[inst_idx]
-            regs_write = instr.cs.regs_access()[1]
+            regs_write = instr.reg_writes_common()
             if any([reg in p.reg_pool for reg in regs_write]):
                 debug(f"next: {instr.cs}")
                 p.emulate(instr)
@@ -285,6 +296,53 @@ class Symbolizer():
             debug(f"WARNING: changing value not in rodata but in {sec.name}")
         sec.replace(addr, size, value)
 
+    def _guess_cases_number(self, container, function, addr):
+        max_instrs_before_switch = 20
+        inst_idx = function.addr_to_idx[addr]
+        instr = function.cache[inst_idx]
+        found = -1
+        reg_index = False
+        class path:
+            def __init__(self, steps=0, reg_index=False, found=-1, idx=inst_idx):
+                self.steps = steps
+                self.reg_index = reg_index
+                self.found = found
+                self.inst_idx = idx
+
+        paths = [path()] 
+        paths_finished = []
+        while len(paths):
+            p = paths[0]
+            p.steps += 1
+            if inst_idx == 0 or p.steps > max_instrs_before_switch:
+                paths_finished += [paths.pop(0)]
+                continue
+
+            prevs = function.prevs[p.inst_idx]
+            p.inst_idx = prevs[0]
+            for prev in prevs[1:]:
+                paths += [path(p.steps, p.reg_index, p.found, prev)]
+            instr = function.cache[p.inst_idx]
+
+            if instr.mnemonic.startswith("ldr") and not p.reg_index:
+                mem, mem_op_idx = instr.get_mem_access_op()
+                if mem.index: p.reg_index = mem.index
+            if instr.mnemonic.startswith("cmp") and p.reg_index:
+                if instr.cs.operands[0].reg == p.reg_index and \
+                   instr.cs.operands[1].type == CS_OP_IMM:
+                    p.found = instr.cs.operands[1].imm
+                    paths_finished += [paths.pop(0)]
+                    continue
+            if instr.mnemonic.startswith("movz") and instr.cs.operands[0].reg == p.reg_index:
+                # if the register is written with a constant value, we just ignore this path
+                paths.pop(0)
+                continue
+        debug(f"number of cases: {[p.found for p in paths_finished]}")
+        if any([paths_finished[i].found != paths_finished[i+1].found 
+            for i in range(len(paths_finished)-1)]):
+            return -1 # if there are inconsistencies, we quit!
+        return paths_finished[0].found
+
     def symbolize_switch_tables(self, container, context):
         rodata = container.sections.get(".rodata", None)
         if not rodata:
@@ -300,14 +358,19 @@ class Symbolizer():
                 # Super advanced pattern matching
                 # import IPython; IPython.embed() 
 
+                # addr
+                if isinstance(expr.left, int):
+                    debug(f"Found a blr at {instr.cs} but it is really a call to {hex(expr.left)}! - ignoring for now")
+                    continue
+
                 # x0
                 if isinstance(expr.left, str):
                     continue
 
                 # [addr]
                 elif expr.left.mem and expr.left.right == None: 
-                    addr = int(str(expr.left.left))
-                    value = self._memory_read(container, addr, 8)
+                    # addr = int(str(expr.left.left))
+                    # value = self._memory_read(container, addr, 8)
                     # swlbl = ".LC%x" % (value,)
                     # self._memory_replace(container, addr, 8, swlbl)
                     continue
@@ -324,7 +387,11 @@ class Symbolizer():
                     debug(f"JMPTBL: {jmptbl}")
                     debug(f"SIZE: {size}")
 
-                    cases = 10
+                    cases = self._guess_cases_number(container, function, instr.address)
+                    debug(f"CASES: {cases}")
+                    if cases == -1:
+                        assert False
+
                     for i in range(cases):
                         value = self._memory_read(container, jmptbl + i*size, size, signed=True)
                         debug("VALUE:" + str(value))
@@ -422,12 +489,10 @@ class Symbolizer():
             if visited[idx]: continue
             visited[idx] = 1
             inst2 = function.cache[idx]
-            # if inst.address == 0x27b0:
-                # print(inst.cs)
-                # print(inst2.cs)
-            if inst2.address == 0x3970:
-                b = idx
-                # self.resolve_register_value(inst2.cs.regs_access()[0][0], function, inst2)
+            # if inst2.address == 0x224c:
+                # b = idx
+                # self.resolve_register_value(inst2.cs.regs_access()[1][0], function, function.cache[idx+1])
+                # print("done")
                 # exit(1)
             if reg_name in inst2.reg_reads():
                 to_fix += [inst2]
@@ -439,19 +504,6 @@ class Symbolizer():
                     backs[n] = idx
                 paths.append(n)
 
-        # if inst.address == 0x27b0:
-            # while b:
-                # inst = function.cache[b]
-                # print(inst.cs)
-                # if b not in backs:
-                    # break
-                # b = backs[b]
-            # exit(1)
-
-
-        # if inst.address == 0x27b0:
-            # print([f.cs for f in to_fix])
-            # exit(1)
 
         resolved_addresses = []
         for inst2 in to_fix:
@@ -466,24 +518,23 @@ class Symbolizer():
                 resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
             elif inst2.mnemonic.startswith("str"):
                 resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
+                # if inst2.address == 0x364c: 
+                    # print(resolved_addresses)
+                    # exit(1)
             else:
                 continue
 
-        # if inst.address == 0x4e90:
-            # print([f.cs for f in to_fix])
-            # print(resolved_addresses)
-            # exit(1)
 
         possible_sections = set()
-        for e, (i, addr) in enumerate(resolved_addresses):
+        for r in resolved_addresses[:]:
+            (i, addr) = r[0], r[1]
             sec = container.section_of_address(addr)
             if sec: 
-                debug(f"{i.cs}, section {sec.name}")
+                debug(f"{i.cs}, in section {sec.name}")
                 possible_sections.add(sec.name)
             else: 
-                debug(f"WARNING: no section possible for resolved address at {i.cs}, ignoring")
-                resolved_addresses.pop(e)
-                # exit(1)
+                critical(f"WARNING: no section for resolved addr {hex(addr)} at {i.cs}, ignoring")
+                resolved_addresses.remove(r)
 
 
         print(resolved_addresses, str(list(possible_sections)))
