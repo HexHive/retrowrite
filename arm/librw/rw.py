@@ -14,7 +14,7 @@ from arm.librw.container import InstrumentedInstruction
 from arm.librw.emulation import Path, Expr
 
 class Rewriter():
-    GCC_FUNCTIONS = [
+    GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
         "_start",
         "__libc_start_main",
         "__libc_csu_fini",
@@ -44,6 +44,13 @@ class Rewriter():
         "call_weak_fn" #not really sure about this, but imho we should'nt touch it
     ]
 
+    GCC_RELOCATIONS = [ # relocations added by the compiler. Do not touch em!
+        "__gmon_start__",
+        "_ITM_deregisterTMCloneTable",
+        "_ITM_registerTMCloneTable"
+    ]
+
+
     # DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     # DATASECTIONS = [".got", ".fini_array",  ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     DATASECTIONS = [".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
@@ -69,6 +76,7 @@ class Rewriter():
 
     def dump(self):
         results = list()
+
         for sec, section in sorted(
                 self.container.sections.items(), key=lambda x: x[1].base):
             results.append("%s" % (section))
@@ -81,17 +89,10 @@ class Rewriter():
                 continue
             results.append("\t.text\n%s" % (function))
 
-        # fake_got = {}
-        # for rel in container.relocations[".dyn"]:
-            # if rel['type'] == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_GLOB_DAT"]:
-                # fake_got[rel['offset']] = rel['name']
-
-        # results.append("\t.text\n.globl fake_got\n.fake_got:")
-        # print(rel.keys())
-        # exit(1)
-
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
+
+        info(f"Success: retrowritten assembly to {self.outfile}")
 
 
 class Symbolizer():
@@ -199,7 +200,6 @@ class Symbolizer():
                         function.nexts[inst_idx].append("undef")
                 elif is_call:
                     instruction.cf_leaves_fn = True
-                    # XXX: ARM
                     function.nexts[inst_idx].append("call")
                     if inst_idx + 1 < len(function.cache):
                         function.nexts[inst_idx].append(inst_idx + 1)
@@ -435,20 +435,20 @@ class Symbolizer():
 
         return False
 
-    def _adjust_adrp_section_pointer(self, container, secname, original, instruction):
+    def _adjust_adrp_section_pointer(self, container, secname, orig_off, instruction):
         # we adjust things like adrp x0, 0x10000 (start of .bss)
         # to stuff like  ldr x0, =(.bss - (offset))
         # to make global variables work
         assert instruction.mnemonic == "adrp"
-        # if secname == ".text":
-            # base = container.loader.elffile.get_section_by_name(".text")["sh_addr"]
-        # else:
         base = container.sections[secname].base
         reg_name = instruction.reg_writes()[0]
-        diff = base - original
+        diff = base - orig_off
         op = '-' if diff > 0 else '+'
+        if secname == ".got": secname = ".fake_got" # the got is special, as it
+        # will get overwritten by the compiler after reassembly. We introduce a 
+        # "fake_got" label so that we keep track of where the "old" got section was
         instruction.mnemonic = "ldr"
-        instruction.op_str = "%s, =(%s %c 0x%x)" % (reg_name, secname, op, abs(diff))
+        instruction.op_str = "%s, =(%s %c 0x%x)"  % (reg_name, secname, op, abs(diff))
 
 
     def _adjust_global_access(self, container, function, edx, inst):
@@ -456,19 +456,19 @@ class Symbolizer():
         # global variable addresses are dynamically built in multiple instructions
         # here we try to resolve the address with some capstone trickery and shady assumptions
 
-        original = inst.cs.operands[1].imm
-        reg_name = inst.reg_writes()[0]
+        orig_off = inst.cs.operands[1].imm
+        orig_reg = inst.reg_writes()[0]
 
         possible_sections = []
         for name,s in container.sections.items():
-            if s.base // 0x1000 == original // 0x1000 or \
-               s.base <= original < s.base + s.sz:
+            if s.base // 0x1000 == orig_off // 0x1000 or \
+               s.base <= orig_off < s.base + s.sz:
                 possible_sections += [name]
 
         if len(possible_sections) == 1:
             secname = possible_sections[0]
-            if secname not in [".got", ".text"]:  # there are import relocations in the .got, skip it + .text can get instrumented
-                self._adjust_adrp_section_pointer(container, secname, original, inst)
+            if secname not in [".text"]:  # .text can get instrumented, we need to know the exact address
+                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
                 return
 
         debug(f"Global access at {inst}, multiple sections possible: {possible_sections}, trying to resolve address...")
@@ -476,7 +476,6 @@ class Symbolizer():
         # if we got here, it's bad, as we're not sure which section the global variable is in.
         # We try to resolve all possible addresses by simulating all possible control flow paths.
 
-        print("aH")
         to_fix = []
         visited = [0]*function.sz
         from collections import deque
@@ -489,17 +488,22 @@ class Symbolizer():
             if visited[idx]: continue
             visited[idx] = 1
             inst2 = function.cache[idx]
-            # if inst2.address == 0x224c:
-                # b = idx
-                # self.resolve_register_value(inst2.cs.regs_access()[1][0], function, function.cache[idx+1])
-                # print("done")
-                # exit(1)
-            if reg_name in inst2.reg_reads():
+            debug(inst2)
+            # if inst.address == 0xd7df4:
+                # print("visiting", inst2)
+            # if inst.address == 0x59a40:
+                # print(inst.cs, orig_reg)
+                # print(inst2.cs)
+            if orig_reg in inst2.reg_reads():
+                if '=' in inst2.op_str:  # ugly hack to avoid reinstrumenting instructions
+                    continue
                 to_fix += [inst2]
-            if reg_name in inst2.reg_writes_common():
+            if orig_reg in inst2.reg_writes_common():
                 continue  # we overwrote the register we're trying to resolve, so abandon this path
             for n in function.nexts[idx]:
                 if not isinstance(n, int): continue
+                if n == 0: continue # avoid recursive calls 
+                # if n < idx: continue
                 if not visited[n]: 
                     backs[n] = idx
                 paths.append(n)
@@ -510,17 +514,17 @@ class Symbolizer():
             if inst2.mnemonic == "add":
                 assert inst2.cs.operands[2].type == CS_OP_IMM
                 assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                resolved_addresses += [(inst2, original + inst2.cs.operands[2].imm)]
+                resolved_addresses += [(inst2, orig_off + inst2.cs.operands[2].imm)]
             elif inst2.mnemonic.startswith("ldr"):
                 assert inst2.cs.operands[1].type == CS_OP_MEM
                 if not all([op.shift.value == 0 for op in inst2.cs.operands]):
                     continue
-                resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
+                resolved_addresses += [(inst2, orig_off + inst2.cs.operands[1].mem.disp)]
             elif inst2.mnemonic.startswith("str"):
-                resolved_addresses += [(inst2, original + inst2.cs.operands[1].mem.disp)]
-                # if inst2.address == 0x364c: 
-                    # print(resolved_addresses)
-                    # exit(1)
+                if inst2.cs.reg_name(inst2.cs.operands[0].reg) == orig_reg: # str <orig_reg>, [...]
+                    resolved_addresses += [(inst2, orig_off)]
+                else: # str ..., [<orig_reg> + ...]
+                    resolved_addresses += [(inst2, orig_off + inst2.cs.operands[1].mem.disp)]
             else:
                 continue
 
@@ -529,24 +533,29 @@ class Symbolizer():
         for r in resolved_addresses[:]:
             (i, addr) = r[0], r[1]
             sec = container.section_of_address(addr)
-            if sec: 
-                debug(f"{i.cs}, in section {sec.name}")
+            if sec:
+                debug(f"to_fix: {i.cs}, in section {sec.name}")
                 possible_sections.add(sec.name)
-            else: 
+            else:
                 critical(f"WARNING: no section for resolved addr {hex(addr)} at {i.cs}, ignoring")
                 resolved_addresses.remove(r)
 
+        # if inst.address == 0x4c6dc:
+            # print(inst2.cs)
+            # print([f.cs for f in to_fix])
+            # exit(1)
 
-        print(resolved_addresses, str(list(possible_sections)))
+        debug(f"After resolving addresses, here are the possible sections: {possible_sections}")
         if len(possible_sections) == 1:
             secname = list(possible_sections)[0]
-            if secname not in [".got", ".text"]:
-                self._adjust_adrp_section_pointer(container, secname, original, inst)
+            if secname not in [".text"]:
+                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
                 debug(f"We're good, false alarm, the only possible section is: {secname}. Nice!")
                 return
 
 
-        # if we got here, it's *very* bad, as we're *still* not sure which section the global variable is in.
+        # if we got here, it's *very* bad, as we're *still* not sure which section the global variable is in,
+        # or that section is the .text section. 
         # As our last hope we try to ugly-hack-patch all instructions that use the register with the
         # global address loaded (instructions in the to_fix list)
 
@@ -577,17 +586,20 @@ class Symbolizer():
                 elif resolved_address in container.plt:
                     is_an_import = container.plt[resolved_address]
                     break
-            print(inst2.cs, is_an_import)
 
             reg_name2 = inst2.cs.reg_name(inst2.cs.operands[0].reg)
             reg_name3 = inst2.cs.reg_name(inst2.cs.operands[1].reg)
 
             if inst2.mnemonic.startswith("str"):
                 old_mnemonic = inst2.mnemonic
-                inst2.mnemonic =  "ldr"
-                inst2.op_str =  reg_name3 + f", =.LC%x" % (resolved_address)
-                inst2.instrument_after(InstrumentedInstruction(
-                    f"{old_mnemonic} {reg_name2}, [{reg_name3}]"))
+                if reg_name2 == orig_reg:  # str <orig_reg>, [...]
+                    inst2.instrument_before(InstrumentedInstruction(
+                        f"ldr {reg_name2}, =.LC%x" % (resolved_address)))
+                else: # str ..., [<orig_reg> + ...]
+                    inst2.mnemonic =  "ldr"
+                    inst2.op_str =  reg_name3 + f", =.LC%x" % (resolved_address)
+                    inst2.instrument_after(InstrumentedInstruction(
+                        f"{old_mnemonic} {reg_name2}, [{reg_name3}]"))
             elif is_an_import:
                 inst2.op_str =  reg_name2 + f", =%s" % (is_an_import)
             else:
@@ -598,6 +610,8 @@ class Symbolizer():
                     if reg_name2.startswith("w"): reg_name2 = 'x' + reg_name2[1:] #XXX: fix this ugly hack
                     inst2.instrument_after(InstrumentedInstruction(
                         f"ldr {reg_name2}, [{reg_name2}]"))
+
+            inst2.op_str += " // from adrp at 0x%x" % (inst.address)
 
             self.xrefs[resolved_address] += [inst2.address]
 
@@ -673,41 +687,18 @@ class Symbolizer():
 
     def _handle_relocation(self, container, section, rel):
         reloc_type = rel['type']
-        # XXX: ARM
-        if reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_PC32"]:
-            swbase = None
-            for base in sorted(self.bases):
-                if base > rel['offset']:
-                    break
-                swbase = base
-            value = rel['st_value'] + rel['addend'] - (rel['offset'] - swbase)
-            swlbl = ".LC%x-.LC%x" % (value, swbase)
-            section.replace(rel['offset'], 4, swlbl)
-        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
-            value = rel['st_value'] + rel['addend']
-            label = ".LC%x" % value
-            section.replace(rel['offset'], 8, label)
         # elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
-        elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_RELATIVE"]:
+        if reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_RELATIVE"]:
             value = rel['addend']
             label = ".LC%x" % value
             if int(value) in container.ignore_function_addrs:
                 return
             section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_GLOB_DAT"]:
-            debug(rel['addend'])
-            debug(rel['offset'])
-            debug(rel['st_value'])
-            debug(rel)
-            # exit(1)
-            # value = rel['addend']
-            # label = ".LC%x" % value
-            # if int(value) in container.ignore_function_addrs:
-                # return
-            # section.replace(rel['offset'], 8, label)
-        elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_COPY"]:
-            # NOP
-            pass
+            if section.name != '.got': return
+            if rel['name'] in Rewriter.GCC_RELOCATIONS: return
+            section.replace(rel['offset'], 8, rel['name'])
+
         else:
             print(rel)
             print("[*] Unhandled relocation {}".format(

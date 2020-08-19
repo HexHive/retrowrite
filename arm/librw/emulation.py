@@ -1,6 +1,7 @@
 
 from capstone import CS_OP_REG, CS_OP_IMM
 from arm.librw.util.arm_util import reg_name, get_access_size_arm
+from arm.librw.util.logging import *
 import copy
 
 
@@ -45,8 +46,13 @@ class Expr:
         if isinstance(self.left, int) and isinstance(self.right, int):
             if self.operation == "+":
                 self.left = self.left + self.right
-            elif self.operatino == "-":
+            elif self.operation == "-":
                 self.left = self.left - self.right
+            elif self.operation == "<<":
+                self.left = self.left << self.right
+            else:
+                critical(f"Operation {self.operation} not supported.")
+                exit(1)
             self.right = None
 
 
@@ -96,7 +102,6 @@ class Path:
                 second = reg_name(second)
             if ops[2].shift.type == 1:
                 second = Expr(second, ops[2].shift.value, op="<<")
-            print("calling da replace", result, Expr(first, second, op=operation))
             self.expr.replace(result, Expr(first, second, op=operation))
 
         elif instr.mnemonic in ["adr", "adrp"]:
@@ -107,7 +112,8 @@ class Path:
         elif instr.mnemonic in ["mov", "movz"]: #XXX: movz?
             result = reg_name(ops[0].reg)
             first = ops[1].reg
-            self.expr.replace(result, first if ops[0].type == CS_OP_IMM else reg_name(first))
+            if instr.mnemonic == "movz" and first != 0: import IPython; IPython.embed() 
+            self.expr.replace(result, first if ops[1].type == CS_OP_IMM else reg_name(first))
 
         elif instr.mnemonic in ["sxtw"]:
             result = reg_name(ops[0].reg)
@@ -136,9 +142,9 @@ class Path:
                 mem, mem_op_idx = instr.get_mem_access_op()
                 mem_op = instr.cs.operands[mem_op_idx]
                 if mem.index != 0 or mem_op.shift.type != 0: assert False
+                if mem.disp == 0: assert False
                 first = reg_name(mem.base)
-                second = reg_name(mem.index) if mem.index != 0 else ""
-                self.expr.replace(first, Expr(first, second, "+"))
+                self.expr.replace(first, Expr(first, mem.disp, "+"))
             return # we don't care about stores for now, only if they do pre-indexing
 
 

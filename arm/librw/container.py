@@ -379,6 +379,11 @@ class DataSection():
         results = []
         results.append(".section {}".format(self.name))
 
+        # fake got is a way to evade relocation hell.
+        # see the comment in _adjust_adrp_section_pointer() for more
+        if self.name == '.got':
+            results.append(".fake_got:")
+
         if self.name != ".fini_array":
             results.append(".align {}".format(self.align))
 
