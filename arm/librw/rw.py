@@ -1,5 +1,5 @@
 import argparse
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM, CS_OP_REG
 from capstone.x86_const import X86_REG_RIP
@@ -279,6 +279,7 @@ class Symbolizer():
             prevs = function.prevs[inst_idx]
             if len(prevs) > 1:
                 print("MULTIPLE prevs: ", prevs)
+                #XXX: add other paths here
             inst_idx = prevs[0]
             instr = function.cache[inst_idx]
             regs_write = instr.reg_writes_common()
@@ -458,6 +459,34 @@ class Symbolizer():
         instruction.mnemonic = "ldr"
         instruction.op_str = "%s, =(%s %c 0x%x)"  % (reg_name, secname, op, abs(diff))
 
+    def _get_resolved_address(self, function, inst, inst2, path):
+        if inst2.mnemonic == "add":
+            assert inst2.cs.operands[2].type == CS_OP_IMM
+            assert all([op.shift.value == 0 for op in inst2.cs.operands])
+            return path.orig_off + inst2.cs.operands[2].imm
+        elif inst2.mnemonic.startswith("ldr"):
+            assert inst2.cs.operands[1].type == CS_OP_MEM
+            if not all([op.shift.value == 0 for op in inst2.cs.operands]):
+                critical(f"Missed global resolved address on {inst2} from {inst}")
+                return 0
+            return path.orig_off + inst2.cs.operands[1].mem.disp
+        elif inst2.mnemonic.startswith("str"):
+            if inst2.cs.reg_name(inst2.cs.operands[0].reg) == path.orig_reg: # str <orig_reg>, [...]
+                if not inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29":
+                    # assert False
+                    critical(f"Missed global resolved address on {inst2} from {inst}")
+                    return 0
+                expr = self.resolve_register_value(inst2.cs.operands[0].reg, function, inst2)
+                if not isinstance(expr.left, int):
+                    critical(f"Missed global resolved address on {inst2} from {inst}")
+                    return 0
+                return (expr.left, inst2.cs.operands[1].mem.disp)
+            else: # str ..., [<orig_reg> + ...]
+                return path.orig_off + inst2.cs.operands[1].mem.disp
+        else:
+            critical(f"Missed global resolved address on {inst2} from {inst}")
+            return 0
+
 
     def _adjust_global_access(self, container, function, edx, inst):
         # there is an adrp somewhere in the code, this means global variable...
@@ -484,57 +513,68 @@ class Symbolizer():
         # if we got here, it's bad, as we're not sure which section the global variable is in.
         # We try to resolve all possible addresses by simulating all possible control flow paths.
 
-        to_fix = []
-        visited = [0]*function.sz
-        from collections import deque
-        paths = deque(function.nexts[edx])
-        backs = {}
-        b = 0
-        while len(paths):
-            idx = paths.pop()
-            if not isinstance(idx, int): continue
-            if visited[idx]: continue
-            visited[idx] = 1
-            inst2 = function.cache[idx]
-            # if inst.address == 0xd7df4:
-                # print("visiting", inst2)
-            # if inst.address == 0x59a40:
-                # print(inst.cs, orig_reg)
-                # print(inst2.cs)
-            if orig_reg in inst2.reg_reads():
-                if '=' in inst2.op_str:  # ugly hack to avoid reinstrumenting instructions
-                    continue
-                if "str" in inst.mnemonic and 
-                to_fix += [inst2]
-            if orig_reg in inst2.reg_writes_common():
-                continue  # we overwrote the register we're trying to resolve, so abandon this path
-            for n in function.nexts[idx]:
-                if not isinstance(n, int): continue
-                if n == 0: continue # avoid recursive calls 
-                # if n < idx: continue
-                if not visited[n]: 
-                    backs[n] = idx
-                paths.append(n)
-
+        class path:
+            def __init__(self, orig_reg="x0", idx=0, stack_stores=[], orig_off=orig_off, visited=[]):
+                self.stack_stores = stack_stores
+                self.orig_reg = orig_reg
+                self.idx = idx
+                self.orig_off = orig_off
+                self.visited = visited
 
         resolved_addresses = []
-        for inst2 in to_fix:
-            if inst2.mnemonic == "add":
-                assert inst2.cs.operands[2].type == CS_OP_IMM
-                assert all([op.shift.value == 0 for op in inst2.cs.operands])
-                resolved_addresses += [(inst2, orig_off + inst2.cs.operands[2].imm)]
-            elif inst2.mnemonic.startswith("ldr"):
-                assert inst2.cs.operands[1].type == CS_OP_MEM
-                if not all([op.shift.value == 0 for op in inst2.cs.operands]):
-                    continue
-                resolved_addresses += [(inst2, orig_off + inst2.cs.operands[1].mem.disp)]
-            elif inst2.mnemonic.startswith("str"):
-                if inst2.cs.reg_name(inst2.cs.operands[0].reg) == orig_reg: # str <orig_reg>, [...]
-                    resolved_addresses += [(inst2, orig_off)]
-                else: # str ..., [<orig_reg> + ...]
-                    resolved_addresses += [(inst2, orig_off + inst2.cs.operands[1].mem.disp)]
-            else:
+        paths = [path(orig_reg, nexti, [], visited=[0]*function.sz) for nexti in function.nexts[edx]]
+        while len(paths):
+            p = paths[0]
+            inst2 = function.cache[p.idx]
+            if p.visited[p.idx]:
+                del paths[0]
                 continue
+            p.visited[p.idx] = 1
+            # debug(str(p.orig_reg) + " " + str(inst2))
+
+            # check if someone is overwriting one of the saved global pointers on the stack
+            if inst2.mnemonic == "str" and inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29" and\
+                    inst2.cs.operands[1].mem.disp in p.stack_stores:
+                p.stack_stores.remove(inst2.cs.operands[1].mem.disp)
+
+            # check if we are loading a previously saved global pointer from the stack
+            if inst2.mnemonic == "ldr" and inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29" and\
+                    inst2.cs.operands[1].mem.disp in p.stack_stores:
+                critical(f"found it at {inst2}, from {inst}!")
+                new_reg = inst2.cs.reg_name(inst2.cs.operands[0].reg)
+                paths.append(path(new_reg, p.idx + 1, [], p.orig_off, p.visited[:]))
+
+            if p.orig_reg in inst2.reg_reads():
+                if '=' in inst2.op_str:  # XXX: ugly hack to avoid reinstrumenting instructions
+                    del paths[0]
+                    continue
+                raddr = self._get_resolved_address(function, inst, inst2, p)
+                if isinstance(raddr, tuple):  # a global pointer was pushed on the stack
+                    addr, disp = raddr
+                    p.stack_stores += [disp]
+                elif raddr: # a global pointer was just used normally 
+                    resolved_addresses += [(inst2, raddr)]
+
+            if p.orig_reg in inst2.reg_writes_common():
+                if len(p.stack_stores) == 0:
+                    del paths[0] # we overwrote the register we're trying to resolve, so abandon this path
+                    continue
+                else:  # unless we pushed it on the stack
+                    p.orig_reg = "None"
+            next_instrs = list(filter(lambda x: isinstance(x, int), function.nexts[p.idx]))
+            if len(next_instrs) == 0: 
+                del paths[0]
+                continue
+            p.idx = next_instrs[0]
+            for n in next_instrs[1:]:
+                # if n < idx: continue
+                if not isinstance(n, int): continue
+                if n == 0: continue # avoid recursive calls to same function
+                if p.visited[n]: continue
+                # count = list(filter(lambda x: x == 1, p.visited))
+                # debug(f"Appending to {n}, {len(paths)}, {len(count)}")
+                paths.append(path(p.orig_reg, n, p.stack_stores[:], p.orig_off, p.visited))
+                # p.visited[n] = 1
 
 
         possible_sections = set()
@@ -548,10 +588,6 @@ class Symbolizer():
                 critical(f"WARNING: no section for resolved addr {hex(addr)} at {i.cs}, ignoring")
                 resolved_addresses.remove(r)
 
-        if inst.address == 0x4d41c:
-            print(inst2.cs)
-            print([f.cs for f in to_fix])
-            exit(1)
 
         debug(f"After resolving addresses, here are the possible sections: {possible_sections}")
         if len(possible_sections) == 1:
@@ -565,7 +601,7 @@ class Symbolizer():
         # if we got here, it's *very* bad, as we're *still* not sure which section the global variable is in,
         # or that section is the .text section. 
         # As our last hope we try to ugly-hack-patch all instructions that use the register with the
-        # global address loaded (instructions in the to_fix list)
+        # global address loaded (instructions in the resolved_addresses list)
 
         debug(f"WARNING: trying to fix each instruction manually...")
 
