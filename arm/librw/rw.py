@@ -92,6 +92,14 @@ class Rewriter():
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
 
+        
+        fixed_sections = [".bss", ".data", ".data.rel.ro", ".rodata", ".text"]
+        seclist = "-Wl"
+        for sec, section in sorted(
+                self.container.sections.items(), key=lambda x: x[1].base):
+            if section not in fixed_sections: continue
+            seclist += f",--section-start={section.name}={hex(section.base)}"
+        info(f"gcc cmdline flag: {seclist}")
         info(f"Success: retrowritten assembly to {self.outfile}")
 
 
@@ -488,7 +496,6 @@ class Symbolizer():
             if visited[idx]: continue
             visited[idx] = 1
             inst2 = function.cache[idx]
-            debug(inst2)
             # if inst.address == 0xd7df4:
                 # print("visiting", inst2)
             # if inst.address == 0x59a40:
@@ -497,6 +504,7 @@ class Symbolizer():
             if orig_reg in inst2.reg_reads():
                 if '=' in inst2.op_str:  # ugly hack to avoid reinstrumenting instructions
                     continue
+                if "str" in inst.mnemonic and 
                 to_fix += [inst2]
             if orig_reg in inst2.reg_writes_common():
                 continue  # we overwrote the register we're trying to resolve, so abandon this path
@@ -540,10 +548,10 @@ class Symbolizer():
                 critical(f"WARNING: no section for resolved addr {hex(addr)} at {i.cs}, ignoring")
                 resolved_addresses.remove(r)
 
-        # if inst.address == 0x4c6dc:
-            # print(inst2.cs)
-            # print([f.cs for f in to_fix])
-            # exit(1)
+        if inst.address == 0x4d41c:
+            print(inst2.cs)
+            print([f.cs for f in to_fix])
+            exit(1)
 
         debug(f"After resolving addresses, here are the possible sections: {possible_sections}")
         if len(possible_sections) == 1:
