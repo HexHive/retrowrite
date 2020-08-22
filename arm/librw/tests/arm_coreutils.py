@@ -3,7 +3,26 @@ from keystone import *
 from arm.librw.util.logging import *
 import subprocess
 import sys
+import os
 
+coreutils_path = os.path.expanduser("~/coreutils/src/")
+test_bins = [
+        ("ls",        [ "/etc", "/etc -la", "/home"]),
+        ("od",        [ "/etc/passwd"]),
+        ("head",      [ "/etc/passwd"]),
+        ("tail",      [ "/etc/passwd", "/etc/passwd -n 2"]),
+        ("cat",       [ "/etc/passwd"]),
+        ("uname",     [ "", "-a"]),
+        ("seq",       [ "1 10", "1 2 100"]),
+        ("tr",        [ "abc def < /etc/passwd"]),
+        ("env",       [ "", "-0"]),
+        ("base64",    [ "/etc/passwd", "/etc/bash.bashrc"]),
+        ("sha256sum", [ "/etc/passwd", "/etc/passwd --tag"]),
+        ("getlimits", [ "", "--version"]),
+        ("fmt",       [ "/etc/passwd -w 10", "/etc/bash.bashrc"]),
+        ("wc",        [ "/etc/passwd", "-L /etc/bash.bashrc"]),
+        ("nl",        [ "/etc/passwd", "/etc/passwd -b psy"]),
+        ]
 
 def cmd(text):
     try:
@@ -13,136 +32,49 @@ def cmd(text):
 
 def check_arch():
     res = cmd("lscpu")
-    if "aarch64" not in res.split()[0]:
+    if b"aarch64" not in res.split():
         critical("Those tests can only be run on an ARM 64 architecture - exiting")
         exit(1)
 
 def check_files():
-    # XXX
-    pass
+    global coreutils_path
+    if "COREUTILS_PATH" in os.environ:
+        coreutils_path = os.environ["COREUTILS_PATH"]
+    if not os.path.isdir(coreutils_path):
+        critical(f"Coreutils not found in {coreutils_path}. Either install them there\
+                  or set environment variable COREUTILS_PATH to the directory containing the binaries.")
+        exit(1)
+    for binary in list(map(lambda x: x[0], test_bins)):
+        if not os.path.exists(coreutils_path + binary):
+            critical(f"Binary {binary} not found in {coreutils_path}!")
+            exit(1)
 
 
-def retrowrite_and_exec(filename):
-    cmd(f"python3 -m arm.librw.rw {filename} /tmp/{filename}_rw.s")
-    # cmd(f"gcc -g -fsanitize=address /tmp/{filename}_rw.s -o /tmp/{filename}_rw.out")
-    cmd(f"gcc -g /tmp/{filename}_rw.s -o /tmp/{filename}_rw.out")
-    return cmd(f"/tmp/{filename}_rw.out")
-    
+def run_test():
+    for test in test_bins:
+        binary = test[0]
+        binary_path = coreutils_path + binary
 
-def run_test(test_func):
-    print(f"[{BLUE}TEST{CLEAR}] Testing {test_func.__code__.co_name} ... ", end="")
-    sys.stdout.flush()
-    # try:
-    result = test_func()
-    print(f"{GREEN}PASSED{CLEAR}")
-    # except AssertionError as e:
-        # print(f"{CRITICAL}FAIL{CLEAR}")
-        # print(e)
+        print(f"[{BLUE}TEST{CLEAR}] Testing {binary} ... ", end="")
+        sys.stdout.flush()
 
+        #retrowriting
+        cmd(f"python3 -m arm.librw.rw {binary_path} /tmp/{binary}_rw.s")
+        cmd(f"gcc -g /tmp/{binary}_rw.s -o /tmp/{binary}_rw.out")
 
-def simple_asan_load8():
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           add x0, x0, 0x200
-           ldr x1, [x0]
-    """ + end_main
-    assert b"heap-buffer-overflow" in retrowrite_and_exec(code)
+        #exec with each possible arg
+        for args in test[1]:
+            output_rw = cmd(f"/tmp/{binary}_rw.out {args}")
+            output    = cmd(f"{binary_path} {args}")
+            if output != output_rw:
+                critical(f"Output of {binary}_rw: {output_rw}")
+                critical(f"Output of {binary}: {output}")
+                assert False
 
-
-def simple_asan_store8():
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           add x0, x0, 0x200
-           str x1, [x0]
-    """ + end_main
-    assert b"heap-buffer-overflow" in retrowrite_and_exec(code)
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           str x1, [x0, 0x100]
-    """ + end_main
-    assert b"heap-buffer-overflow" in retrowrite_and_exec(code)
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           mov x1, 0x20
-           str x1, [x0, x1, LSL#3]
-    """ + end_main
-    assert b"heap-buffer-overflow" in retrowrite_and_exec(code)
-
-
-def asan_load_16():
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           ldp x0, x1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"READ of size 16"]])
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           ldp x0, x1, [x0, 0xf8]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"READ of size 16"]])
-
-
-def asan_store_1_2_4_8_16():
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           stp x0, x1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 16"]])
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           str x1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 8"]])
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           strh w1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 2"]])
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           str w1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 4"]])
-
-    code = start_main + """
-           mov x0, 0x100
-           bl malloc
-           strb w1, [x0, 0x100]
-    """ + end_main
-    output = retrowrite_and_exec(code)
-    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
-
-
+        print(f"{GREEN}PASSED{CLEAR}")
 
 
 
 if __name__ == "__main__":
-    check_arch()
-    check_files()
-    run_test(asan_load_16)
-    run_test(asan_store_1_2_4_8_16)
-    run_test(simple_asan_store8)
-    run_test(simple_asan_load8)
+    run_test()
 

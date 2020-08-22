@@ -278,7 +278,7 @@ class Symbolizer():
             visited[inst_idx] = True
             prevs = function.prevs[inst_idx]
             if len(prevs) > 1:
-                print("MULTIPLE prevs: ", prevs)
+                print("MULTIPLE prevs: ", [hex(function.cache[i].address) for i in prevs])
                 #XXX: add other paths here
             inst_idx = prevs[0]
             instr = function.cache[inst_idx]
@@ -306,7 +306,7 @@ class Symbolizer():
         sec.replace(addr, size, value)
 
     def _guess_cases_number(self, container, function, addr):
-        max_instrs_before_switch = 20
+        max_instrs_before_switch = 30
         inst_idx = function.addr_to_idx[addr]
         instr = function.cache[inst_idx]
         found = -1
@@ -318,7 +318,7 @@ class Symbolizer():
                 self.found = found
                 self.inst_idx = idx
 
-        paths = [path()] 
+        paths = [path()]
         paths_finished = []
         while len(paths):
             p = paths[0]
@@ -347,10 +347,12 @@ class Symbolizer():
                 paths.pop(0)
                 continue
         debug(f"number of cases: {[p.found for p in paths_finished]}")
-        if any([paths_finished[i].found != paths_finished[i+1].found 
-            for i in range(len(paths_finished)-1)]):
+        true_paths_finished = list(filter(lambda x: x.found != -1, paths_finished))
+        if len(true_paths_finished) != len(paths_finished):
+            critical(f"Some paths not concluded while guessing cases number for switch at {addr}!")
+        if any([p.found != true_paths_finished[0].found for p in true_paths_finished]):
             return -1 # if there are inconsistencies, we quit!
-        return paths_finished[0].found
+        return true_paths_finished[0].found
 
     def symbolize_switch_tables(self, container, context):
         rodata = container.sections.get(".rodata", None)
@@ -448,7 +450,7 @@ class Symbolizer():
         # we adjust things like adrp x0, 0x10000 (start of .bss)
         # to stuff like  ldr x0, =(.bss - (offset))
         # to make global variables work
-        assert instruction.mnemonic == "adrp"
+        assert instruction.mnemonic.startswith("adr")
         base = container.sections[secname].base
         reg_name = instruction.reg_writes()[0]
         diff = base - orig_off
@@ -674,7 +676,11 @@ class Symbolizer():
                     self._adjust_global_access(container, function, edx, inst)
 
                 if inst.mnemonic == "adr":
-                    inst.op_str = inst.op_str.replace("#0x%x" % inst.cs.operands[1].imm, ".LC%x" % inst.cs.operands[1].imm)
+                    value = inst.cs.operands[1].imm
+                    if value % 0x1000 == 0: # an adr to a page, probably same as adrp
+                        self._adjust_global_access(container, function, edx, inst)
+                    else:
+                        inst.op_str = inst.op_str.replace("#0x%x" % value, ".LC%x" % value)
 
 
                 mem_access, _ = inst.get_mem_access_op()
