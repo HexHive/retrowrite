@@ -84,22 +84,30 @@ class Rewriter():
         results.append(".section .text")
         results.append(".align 16")
 
-        for _, function in sorted(self.container.functions.items()):
+        section = self.container.loader.elffile.get_section_by_name(".text")
+        data = section.data()
+        last_addr = base = section['sh_addr']
+        for faddr, function in sorted(self.container.functions.items()):
+            for addr in range(last_addr, faddr): # fill in space between functions.
+                results.append(".LC%x: // filler between functions" % (addr))
+                results.append(f"\t .byte {hex(data[addr - base])}")
+            last_addr = faddr + function.sz
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             results.append("\t.text\n%s" % (function))
+            results.append(".ltorg")  # XXX: fix this ugly hack
 
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
 
         
-        fixed_sections = [".bss", ".data", ".data.rel.ro", ".rodata", ".text"]
-        seclist = "-Wl"
-        for sec, section in sorted(
-                self.container.sections.items(), key=lambda x: x[1].base):
-            if section not in fixed_sections: continue
-            seclist += f",--section-start={section.name}={hex(section.base)}"
-        info(f"gcc cmdline flag: {seclist}")
+        # fixed_sections = [".bss", ".data", ".data.rel.ro", ".rodata", ".text"]
+        # seclist = "-Wl"
+        # for sec, section in sorted(
+                # self.container.sections.items(), key=lambda x: x[1].base):
+            # if section not in fixed_sections: continue
+            # seclist += f",--section-start={section.name}={hex(section.base)}"
+        # info(f"gcc cmdline flag: {seclist}")
         info(f"Success: retrowritten assembly to {self.outfile}")
 
 
@@ -255,7 +263,7 @@ class Symbolizer():
 
     def reverse_nexts(self, container):
         for _, function in container.functions.items():
-            function.prevs = {}
+            function.prevs = defaultdict(list)
             for idx, nexts in function.nexts.items():
                 for nexti in nexts:
                     function.prevs[nexti] = function.prevs.get(nexti, [])
@@ -266,27 +274,32 @@ class Symbolizer():
         inst_idx = function.addr_to_idx[instr.address]
         reg_name = instr.cs.reg_name(register)
         visited = [False]*len(function.cache)
-        paths = [Path(function, inst_idx, reg_pool=[reg_name], exprvalue=f"{reg_name}")]
+        paths = [Path(function, inst_idx, reg_pool=[reg_name], exprvalue=f"{reg_name}", visited=visited)]
         paths_finished = []
         while len(paths) > 0:
             p = paths[0]
-            if inst_idx == 0 or visited[inst_idx] or len(p.reg_pool) == 0:  # we got to the start of the function
+            prevs = function.prevs[p.inst_idx]
+            if p.inst_idx == 0 or p.visited[p.inst_idx] or \
+                    len(prevs) == 0 or len(p.reg_pool) == 0:  # we got to the start of the function
                 paths_finished += [paths[0]]
+                debug("finished path")
                 del paths[0]
                 continue
 
-            visited[inst_idx] = True
-            prevs = function.prevs[inst_idx]
+            p.visited[p.inst_idx] = True
             if len(prevs) > 1:
                 print("MULTIPLE prevs: ", [hex(function.cache[i].address) for i in prevs])
                 #XXX: add other paths here
-            inst_idx = prevs[0]
-            instr = function.cache[inst_idx]
+            p.inst_idx = prevs[0]
+            instr = function.cache[p.inst_idx]
             regs_write = instr.reg_writes_common()
             if any([reg in p.reg_pool for reg in regs_write]):
                 debug(f"next: {instr.cs}")
-                p.emulate(instr)
+                new_paths = p.emulate(instr)
                 debug(f"step: {instr.cs} - expr: {p.expr}")
+                if new_paths:
+                    for pp in new_paths:
+                        paths += [pp]
 
         for p in paths_finished:
             p.expr.simplify()
@@ -307,12 +320,12 @@ class Symbolizer():
 
     def _guess_cases_number(self, container, function, addr):
         max_instrs_before_switch = 30
-        inst_idx = function.addr_to_idx[addr]
-        instr = function.cache[inst_idx]
+        start_idx = function.addr_to_idx[addr]
+        instr = function.cache[start_idx]
         found = -1
         reg_index = False
         class path:
-            def __init__(self, steps=0, reg_index=False, found=-1, idx=inst_idx):
+            def __init__(self, steps=0, reg_index=False, found=-1, idx=start_idx):
                 self.steps = steps
                 self.reg_index = reg_index
                 self.found = found
@@ -323,11 +336,11 @@ class Symbolizer():
         while len(paths):
             p = paths[0]
             p.steps += 1
-            if inst_idx == 0 or p.steps > max_instrs_before_switch:
+            prevs = function.prevs[p.inst_idx]
+            if p.inst_idx == 0 or len(prevs) == 0 or p.steps > max_instrs_before_switch:
                 paths_finished += [paths.pop(0)]
                 continue
 
-            prevs = function.prevs[p.inst_idx]
             p.inst_idx = prevs[0]
             for prev in prevs[1:]:
                 paths += [path(p.steps, p.reg_index, p.found, prev)]
@@ -342,10 +355,17 @@ class Symbolizer():
                     p.found = instr.cs.operands[1].imm
                     paths_finished += [paths.pop(0)]
                     continue
-            if instr.mnemonic.startswith("movz") and instr.cs.operands[0].reg == p.reg_index:
+            if instr.mnemonic == "movz" and instr.cs.operands[0].reg == p.reg_index:
                 # if the register is written with a constant value, we just ignore this path
                 paths.pop(0)
                 continue
+            if instr.mnemonic == "mov" and instr.cs.operands[0].reg == p.reg_index:
+                # if the register is substitued by another register, it might be the comparison
+                # is done on the new one, so we start another path form scratch with that reg
+                paths.pop(0)
+                paths += [path(p.steps, instr.cs.operands[1].reg, -1, start_idx)]
+                continue
+
         debug(f"number of cases: {[p.found for p in paths_finished]}")
         true_paths_finished = list(filter(lambda x: x.found != -1, paths_finished))
         if len(true_paths_finished) != len(paths_finished):
@@ -384,6 +404,10 @@ class Symbolizer():
                     # value = self._memory_read(container, addr, 8)
                     # swlbl = ".LC%x" % (value,)
                     # self._memory_replace(container, addr, 8, swlbl)
+                    continue
+
+                # addr + ... (no register present in expression
+                if all([c not in str(expr) for c in ['x', 'w']]): 
                     continue
 
                 # first_case_addr + [ jmptbl_addr + ??? ]
@@ -462,31 +486,29 @@ class Symbolizer():
         instruction.op_str = "%s, =(%s %c 0x%x)"  % (reg_name, secname, op, abs(diff))
 
     def _get_resolved_address(self, function, inst, inst2, path):
+        debug(inst2)
         if inst2.mnemonic == "add":
-            assert inst2.cs.operands[2].type == CS_OP_IMM
+            if not inst2.cs.operands[2].type == CS_OP_IMM:
+                return 0
             assert all([op.shift.value == 0 for op in inst2.cs.operands])
             return path.orig_off + inst2.cs.operands[2].imm
         elif inst2.mnemonic.startswith("ldr"):
             assert inst2.cs.operands[1].type == CS_OP_MEM
             if not all([op.shift.value == 0 for op in inst2.cs.operands]):
-                critical(f"Missed global resolved address on {inst2} from {inst}")
                 return 0
             return path.orig_off + inst2.cs.operands[1].mem.disp
         elif inst2.mnemonic.startswith("str"):
             if inst2.cs.reg_name(inst2.cs.operands[0].reg) == path.orig_reg: # str <orig_reg>, [...]
                 if not inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29":
                     # assert False
-                    critical(f"Missed global resolved address on {inst2} from {inst}")
                     return 0
                 expr = self.resolve_register_value(inst2.cs.operands[0].reg, function, inst2)
                 if not isinstance(expr.left, int):
-                    critical(f"Missed global resolved address on {inst2} from {inst}")
                     return 0
                 return (expr.left, inst2.cs.operands[1].mem.disp)
             else: # str ..., [<orig_reg> + ...]
                 return path.orig_off + inst2.cs.operands[1].mem.disp
         else:
-            critical(f"Missed global resolved address on {inst2} from {inst}")
             return 0
 
 
@@ -514,6 +536,7 @@ class Symbolizer():
 
         # if we got here, it's bad, as we're not sure which section the global variable is in.
         # We try to resolve all possible addresses by simulating all possible control flow paths.
+        # we will also track down stack pushes of global pointers because they can be loaded later
 
         class path:
             def __init__(self, orig_reg="x0", idx=0, stack_stores=[], orig_off=orig_off, visited=[]):
@@ -556,6 +579,8 @@ class Symbolizer():
                     p.stack_stores += [disp]
                 elif raddr: # a global pointer was just used normally 
                     resolved_addresses += [(inst2, raddr)]
+                else:
+                    critical(f"Missed global resolved address on {inst2} from {inst}")
 
             if p.orig_reg in inst2.reg_writes_common():
                 if len(p.stack_stores) == 0:
@@ -674,6 +699,7 @@ class Symbolizer():
 
                 if inst.mnemonic == "adrp":
                     self._adjust_global_access(container, function, edx, inst)
+                    sys.stdout.flush()
 
                 if inst.mnemonic == "adr":
                     value = inst.cs.operands[1].imm

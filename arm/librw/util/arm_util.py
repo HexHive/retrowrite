@@ -3,6 +3,13 @@ from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM, CS_OP_REG
 cs = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
 cs.detail = True
 
+
+# Clobbered registers (reserved by caller, cannot overwrite)
+clobbered_registers = ["x" + str(i) for i in range(19, 29)] + ["w" + str(i) for i in range(19, 29)]
+# Non-clobbered registers (can be overwrited by a function)
+non_clobbered_registers = ["x" + str(i) for i in range(0, 19)] + ["w" + str(i) for i in range(0, 19)]
+
+
 def get_reg_size_arm(regname):
     sizes = {
         "B" : 1,

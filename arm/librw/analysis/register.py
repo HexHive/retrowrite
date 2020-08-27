@@ -6,6 +6,7 @@ import copy
 from collections import defaultdict
 
 from archinfo import ArchAArch64, Register
+from arm.librw.util.logging import *
 
 
 class RegisterAnalysis(object):
@@ -110,11 +111,8 @@ class RegisterAnalysis(object):
     def analyze(container):
         for addr, function in container.functions.items():
             ra = RegisterAnalysis()
-            print("Analyzing function " + function.name)
+            debug("Analyzing function " + function.name)
             ra.analyze_function(function)
-            if len(ra.free_regs) < 4: 
-                print(ra.free_regs)
-                # exit(1)
             function.analysis[RegisterAnalysis.KEY] = ra.free_regs
 
     def analyze_function(self, function):
@@ -122,22 +120,25 @@ class RegisterAnalysis(object):
         iter = 0
         while change and iter < 8192:
             change = False
-            for idx, _ in enumerate(function.cache):
-                change = change or self.analyze_instruction(function, idx)
+            for idx in range(len(function.cache)-1, -1, -1): 
+                if self.analyze_instruction(function, idx):
+                    change = True
             iter += 1
         self.finalize()
 
     def analyze_instruction(self, function, instruction_idx):
         current_instruction = function.cache[instruction_idx]
-        nexts = function.next_of(instruction_idx)
+        nexts = function.nexts[instruction_idx]
 
         reguses = self.reg_pool.intersection(
-            [self.full_register_of(x) for x in current_instruction.reg_reads()]
+            ["x"+x if x[0] == "w" else x for x in current_instruction.reg_reads()]
         )
+        reguses = self.compute_reg_set_closure(reguses)
 
-        regwrites = self.compute_reg_set_closure(
-            current_instruction.reg_writes()
-        ).difference(reguses)
+
+        regwrites = ["x"+x if x[0] == "w" else x for x in current_instruction.reg_writes()]
+        regwrites = self.compute_reg_set_closure(regwrites)
+        regwrites = set(regwrites).difference(reguses)
 
         if current_instruction.mnemonic.startswith("cmp") \
         or current_instruction.mnemonic.startswith("tst"):
@@ -156,6 +157,45 @@ class RegisterAnalysis(object):
 
         return False
 
+    # def analyze_function(self, function):
+        # change = False
+        # change = True
+        # iter = 0
+        # while change and iter < 8192:
+            # change = False
+            # for idx, _ in enumerate(function.cache):
+                # change = change or self.analyze_instruction(function, idx)
+            # iter += 1
+        # self.finalize()
+
+    # def analyze_instruction(self, function, instruction_idx):
+        # current_instruction = function.cache[instruction_idx]
+        # nexts = function.next_of(instruction_idx)
+
+        # reguses = self.reg_pool.intersection(
+            # [self.full_register_of(x) for x in current_instruction.reg_reads()]
+        # )
+
+        # regwrites = self.reg_pool.intersection(current_instruction.reg_writes()).difference(reguses)
+
+        # if current_instruction.mnemonic.startswith("cmp") \
+        # or current_instruction.mnemonic.startswith("tst"):
+            # reguses = reguses.union(regwrites)
+
+        # for nexti in nexts:
+            # if nexti not in self.used_regs: continue
+            # reguses = reguses.union(
+                # self.used_regs[nexti].difference(regwrites))
+
+        # reguses = self.compute_reg_set_closure(reguses)
+
+        # if reguses != self.used_regs[instruction_idx]:
+            # self.used_regs[instruction_idx] = reguses
+            # return True
+
+        # return False
+
+
     def debug(self, function):
         print("==== DEBUG")
         for instruction_idx, inst in enumerate(function.cache):
@@ -163,4 +203,5 @@ class RegisterAnalysis(object):
 
     def finalize(self):
         for idx, ent in self.used_regs.items():
-            self.free_regs[idx] = self.reg_pool.difference(ent)
+            self.free_regs[idx] = []
+            # self.free_regs[idx] = self.reg_pool.difference(ent)

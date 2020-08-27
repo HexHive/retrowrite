@@ -5,6 +5,7 @@ from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
 from . import disasm
 from arm.librw.util.logging import *
+from arm.librw.util.arm_util import non_clobbered_registers
 
 
 class SzPfx():
@@ -223,6 +224,7 @@ class Function():
     def next_of(self, instruction_idx):
         nexts = list()
         for x in self.nexts[instruction_idx]:
+            #XXX: does not make any sense
             if isinstance(x, str):
                 nexts.append(x)
             else:
@@ -272,7 +274,7 @@ class InstructionWrapper():
 
     def reg_writes_common(self):
         if self.mnemonic.startswith("bl"): # assume the function called uses all temporary registers
-            return ["x"+str(i) for i in range(19)] 
+            return non_clobbered_registers
         return self.reg_writes()
 
     def instrument_before(self, iinstr, order=None):

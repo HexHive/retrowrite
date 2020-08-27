@@ -44,7 +44,6 @@ def do_symbolization(input, outfile):
     loader.container.attach_loader(loader)
 
     # XXX: do we really want "+.s" at the end?
-    # rw = Rewriter(loader.container, outfile + ".s")
     rw = Rewriter(loader.container, outfile)
 
     # XXX: remove

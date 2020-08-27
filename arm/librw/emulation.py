@@ -22,12 +22,12 @@ class Expr:
             # print("  "*d, "calling left")
             self.left.replace(old, new, d+1)
         elif self.left == old:
-            self.left = copy.copy(new)
+            self.left = copy.deepcopy(new)
         if isinstance(self.right, Expr):
             # print("  "*d, "calling right")
             self.right.replace(old, new, d+1)
         elif self.right == old:
-            self.right = copy.copy(new)
+            self.right = copy.deepcopy(new)
         # print("  "*d, "exit")
 
     def simplify(self):
@@ -50,6 +50,8 @@ class Expr:
                 self.left = self.left - self.right
             elif self.operation == "<<":
                 self.left = self.left << self.right
+            elif self.operation == "&":
+                self.left = (self.left & self.right)
             else:
                 critical(f"Operation {self.operation} not supported.")
                 exit(1)
@@ -69,12 +71,16 @@ class Expr:
 
 
 class Path:
-    def __init__(self, function, address, reg_pool=[], exprvalue=""):
-        self.address = address
+    def __init__(self, function, inst_idx, reg_pool=[], exprvalue="", visited=[]):
         self.function = function
         self.reg_pool = set(reg_pool)
-        self.inst_idx = 0
+        self.inst_idx = inst_idx
         self.expr = Expr(exprvalue)
+        self.visited = visited
+
+    def __copy__(self):
+        return Path(self.function, self.inst_idx, copy.copy(self.reg_pool),
+                    copy.deepcopy(self.expr), self.visited[:])
 
     def emulate(self, instr):
         if instr.mnemonic in ["cmp", "cmn"]: #skip comparisons
@@ -90,10 +96,10 @@ class Path:
         for reg in regs_read:
             self.reg_pool.add(reg)
 
-        if instr.cs.mnemonic in ["bl"]:
+        if instr.cs.mnemonic in ["bl", "blr"]:
             return
 
-        if instr.cs.mnemonic == "add" or instr.mnemonic == "sub":
+        if instr.cs.mnemonic in ["add", "adds"] or instr.mnemonic == "sub":
             operation = "+" if instr.mnemonic == "add" else "-"
             result = reg_name(ops[0].reg)
             first = reg_name(ops[1].reg)
@@ -109,11 +115,24 @@ class Path:
             first = ops[1].imm
             self.expr.replace(result, first)
 
+        elif instr.cs.mnemonic in ["and"]:
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            assert ops[1].type == CS_OP_REG
+            second = ops[2].reg
+            if ops[2].type == CS_OP_REG:
+                second = reg_name(second)
+            self.expr.replace(result, Expr(first, second, op="&"))
+
         elif instr.cs.mnemonic in ["mov", "movz"]: #XXX: movz?
             result = reg_name(ops[0].reg)
             first = ops[1].reg
-            if instr.mnemonic == "movz" and first != 0: import IPython; IPython.embed() 
+            if instr.mnemonic == "movz": assert ops[1].type == CS_OP_IMM
             self.expr.replace(result, first if ops[1].type == CS_OP_IMM else reg_name(first))
+
+        elif instr.cs.mnemonic in ["movn"]: 
+            result = reg_name(ops[0].reg)
+            self.expr.replace(result, ~(ops[1].imm))
 
         elif instr.cs.mnemonic in ["sxtw"]:
             result = reg_name(ops[0].reg)
@@ -167,8 +186,7 @@ class Path:
             final2.mem = sz
             self.expr.replace(results[1], final2) # replace the second register written
 
-        elif instr.cs.mnemonic.startswith("ldr"):
-            if "]," in instr.op_str: assert False
+        elif instr.cs.mnemonic.startswith("ldr") or instr.cs.mnemonic.startswith("ldur"):
             result = reg_name(ops[0].reg)
             mem, mem_op_idx = instr.get_mem_access_op()
             mem_op = instr.cs.operands[mem_op_idx]
@@ -177,10 +195,14 @@ class Path:
             if mem_op.shift.type == 1:
                 second = Expr(second, mem_op.shift.value, op="<<")
             elif mem.disp != 0:
-                if "!" in instr.op_str: 
+                if "!" in instr.op_str:  #pre-increment
                     if mem.index != 0 or mem_op.shift.type != 0: assert False
                     self.expr.replace(first, Expr(first, second, "+"))
+                    first = Expr(first, second, "+")
                 second = mem.disp
+            if "]," in instr.op_str: #post-increment
+                if mem.index != 0 or mem_op.shift.type != 0: assert False
+                self.expr.replace(first, Expr(first, ops[2].imm, "+"))
             if second == "":
                 final = Expr(first)
             else:
@@ -188,6 +210,23 @@ class Path:
             final.mem = get_access_size_arm(instr.cs)[0]
             self.expr.replace(result, final)
 
+        elif instr.cs.mnemonic.startswith("csel"):
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            second = reg_name(ops[2].reg)
+            new_path = copy.copy(self)
+            self.expr.replace(result, first)
+
+            new_path.expr.replace(result, second)
+            return [new_path]
+
+        elif instr.cs.mnemonic.startswith("cneg"):
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            new_path = copy.copy(self)
+            self.expr.replace(result, first)
+            new_path.expr.replace(result, Expr(Expr(first, -1, "*"), -1, "+")) # not binary operator
+            return [new_path]
 
         else:
             print("NOT SUPPORTED", instr.cs)
