@@ -10,7 +10,7 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 
 from arm.librw.util.logging import *
 from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg
-from arm.librw.container import InstrumentedInstruction
+from arm.librw.container import InstrumentedInstruction, Jumptable
 from arm.librw.emulation import Path, Expr
 
 class Rewriter():
@@ -178,7 +178,6 @@ class Symbolizer():
             self.symbolized.add(inst.address)
 
         self.symbolize_cf_transfer(container, context)
-        self.reverse_nexts(container)
         # Symbolize remaining memory accesses
         self.symbolize_switch_tables(container, context)
         self.symbolize_mem_accesses(container, context)
@@ -227,7 +226,7 @@ class Symbolizer():
                 if instruction.cs.operands[-1].type == CS_OP_IMM: # b 0xf20
                     target = instruction.cs.operands[-1].imm
                 elif instruction.cs.operands[-1].type == CS_OP_REG: # br x0
-                    function.switches += [instruction.address]
+                    function.possible_switches += [instruction.address]
                 if target:
                     # Check if the target is in .text section.
                     if container.is_in_section(".text", target):
@@ -260,6 +259,9 @@ class Symbolizer():
                             function.nexts[inst_idx].append("undef")
                 elif is_jmp:
                     function.nexts[inst_idx].append("undef")
+
+        # after we're done, we prepare the prevs list
+        self.reverse_nexts(container)
 
     def reverse_nexts(self, container):
         for _, function in container.functions.items():
@@ -379,7 +381,7 @@ class Symbolizer():
         if not rodata:
             assert False
         for _, function in container.functions.items():
-            for jump in function.switches:
+            for jump in function.possible_switches:
                 inst_idx = function.addr_to_idx[jump]
                 instr = function.cache[inst_idx]
                 reg = instr.cs.operands[0].reg
@@ -416,10 +418,10 @@ class Symbolizer():
                     base_case = expr.left.left
                     debug(f"BASE CASE: {base_case}")
                     size = expr.left.right.left.mem
-                    jmptbl = int(str(expr.left.right.left.left))
+                    jmptbl_addr = int(str(expr.left.right.left.left))
                     shift = expr.left.right.right
                     debug(f"SHIFT: {shift}")
-                    debug(f"JMPTBL: {jmptbl}")
+                    debug(f"JMPTBL: {jmptbl_addr}")
                     debug(f"SIZE: {size}")
 
                     cases = self._guess_cases_number(container, function, instr.address)
@@ -427,12 +429,17 @@ class Symbolizer():
                     if cases == -1:
                         assert False
 
+                    cases_list = [base_case]
+
                     for i in range(cases):
-                        value = self._memory_read(container, jmptbl + i*size, size, signed=True)
+                        value = self._memory_read(container, jmptbl_addr + i*size, size, signed=True)
                         debug("VALUE:" + str(value))
                         addr = base_case + value*(2**shift)
                         swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
-                        self._memory_replace(container, jmptbl + i*size, size, swlbl)
+                        self._memory_replace(container, jmptbl_addr + i*size, size, swlbl)
+                        cases_list += [addr]
+
+                    function.add_switch(Jumptable(instr.address, jmptbl_addr, size, cases, cases_list))
 
                 else:
                     critical(f"JUMP TABLE at {hex(instr.address)} impossible to recognize!")
@@ -699,7 +706,6 @@ class Symbolizer():
 
                 if inst.mnemonic == "adrp":
                     self._adjust_global_access(container, function, edx, inst)
-                    sys.stdout.flush()
 
                 if inst.mnemonic == "adr":
                     value = inst.cs.operands[1].imm

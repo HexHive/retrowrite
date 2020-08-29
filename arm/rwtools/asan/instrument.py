@@ -109,7 +109,7 @@ class Instrument():
 
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(18, 0, -1)]
-        free = sorted(
+        free_regs = sorted(
             list(free),
             key=lambda x: affinity.index(x) if x in affinity else len(affinity))
 
@@ -120,17 +120,21 @@ class Instrument():
         fix_lexp = list()
         save_rflags = "unopt"
         save_rax = True
-        is_rep_stos = False
+        push_cnt = 0
 
-        asan_regs = []
-        for i in range(4):
-            if len(free) > i:
-                asan_regs += [free[i]]
-            else:
-                print("Not enough free registers! Quitting...")
-                exit(1)
-
-
+        asan_regs = free_regs[:4] # we need 4 free registers
+        if len(asan_regs) < 4: # if there aren't enough we save them on the stack
+            non_free = [reg for reg in affinity if reg not in asan_regs]
+            to_save_regs = non_free[:4 - len(asan_regs)]
+            for i in range(0, len(to_save_regs)-1, 2): # first save them in pairs (faster)
+                save.append(copy.copy(sp.STACK_PAIR_REG_SAVE)[0].format(*to_save_regs[i:i+2]))
+                restore.insert(0, copy.copy(sp.STACK_PAIR_REG_LOAD)[0].format(*to_save_regs[i:i+2]))
+            if i + 2 < len(to_save_regs): # if there is a single one left
+                save.append(copy.copy(sp.STACK_REG_SAVE)[0].format(to_save_regs[i]))
+                restore.insert(0, copy.copy(sp.STACK_REG_LOAD)[0].format(to_save_regs[i]))
+            asan_regs += to_save_regs
+            print(asan_regs)
+            push_cnt += len(to_save_regs)
 
         mem, mem_op_idx = instruction.get_mem_access_op()
         mem_op = instruction.cs.operands[mem_op_idx]
@@ -148,10 +152,17 @@ class Instrument():
             fix_lexp += [sp.LEXP_SHIFT.format(To=to, Res=asan_regs[0], From=cs.reg_name(mem.base), amnt=amnt, shift_reg=shift_reg)]
         # ldr x0, [x1, x2]
         elif mem.index != 0:
-            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=cs.reg_name(mem.index))]
+            reg_index = cs.reg_name(mem.index)
+            if is_reg_32bits(reg_index):
+                reg_index += ", sxtw"  # quick hack
+            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=reg_index)]
         # ldr x0, [x1, #12]
         elif mem.disp != 0:
-            fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
+            if mem.disp > (1 << 12): # aarch64 limitation
+                fix_lexp += [sp.LEXP_MOVZ.format(To=asan_regs[0], amnt=mem.disp)]
+                fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=asan_regs[0])]
+            else:
+                fix_lexp += [sp.LEXP_ADD.format(To=asan_regs[0], From=cs.reg_name(mem.base), amnt=mem.disp)]
         # ldr x0, [x1]
         if mem.disp == 0 and mem.index == 0 and mem_op.shift.value == 0:
             lexp = cs.reg_name(mem.base)
@@ -176,20 +187,12 @@ class Instrument():
                 # save_rflags = "opt"
                 # save_rax = "rax" not in free
 
-        # this has to do with red zones (kernel x64 does not have them)
+        # this has to do with red zones (kernel x64 does not have them) (are you sure?)
         # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f219372
-        push_cnt = 0
         if is_leaf and (any([r[0] for r in asan_regs]) or save_rflags):
             save.append(sp.LEAF_STACK_ADJUST)
             restore.append(sp.LEAF_STACK_UNADJUST)
             push_cnt += 32
-
-        # XXX: saving registers!
-        # for r in asan_regs:
-            # if r[0]:
-                # save.append(copy.copy(sp.MEM_REG_SAVE)[0].format(reg=r[1]))
-                # restore.insert(0, copy.copy(sp.MEM_REG_RESTORE)[0].format(reg=r[1]))
-                # push_cnt += 1
 
 
         # XXX:
@@ -282,21 +285,23 @@ class Instrument():
         codecache = '\n'.join(codecache)
         comment = "{}: {}".format(str(instruction), str(free))
 
-        if is_rep_stos:
-            copycache = copy.copy(codecache)
-            extend_args_check = copy.copy(args)
-            extend_args_check["lexp"] = "(%rdi, %rcx)"
-            extend_args_check["addr"] = '{}_2'.format(instruction.address)
-            copycache = copycache.format(**extend_args_check)
-            original_exit = copy.copy(
-                sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address)
+        # if is_rep_stos:
+            # copycache = copy.copy(codecache)
+            # extend_args_check = copy.copy(args)
+            # extend_args_check["lexp"] = "(%rdi, %rcx)"
+            # extend_args_check["addr"] = '{}_2'.format(instruction.address)
+            # copycache = copycache.format(**extend_args_check)
+            # original_exit = copy.copy(
+                # sp.MEM_EXIT_LABEL)[0].format(addr=instruction.address)
 
-            new_exit = copy.copy(sp.MEM_EXIT_LABEL)[0].format(
-                addr='{}_2'.format(instruction.address))
-            copycache = copycache.replace(original_exit, new_exit)
-            codecache = codecache + "\n" + copycache
+            # new_exit = copy.copy(sp.MEM_EXIT_LABEL)[0].format(
+                # addr='{}_2'.format(instruction.address))
+            # copycache = copycache.replace(original_exit, new_exit)
+            # codecache = codecache + "\n" + copycache
 
         debug("Memcheck after:\n" + codecache.format(**args))
+
+        # exit(1)
 
         return InstrumentedInstruction(codecache.format(**args),
                                        enter_lbl, comment)
@@ -312,6 +317,7 @@ class Instrument():
                 if instruction.address in self.skip_instrument:
                     continue
 
+
                 # Do not instrument stack canaries
                 # XXX: if instruction.op_str.startswith(sp.CANARY_CHECK):
                     # XXX: continue
@@ -319,6 +325,11 @@ class Instrument():
                 mem, midx = instruction.get_mem_access_op()
                 # This is not a memory access
                 if not mem:
+                    continue
+
+                # XXX: not supporting SIMD instructions for now (ld1, st3 ...)
+                if instruction.cs.reg_name(instruction.cs.operands[0].reg)[0] == 'v':
+                    debug(f"Skipping BAsan instrumentation on SIMD instr {instruction.cs}")
                     continue
 
                 acsz, bool_load = get_access_size_arm(instruction.cs)

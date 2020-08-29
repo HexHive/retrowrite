@@ -136,8 +136,20 @@ LEXP_SHIFT = """
 """
 
 LEXP_ADD = "\tadd {To}, {From}, {amnt}"
+LEXP_MOVZ = "\tmovz {To}, {amnt}"
 
 
+# this is for leaf functions, where the 
+# system V ABI lets them use 128 bytes of stack without pushes
+# we need to work around that by adjusting the stack pointer
+LEAF_STACK_ADJUST = "\tsub sp, sp, 256"
+LEAF_STACK_UNADJUST = "\tadd sp, sp, 256"
+
+STACK_REG_SAVE = "\tstr {0}, [sp, -8]!",  #pre-increment
+STACK_REG_LOAD = "\tldr {0}, [sp], 8",    #post-increment
+
+STACK_PAIR_REG_SAVE = "\tstp {0}, {1}, [sp, -16]!",  #pre-increment
+STACK_PAIR_REG_LOAD = "\tldp {0}, {1}, [sp], 16",    #post-increment
 
 
 # MEM_REG_SAVE = [

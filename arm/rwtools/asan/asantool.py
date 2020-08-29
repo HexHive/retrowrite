@@ -76,7 +76,6 @@ def do_symbolization(input, outfile):
                         # addr = k
                     # loader.container.functions[int(func)].analysis[key][addr] = v
     # except IOError:
-    print("[*] Analyzing free registers")
     RegisterAnalysis.analyze(loader.container)
     analysis = dict()
 

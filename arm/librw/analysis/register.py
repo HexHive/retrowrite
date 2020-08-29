@@ -116,15 +116,40 @@ class RegisterAnalysis(object):
             function.analysis[RegisterAnalysis.KEY] = ra.free_regs
 
     def analyze_function(self, function):
-        change = True
-        iter = 0
-        while change and iter < 8192:
-            change = False
-            for idx in range(len(function.cache)-1, -1, -1): 
-                if self.analyze_instruction(function, idx):
-                    change = True
-            iter += 1
+        # we will do a reverse-topological order visit to understand
+        # which registers are free in a single pass
+
+        queue = []
+        for idx, nexts in function.nexts.items():
+            no_of_nexts = sum(isinstance(x, int) for x in nexts) # how many actual nexts do we have?
+            if no_of_nexts == 0:
+                queue += [idx]
+
+        # breadth first search on the cfg
+        visited = [False]*function.sz
+        while len(queue):
+            idx = queue.pop(0)
+            visited[idx] = True
+            self.analyze_instruction(function, idx)
+            prev_instrs = list(filter(lambda x: isinstance(x, int), function.prevs[idx]))
+            for idxs in prev_instrs:
+                if not visited[idxs]:
+                    queue += [idxs]
+
         self.finalize()
+
+
+        # old algorithm, ignore
+
+        # change = True
+        # iter = 0
+        # while change and iter < 8192:
+            # change = False
+            # for idx in range(len(function.cache)-1, -1, -1): 
+                # if self.analyze_instruction(function, idx):
+                    # change = True
+            # iter += 1
+
 
     def analyze_instruction(self, function, instruction_idx):
         current_instruction = function.cache[instruction_idx]
@@ -150,12 +175,14 @@ class RegisterAnalysis(object):
                 self.used_regs[nexti].difference(regwrites))
 
         reguses = self.compute_reg_set_closure(reguses)
+        self.used_regs[instruction_idx] = reguses
+        return
 
-        if reguses != self.used_regs[instruction_idx]:
-            self.used_regs[instruction_idx] = reguses
-            return True
+        # if reguses != self.used_regs[instruction_idx]:
+            # self.used_regs[instruction_idx] = reguses
+            # return True
 
-        return False
+        # return False
 
     # def analyze_function(self, function):
         # change = False

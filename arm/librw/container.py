@@ -31,6 +31,7 @@ class Container():
         self.relocations = defaultdict(list)
         self.loader = None
         self.ignore_function_addrs = list()
+        self.text_section = None
         # PLT information
         self.plt_base = None
         self.plt = dict()
@@ -87,11 +88,18 @@ class Container():
 
     def attach_loader(self, loader):
         self.loader = loader
+        self.text_section = self.loader.elffile.get_section_by_name(".text")
+
 
     def is_in_section(self, secname, value):
         assert self.loader, "No loader found!"
 
-        section = self.loader.elffile.get_section_by_name(secname)
+        if secname in self.sections:
+            section = self.sections[secname]
+        if secname == ".text":
+            if self.text_section == None: return True
+            section = self.text_section
+
         base = section['sh_addr']
         sz = section['sh_size']
         if base <= value < base + sz:
@@ -107,7 +115,7 @@ class Container():
                 return section
         # check for .text, as container.sections has only datasections
         if self.is_in_section(".text", addr):
-            return self.loader.elffile.get_section_by_name(".text")
+            return self.text_section
         return None
 
     def function_of_address(self, addr):
@@ -129,6 +137,13 @@ class Container():
         assert self.loader, "No loader found!"
         return "import"
 
+class Jumptable():
+    def __init__(self, br_address=0, jump_table_address=0, case_size=1, case_no=1, cases=[]):
+        self.br_address = br_address
+        self.jump_table_address = jump_table_address
+        self.case_size = case_size
+        self.case_no = case_no
+        self.cases = cases
 
 class Function():
     def __init__(self, name, start, sz, bytes, bind="STB_LOCAL"):
@@ -139,6 +154,7 @@ class Function():
         self.bytes = bytes
         self.bbstarts = set()
         self.bind = bind
+        self.possible_switches = list()
         self.switches = list()
         self.addr_to_idx = dict()
 
@@ -183,6 +199,9 @@ class Function():
 
         return None
 
+    def add_switch(self, jump_table):
+        self.switches += [jump_table]
+
     def __str__(self):
         assert self.cache, "Function not disassembled!"
 
@@ -194,6 +213,27 @@ class Function():
             results.append(".local %s" % (self.name))
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
+
+        #we first fix up the switches, depending on how much 
+        #instrumentation we added
+        for jmptbl in self.switches:
+            case_no = 0
+            instr_count = 0
+            for instruction in self.cache:
+                if instruction.address == jmptbl.cases[case_no]: 
+                    if case_no >= 0 and instr_count > (1 << (8 * jmptbl.case_size)):
+                        critical(f"PROBLEM AT {jmptbl.br_address}")
+                        exit(1)
+                    instr_count = 0
+                    case_no += 1
+
+                instr_count += 1
+                for iinstr in instruction.before:
+                    instr_count += 1
+                for iinstr in instruction.before:
+                    instr_count += 1
+
+
 
         for instruction in self.cache:
             if isinstance(instruction, InstrumentedInstruction):

@@ -56,3 +56,4 @@ def _is_jump_conditional(opcode):
 
 def reg_name(reg):
     return cs.reg_name(reg)
+
