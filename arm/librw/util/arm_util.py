@@ -57,3 +57,31 @@ def _is_jump_conditional(opcode):
 def reg_name(reg):
     return cs.reg_name(reg)
 
+def memory_replace(container, addr, size, value):
+    sec = container.section_of_address(addr)
+    if sec.name != ".rodata": 
+        debug(f"WARNING: changing value not in rodata but in {sec.name}")
+    sec.replace(addr, size, value)
+
+def count_instructions(function, start_addr, end_addr):
+    if start_addr > end_addr:
+        start_addr, end_addr = end_addr, start_addr
+    first_idx = function.addr_to_idx[start_addr]
+    last_idx = function.addr_to_idx[end_addr]
+    instr_count = 0
+    for idx in range(first_idx,last_idx):
+        instr_count += 1
+        instruction = function.cache[idx]
+        for iinstr in (instruction.before + instruction.after):
+            for line in iinstr.code.split('\n'):
+                subinstr = line.strip()
+                if len(subinstr) and subinstr[0] != '.' and subinstr[0] != '#':
+                    instr_count += 1
+    return instr_count
+
+def is_stackframe_mov(instr):
+    if any([instr.cs.mnemonic.startswith(n) for n in ["ldr", "ldp", "str", "stp"]]):
+        mem, mem_op_idx = instr.get_mem_access_op()
+        if reg_name(mem.base) == "x29":
+            return True
+    return False

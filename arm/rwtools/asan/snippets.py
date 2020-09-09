@@ -151,6 +151,16 @@ STACK_REG_LOAD = "\tldr {0}, [sp], 8",    #post-increment
 STACK_PAIR_REG_SAVE = "\tstp {0}, {1}, [sp, -16]!",  #pre-increment
 STACK_PAIR_REG_LOAD = "\tldp {0}, {1}, [sp], 16",    #post-increment
 
+# STACKFRAME_PAIR_REG_SAVE = """
+    # stp {0}, {1}, [x29, 0x500]
+    # stp {2}, {3}, [x29, 0x1010]
+# """
+
+# STACKFRAME_PAIR_REG_LOAD = """
+    # ldp {0}, {1}, [x29, 0x1000]
+    # ldp {2}, {3}, [x29, 0x1010]
+# """
+
 
 # MEM_REG_SAVE = [
     # # Save Regs

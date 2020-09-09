@@ -46,14 +46,10 @@ def do_symbolization(input, outfile):
     # XXX: do we really want "+.s" at the end?
     rw = Rewriter(loader.container, outfile)
 
-    # XXX: remove
-    rw.outfile = "temp.s"
-    rw.dump()
-
     rw.symbolize()
 
-    rw.outfile = "temp_symbolized.s"
-    rw.dump()
+    # rw.outfile = "temp_symbolized.s"
+    # rw.dump()
 
     rw.outfile = outfile
 

@@ -102,9 +102,32 @@ class Instrument():
         return common + sp.ASAN_REPORT
 
     def get_mem_instrumentation(self, acsz, instruction, midx, free, is_leaf, bool_load):
-        if "sp" in instruction.reg_reads() and "sp" in instruction.reg_writes():
+        if "sp" in instruction.reg_reads() or "sp" in instruction.reg_writes():
             debug("we do not instrument push/pop for now")
-            return "# push/pop"
+            return InstrumentedInstruction("# push/pop")
+        # if "x29" in instruction.reg_reads() or "x29" in instruction.reg_writes():
+            # debug("we do not instrument stack frames for now")
+            # return InstrumentedInstruction("# stackframe push/pop")
+
+
+
+        # return InstrumentedInstruction("nop\n"*500)
+
+        # if instruction.address != 0xa360:
+            # return InstrumentedInstruction("# woah")
+        # if instruction.address < 0x99c0 or instruction.address > 0xa3b8:
+            # return InstrumentedInstruction("# woah")
+
+        # if 0x9900 <= instruction.address <= 0x9990:
+                # return InstrumentedInstruction("# woah")
+
+        # if is_leaf:
+            # critical(f"LEAF {instruction.cs}")
+            # exit(1)
+
+        # import random
+        # if random.randint(0, 800) != 1:
+            # return InstrumentedInstruction("# woah")
 
 
         # we prefer high registers, less likely to go wrong
@@ -126,6 +149,7 @@ class Instrument():
         if len(asan_regs) < 4: # if there aren't enough we save them on the stack
             non_free = [reg for reg in affinity if reg not in asan_regs]
             to_save_regs = non_free[:4 - len(asan_regs)]
+            i = 0
             for i in range(0, len(to_save_regs)-1, 2): # first save them in pairs (faster)
                 save.append(copy.copy(sp.STACK_PAIR_REG_SAVE)[0].format(*to_save_regs[i:i+2]))
                 restore.insert(0, copy.copy(sp.STACK_PAIR_REG_LOAD)[0].format(*to_save_regs[i:i+2]))
@@ -135,6 +159,11 @@ class Instrument():
             asan_regs += to_save_regs
             print(asan_regs)
             push_cnt += len(to_save_regs)
+
+        save_condition_reg = True
+        if save_condition_reg: # should check whether we actually need this or not
+            save.append("\tmrs {0}, nzcv\n\tstr {0}, [sp, -16]!".format(asan_regs[0]))
+            restore.insert(0, "\tldr {0}, [sp], 16\n\tmsr nzcv, {0}".format(asan_regs[0]))
 
         mem, mem_op_idx = instruction.get_mem_access_op()
         mem_op = instruction.cs.operands[mem_op_idx]
@@ -186,13 +215,16 @@ class Instrument():
             # if save_rflags:
                 # save_rflags = "opt"
                 # save_rax = "rax" not in free
+        if is_leaf:
+            save.insert(0, sp.LEAF_STACK_ADJUST)
+            restore.append(sp.LEAF_STACK_UNADJUST)
 
         # this has to do with red zones (kernel x64 does not have them) (are you sure?)
         # https://github.com/torvalds/linux/blob/9f159ae07f07fc540290f219372
-        if is_leaf and (any([r[0] for r in asan_regs]) or save_rflags):
-            save.append(sp.LEAF_STACK_ADJUST)
-            restore.append(sp.LEAF_STACK_UNADJUST)
-            push_cnt += 32
+        # if is_leaf and (any([r[0] for r in asan_regs]) or save_rflags):
+            # save.append(sp.LEAF_STACK_ADJUST)
+            # restore.append(sp.LEAF_STACK_UNADJUST)
+            # push_cnt += 32
 
 
         # XXX:
@@ -309,6 +341,9 @@ class Instrument():
 
     def instrument_mem_accesses(self):
         for _, fn in self.rewriter.container.functions.items():
+            if any([s in fn.name for s in ["alloc", "signal_is_trapped", "free"]]):
+                info("Skipping instrumentation on function {fn.name} to avoid custom heap implementations")
+                continue
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):
                 # Do not instrument instrumented instructions

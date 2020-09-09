@@ -28,20 +28,23 @@ class StackFrameAnalysis(object):
         self.analyze_is_fn_leaf(function, container)
 
     def analyze_is_fn_leaf(self, function, container):
+        is_leaf = True
         for instruction in function.cache:
-            mem, midx = instruction.get_mem_access_op()
-            if not mem:
-                continue
-            # XXX: ARM
-            if mem.base != X86_REG_RSP:
-                continue
-            if mem.disp >= 0:
-                continue
+            if instruction.mnemonic == "bl":
+                is_leaf = False
+                break
+            # mem, midx = instruction.get_mem_access_op()
+            # if not mem:
+                # continue
+            # # XXX: ARM
+            # if mem.base != X86_REG_RSP:
+                # continue
+            # if mem.disp >= 0:
+                # continue
 
-            self.analysis[function.start][
-                StackFrameAnalysis.KEY_IS_LEAF] = True
+        self.analysis[function.start][
+            StackFrameAnalysis.KEY_IS_LEAF] = is_leaf
 
-            break
 
     def update_results(self, container):
         for key, result in self.analysis.items():

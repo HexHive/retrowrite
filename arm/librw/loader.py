@@ -29,9 +29,10 @@ class Loader():
             bytes = data[section_offset:section_offset + fvalue["sz"]]
 
             fixed_name = fvalue["name"].replace("@", "_")
-            function = Function(fixed_name, faddr, fvalue["sz"], bytes,
-                                fvalue["bind"])
+            bind = fvalue["bind"] if fixed_name != "main" else "STB_GLOBAL" #main should always be global
+            function = Function(fixed_name, faddr, fvalue["sz"], bytes, bind)
             self.container.add_function(function)
+        # exit(1)
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
         for sec in [sec for sec in seclist if section_filter(sec)]:

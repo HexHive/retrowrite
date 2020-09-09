@@ -9,9 +9,10 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 
 from arm.librw.util.logging import *
-from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg
+from arm.librw.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg, memory_replace, get_access_size_arm
 from arm.librw.container import InstrumentedInstruction, Jumptable
 from arm.librw.emulation import Path, Expr
+
 
 class Rewriter():
     GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
@@ -75,14 +76,21 @@ class Rewriter():
         symb.symbolize_data_sections(self.container, None)
 
     def dump(self):
-        results = list()
+        # we fix stuff that gets broken by too much instrumentation added,
+        # like 'tbz' short jumps and jump tables.
+        # it is *very* important that no further instrumentation is added from now!
+        for _,function in self.container.functions.items():
+            function.fix_shortjumps()
+            function.fix_jmptbl_size(self.container)
 
+        results = list()
         for sec, section in sorted(
                 self.container.sections.items(), key=lambda x: x[1].base):
             results.append("%s" % (section))
 
         results.append(".section .text")
         results.append(".align 16")
+
 
         section = self.container.loader.elffile.get_section_by_name(".text")
         data = section.data()
@@ -97,17 +105,10 @@ class Rewriter():
             results.append("\t.text\n%s" % (function))
             results.append(".ltorg")  # XXX: fix this ugly hack
 
+
         with open(self.outfile, 'w') as outfd:
             outfd.write("\n".join(results + ['']))
 
-        
-        # fixed_sections = [".bss", ".data", ".data.rel.ro", ".rodata", ".text"]
-        # seclist = "-Wl"
-        # for sec, section in sorted(
-                # self.container.sections.items(), key=lambda x: x[1].base):
-            # if section not in fixed_sections: continue
-            # seclist += f",--section-start={section.name}={hex(section.base)}"
-        # info(f"gcc cmdline flag: {seclist}")
         info(f"Success: retrowritten assembly to {self.outfile}")
 
 
@@ -195,11 +196,13 @@ class Symbolizer():
                 is_call = "bl" in instruction.cs.mnemonic
 
                 if not (is_jmp or is_call):
-                    # Simple, next is idx + 1
-                    # XXX: ARM
-                    if instruction.mnemonic.startswith('ret'):
+                    # https://idasuckless.github.io/the-brk-is-a-lie.html
+                    if instruction.mnemonic == "brk":
+                        function.nexts[inst_idx] = []
+                    elif instruction.mnemonic.startswith('ret'):
                         function.nexts[inst_idx].append("ret")
                         instruction.cf_leaves_fn = True
+                    # otherwise, if it's a normal istruction, just go to the next
                     else:
                         function.nexts[inst_idx].append(inst_idx + 1)
                     continue
@@ -233,8 +236,10 @@ class Symbolizer():
                         function.bbstarts.add(target)
                         instruction.op_str = instruction.op_str.replace("#0x%x" % target, ".LC%x" % target)
                     elif target in container.plt:
-                        instruction.op_str = "{}".format(
-                            container.plt[target])
+                        name = container.plt[target]
+                        instruction.op_str = "{}".format(name)
+                        if any(exit in name for exit in ["abort", "exit"]): #XXX: fix this ugly hack
+                            function.nexts[inst_idx] = []
                     else:
                         gotent = container.is_target_gotplt(target)
                         if gotent:
@@ -295,13 +300,13 @@ class Symbolizer():
             p.inst_idx = prevs[0]
             instr = function.cache[p.inst_idx]
             regs_write = instr.reg_writes_common()
-            if any([reg in p.reg_pool for reg in regs_write]):
-                debug(f"next: {instr.cs}")
-                new_paths = p.emulate(instr)
-                debug(f"step: {instr.cs} - expr: {p.expr}")
-                if new_paths:
-                    for pp in new_paths:
-                        paths += [pp]
+            # if any([reg in p.reg_pool for reg in regs_write]):
+
+            new_paths = p.emulate(instr)
+
+            if new_paths:
+                for pp in new_paths:
+                    paths += [pp]
 
         for p in paths_finished:
             p.expr.simplify()
@@ -313,12 +318,6 @@ class Symbolizer():
         if sec.name != ".rodata": 
             debug(f"WARNING: changing value not in rodata but in {sec.name}")
         return sec.read_at(addr, size, signed)
-
-    def _memory_replace(self, container, addr, size, value):
-        sec = container.section_of_address(addr)
-        if sec.name != ".rodata": 
-            debug(f"WARNING: changing value not in rodata but in {sec.name}")
-        sec.replace(addr, size, value)
 
     def _guess_cases_number(self, container, function, addr):
         max_instrs_before_switch = 30
@@ -342,11 +341,15 @@ class Symbolizer():
             if p.inst_idx == 0 or len(prevs) == 0 or p.steps > max_instrs_before_switch:
                 paths_finished += [paths.pop(0)]
                 continue
+            print(f"taking path at {hex(function.cache[p.inst_idx].address)}, total paths {len(paths)}")
+
+            for i in prevs:
+                print("MULTIPLE prevs: " , [hex(function.cache[i].address) for i in prevs])
 
             p.inst_idx = prevs[0]
-            for prev in prevs[1:]:
-                paths += [path(p.steps, p.reg_index, p.found, prev)]
             instr = function.cache[p.inst_idx]
+
+
 
             if instr.mnemonic.startswith("ldr") and not p.reg_index:
                 mem, mem_op_idx = instr.get_mem_access_op()
@@ -356,6 +359,7 @@ class Symbolizer():
                    instr.cs.operands[1].type == CS_OP_IMM:
                     p.found = instr.cs.operands[1].imm
                     paths_finished += [paths.pop(0)]
+                    print("found path", len(paths))
                     continue
             if instr.mnemonic == "movz" and instr.cs.operands[0].reg == p.reg_index:
                 # if the register is written with a constant value, we just ignore this path
@@ -367,6 +371,10 @@ class Symbolizer():
                 paths.pop(0)
                 paths += [path(p.steps, instr.cs.operands[1].reg, -1, start_idx)]
                 continue
+
+            for prev in prevs[1:]:
+                print("adding path", hex(function.cache[prev].address), instr.cs.reg_name(p.reg_index))
+                paths += [path(p.steps, p.reg_index, p.found, prev)]
 
         debug(f"number of cases: {[p.found for p in paths_finished]}")
         true_paths_finished = list(filter(lambda x: x.found != -1, paths_finished))
@@ -405,7 +413,7 @@ class Symbolizer():
                     # addr = int(str(expr.left.left))
                     # value = self._memory_read(container, addr, 8)
                     # swlbl = ".LC%x" % (value,)
-                    # self._memory_replace(container, addr, 8, swlbl)
+                    # memory_replace(container, addr, 8, swlbl)
                     continue
 
                 # addr + ... (no register present in expression
@@ -414,7 +422,8 @@ class Symbolizer():
 
                 # first_case_addr + [ jmptbl_addr + ??? ]
                 elif isinstance(expr.left.right, Expr) and expr.left.right.left \
-                    and expr.left.right.left.mem and isinstance(expr.left.right.left.left, int):
+                    and isinstance(expr.left.right.left, Expr) and expr.left.right.left.mem\
+                    and isinstance(expr.left.right.left.left, int):
                     base_case = expr.left.left
                     debug(f"BASE CASE: {base_case}")
                     size = expr.left.right.left.mem
@@ -429,14 +438,14 @@ class Symbolizer():
                     if cases == -1:
                         assert False
 
-                    cases_list = [base_case]
+                    cases_list = []
 
                     for i in range(cases):
                         value = self._memory_read(container, jmptbl_addr + i*size, size, signed=True)
                         debug("VALUE:" + str(value))
                         addr = base_case + value*(2**shift)
                         swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
-                        self._memory_replace(container, jmptbl_addr + i*size, size, swlbl)
+                        memory_replace(container, jmptbl_addr + i*size, size, swlbl)
                         cases_list += [addr]
 
                     function.add_switch(Jumptable(instr.address, jmptbl_addr, size, cases, cases_list))
@@ -494,17 +503,17 @@ class Symbolizer():
 
     def _get_resolved_address(self, function, inst, inst2, path):
         debug(inst2)
-        if inst2.mnemonic == "add":
+        if inst2.cs.mnemonic == "add":
             if not inst2.cs.operands[2].type == CS_OP_IMM:
                 return 0
             assert all([op.shift.value == 0 for op in inst2.cs.operands])
             return path.orig_off + inst2.cs.operands[2].imm
-        elif inst2.mnemonic.startswith("ldr"):
+        elif inst2.cs.mnemonic.startswith("ldr"):
             assert inst2.cs.operands[1].type == CS_OP_MEM
             if not all([op.shift.value == 0 for op in inst2.cs.operands]):
                 return 0
             return path.orig_off + inst2.cs.operands[1].mem.disp
-        elif inst2.mnemonic.startswith("str"):
+        elif inst2.cs.mnemonic.startswith("str"):
             if inst2.cs.reg_name(inst2.cs.operands[0].reg) == path.orig_reg: # str <orig_reg>, [...]
                 if not inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29":
                     # assert False
@@ -515,6 +524,21 @@ class Symbolizer():
                 return (expr.left, inst2.cs.operands[1].mem.disp)
             else: # str ..., [<orig_reg> + ...]
                 return path.orig_off + inst2.cs.operands[1].mem.disp
+        elif inst2.cs.mnemonic.startswith("stp"):
+            if inst2.cs.reg_name(inst2.cs.operands[0].reg) == path.orig_reg: # stp <orig_reg>, ..., [...]
+                op_num, adding = 0, 0
+            elif inst2.cs.reg_name(inst2.cs.operands[1].reg) == path.orig_reg: # stp ..., <orig_reg>, [...]
+                op_num, adding = 1, get_access_size_arm(inst2.cs)[0] // 2
+            else: # str ..., [<orig_reg> + ...]
+                return path.orig_off + inst2.cs.operands[1].mem.disp
+
+            mem, mem_op_idx = inst2.get_mem_access_op()
+            if not inst2.cs.reg_name(mem.base) == "x29":
+                return 0
+            expr = self.resolve_register_value(inst2.cs.operands[op_num].reg, function, inst2)
+            if not isinstance(expr.left, int):
+                return 0
+            return (expr.left, mem.disp + adding)
         else:
             return 0
 
@@ -562,14 +586,17 @@ class Symbolizer():
                 del paths[0]
                 continue
             p.visited[p.idx] = 1
+            # print(inst2.cs)
             # debug(str(p.orig_reg) + " " + str(inst2))
 
             # check if someone is overwriting one of the saved global pointers on the stack
+            # XXX: add support for stp
             if inst2.mnemonic == "str" and inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29" and\
                     inst2.cs.operands[1].mem.disp in p.stack_stores:
                 p.stack_stores.remove(inst2.cs.operands[1].mem.disp)
 
             # check if we are loading a previously saved global pointer from the stack
+            # XXX: add support for ldp
             if inst2.mnemonic == "ldr" and inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29" and\
                     inst2.cs.operands[1].mem.disp in p.stack_stores:
                 critical(f"found it at {inst2}, from {inst}!")
@@ -748,6 +775,7 @@ class Symbolizer():
                             break
 
                     if is_an_import:
+                        print(is_an_import)
                         inst.op_str = inst.op_str.replace(
                             hex(value), "%s%s" % (is_an_import, sfx))
                     else:
