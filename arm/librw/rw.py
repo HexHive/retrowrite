@@ -79,9 +79,16 @@ class Rewriter():
         # we fix stuff that gets broken by too much instrumentation added,
         # like 'tbz' short jumps and jump tables.
         # it is *very* important that no further instrumentation is added from now!
+        total_jumps_fixed = 0
         for _,function in self.container.functions.items():
-            function.fix_shortjumps()
+            function.update_instruction_count()
+            function.fix_literal_pools()
+            total_jumps_fixed += function.fix_shortjumps()
+            function.update_instruction_count()
             function.fix_jmptbl_size(self.container)
+
+        if total_jumps_fixed: 
+            info(f"Fixed a total of {total_jumps_fixed} short jumps")
 
         results = list()
         for sec, section in sorted(
@@ -286,8 +293,10 @@ class Symbolizer():
         while len(paths) > 0:
             p = paths[0]
             prevs = function.prevs[p.inst_idx]
+
+            # XXX: fix the ugly 'x' in p.expr hack
             if p.inst_idx == 0 or p.visited[p.inst_idx] or \
-                    len(prevs) == 0 or len(p.reg_pool) == 0:  # we got to the start of the function
+            len(prevs) == 0 or (len(p.reg_pool) == 0 and 'x' not in str(p.expr)):  # we got to the start of the function 
                 paths_finished += [paths[0]]
                 debug("finished path")
                 del paths[0]
@@ -358,6 +367,11 @@ class Symbolizer():
                 if instr.cs.operands[0].reg == p.reg_index and \
                    instr.cs.operands[1].type == CS_OP_IMM:
                     p.found = instr.cs.operands[1].imm
+                    # adjustments for differenct comparisons
+                    next_instr = function.cache[p.inst_idx + 1]
+                    if next_instr and next_instr.mnemonic in ["b.hi", "b.ls", "b.le"]:
+                        p.found += 1
+                    # if next_instr and next_instr.mnemonic in ["b.lt"]: p.found -= 1
                     paths_finished += [paths.pop(0)]
                     print("found path", len(paths))
                     continue
@@ -416,39 +430,43 @@ class Symbolizer():
                     # memory_replace(container, addr, 8, swlbl)
                     continue
 
-                # addr + ... (no register present in expression
-                if all([c not in str(expr) for c in ['x', 'w']]): 
-                    continue
+                # addr + ... (no register present in expression)
+                # if all([c not in str(expr) for c in ['x', 'w']]): 
+                    # continue
 
                 # first_case_addr + [ jmptbl_addr + ??? ]
                 elif isinstance(expr.left.right, Expr) and expr.left.right.left \
                     and isinstance(expr.left.right.left, Expr) and expr.left.right.left.mem\
                     and isinstance(expr.left.right.left.left, int):
-                    base_case = expr.left.left
-                    debug(f"BASE CASE: {base_case}")
-                    size = expr.left.right.left.mem
-                    jmptbl_addr = int(str(expr.left.right.left.left))
-                    shift = expr.left.right.right
-                    debug(f"SHIFT: {shift}")
-                    debug(f"JMPTBL: {jmptbl_addr}")
-                    debug(f"SIZE: {size}")
+                    try: #XXX remove this try catch and uncomment (and fix) above expression about not having registers
+                         # probably you need to implement multiple path traversal in the switch detection
+                        base_case = expr.left.left
+                        debug(f"BASE CASE: {base_case}")
+                        size = expr.left.right.left.mem
+                        jmptbl_addr = int(str(expr.left.right.left.left))
+                        shift = expr.left.right.right
+                        debug(f"SHIFT: {shift}")
+                        debug(f"JMPTBL: {jmptbl_addr}")
+                        debug(f"SIZE: {size}")
 
-                    cases = self._guess_cases_number(container, function, instr.address)
-                    debug(f"CASES: {cases}")
-                    if cases == -1:
-                        assert False
+                        cases = self._guess_cases_number(container, function, instr.address)
+                        debug(f"CASES: {cases}")
+                        if cases == -1:
+                            assert False
 
-                    cases_list = []
+                        cases_list = []
 
-                    for i in range(cases):
-                        value = self._memory_read(container, jmptbl_addr + i*size, size, signed=True)
-                        debug("VALUE:" + str(value))
-                        addr = base_case + value*(2**shift)
-                        swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
-                        memory_replace(container, jmptbl_addr + i*size, size, swlbl)
-                        cases_list += [addr]
+                        for i in range(cases):
+                            value = self._memory_read(container, jmptbl_addr + i*size, size, signed=True)
+                            debug("VALUE:" + str(value))
+                            addr = base_case + value*(2**shift)
+                            swlbl = "(.LC%x-.LC%x)/%d" % (addr, base_case, 2**shift)
+                            memory_replace(container, jmptbl_addr + i*size, size, swlbl)
+                            cases_list += [addr]
 
-                    function.add_switch(Jumptable(instr.address, jmptbl_addr, size, cases, cases_list))
+                        function.add_switch(Jumptable(instr.address, jmptbl_addr, size, base_case, cases_list))
+                    except:
+                        continue
 
                 else:
                     critical(f"JUMP TABLE at {hex(instr.address)} impossible to recognize!")
@@ -486,7 +504,7 @@ class Symbolizer():
 
         return False
 
-    def _adjust_adrp_section_pointer(self, container, secname, orig_off, instruction):
+    def _adjust_adrp_section_pointer(self, container, fun, secname, orig_off, instruction):
         # we adjust things like adrp x0, 0x10000 (start of .bss)
         # to stuff like  ldr x0, =(.bss - (offset))
         # to make global variables work
@@ -560,7 +578,7 @@ class Symbolizer():
         if len(possible_sections) == 1:
             secname = possible_sections[0]
             if secname not in [".text"]:  # .text can get instrumented, we need to know the exact address
-                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
+                self._adjust_adrp_section_pointer(container, function, secname, orig_off, inst)
                 return
 
         debug(f"Global access at {inst}, multiple sections possible: {possible_sections}, trying to resolve address...")
@@ -654,7 +672,7 @@ class Symbolizer():
         if len(possible_sections) == 1:
             secname = list(possible_sections)[0]
             if secname not in [".text"]:
-                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
+                self._adjust_adrp_section_pointer(container, function, secname, orig_off, inst)
                 debug(f"We're good, false alarm, the only possible section is: {secname}. Nice!")
                 return
 

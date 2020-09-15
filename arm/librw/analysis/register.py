@@ -119,6 +119,14 @@ class RegisterAnalysis(object):
         # we will do a reverse-topological order visit to understand
         # which registers are free in a single pass
 
+
+
+        if function.name != "lower_sequence":
+            self.finalize()
+            return
+
+
+
         queue = []
         for idx, nexts in function.nexts.items():
             no_of_nexts = sum(isinstance(x, int) for x in nexts) # how many actual nexts do we have?
@@ -230,5 +238,9 @@ class RegisterAnalysis(object):
 
     def finalize(self):
         for idx, ent in self.used_regs.items():
+            #XXX
+            #XXX
+            #XXX
+            #XXX
             self.free_regs[idx] = []
             # self.free_regs[idx] = self.reg_pool.difference(ent)

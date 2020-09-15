@@ -5,7 +5,7 @@ from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
 from . import disasm
 from arm.librw.util.logging import *
-from arm.librw.util.arm_util import non_clobbered_registers, memory_replace, count_instructions
+from arm.librw.util.arm_util import non_clobbered_registers, memory_replace
 
 INSTR_SIZE = 4
 
@@ -139,14 +139,14 @@ class Container():
         return "import"
 
 class Jumptable():
-    def __init__(self, br_address=0, jump_table_address=0, case_size=1, case_no=1, cases=[]):
+    def __init__(self, br_address=0, jump_table_address=0, case_size=1, base_case=0, cases=[]):
         self.br_address = br_address
         self.jump_table_address = jump_table_address
         self.case_size = case_size
-        self.case_no = case_no
+        self.case_no = len(cases)
         self.cases = cases
         self.first_case = sorted(cases)[0]
-        self.base_case = cases[0]
+        self.base_case = base_case
         self.last_case = sorted(cases)[-1]
 
 class Function():
@@ -159,6 +159,7 @@ class Function():
         self.bbstarts = set()
         self.bind = bind
         self.possible_switches = list()
+        self.instr_count = {}
         self.switches = list()
         self.switches_to_fix = list()
         self.addr_to_idx = dict()
@@ -206,26 +207,78 @@ class Function():
 
     def add_switch(self, jump_table):
         self.switches += [jump_table]
-        print(self.name)
         for case in set(jump_table.cases):
             instr = self.cache[self.addr_to_idx[case]]
             same_cases = [e for e,x in enumerate(jump_table.cases) if x == instr.address]
             instr.op_str += f" // Case {same_cases} of switch at {hex(jump_table.br_address)}"
 
+    def get_instrumentation_length(self, instruction, after=True):
+        instr_count = 0
+        if not after: instr_list = instruction.before
+        else: instr_list = instruction.before + instruction.after
+        for iinstr in instr_list:
+            for line in iinstr.code.split('\n'):
+                subinstr = line.strip()
+                if len(subinstr) and subinstr[0] != '.' and subinstr[0] != '#':
+                    instr_count += 1
+        return instr_count
+
+    def update_instruction_count(self):
+        # get how much instrumentation was added by manually counting instructions
+        # only run this after _all_ instrumentation has been added
+        first_idx = 0
+        last_idx = len(self.cache)
+        instr_count = 0
+        for idx in range(first_idx,last_idx):
+            instr_count += 1
+            instruction = self.cache[idx]
+            instr_count += self.get_instrumentation_length(instruction)
+            self.instr_count[instruction.address] = instr_count
+        return instr_count
+
+    def count_instructions(self, start_addr, end_addr):
+        off = 0
+        if start_addr > end_addr:
+            start_addr, end_addr = end_addr, start_addr
+        if end_addr > self.cache[-1].address:
+            off = end_addr - self.cache[-1].address
+            end_addr = self.cache[-1].address
+        assert start_addr in self.instr_count and end_addr in self.instr_count
+        # print(f"total instructions between {hex(start_addr)} and {hex(end_addr)}: {self.instr_count[end_addr] - self.instr_count[start_addr] + off}")
+
+        return self.instr_count[end_addr] - self.instr_count[start_addr] + off
+
     def fix_shortjumps(self):
         # fix short conditional branches, like tbz, if too much instrumentation was added
+        jumps_fixed = 0
         for instruction in self.cache:
             if instruction.mnemonic in ["tbz", "tbnz"]:
                 start = instruction.address
                 target = instruction.cs.operands[-1].imm
                 next_instruction = start + INSTR_SIZE
-                instrs = count_instructions(self, start, target)
-                if instrs > 2**13: #32kB = 2^15 bytes = (2^15 / 4) instrs
-                     instruction.instrument_after(InstrumentedInstruction(
-                         ".tbz_%x_false:\n\tb .LC%x\n.tbz_%x_true:\n\tb .LC%x" \
-                         %  (start, next_instruction, start, target)))
-                     instruction.op_str = instruction.op_str.replace(
-                             ".LC%x" % target, ".tbz_%x_true" % start)
+                instrs = self.count_instructions(start, target)
+                if instrs > 2**12: #32kB = 2^15 bytes = (2^15 / 4) instrs
+                    jumps_fixed += 1
+                    instruction.instrument_after(InstrumentedInstruction(
+                        ".tbz_%x_false:\n\tb .LC%x\n.tbz_%x_true:\n\tb .LC%x" \
+                        %  (start, next_instruction, start, target)))
+                    instruction.op_str = instruction.op_str.replace(
+                        ".LC%x" % target, ".tbz_%x_true" % start)
+            if instruction.cs.mnemonic.startswith("b.") or instruction.cs.mnemonic in ["cbz", "cbnz"]:
+                start = instruction.address
+                target = instruction.cs.operands[-1].imm
+                next_instruction = start + INSTR_SIZE
+                instrs = self.count_instructions(start, target)
+                # if instruction.address == 0x53e684:
+                    # import IPython; IPython.embed() 
+                if instrs > 2**17: #1MB = 2^20 bytes = (2^20 / 4) instrs
+                    jumps_fixed += 1
+                    instruction.instrument_after(InstrumentedInstruction(
+                        ".condb_%x_false:\n\tb .LC%x\n.condb_%x_true:\n\tb .LC%x" \
+                        %  (start, next_instruction, start, target)))
+                    instruction.op_str = instruction.op_str.replace(
+                        ".LC%x" % target, ".condb_%x_true" % start)
+        return jumps_fixed
 
     def fix_jmptbl_size(self, container):
         # jump tables may not fit if there is too much instrumentation. 
@@ -236,8 +289,8 @@ class Function():
             # and the base case. We do the same, backwards, from the 
             # latest possible landing point
 
-            max_instrs = max(count_instructions(self, jmptbl.first_case, jmptbl.base_case),
-                             count_instructions(self, jmptbl.base_case, jmptbl.last_case))
+            max_instrs = max(self.count_instructions(jmptbl.first_case, jmptbl.base_case),
+                             self.count_instructions(jmptbl.base_case, jmptbl.last_case))
 
             if max_instrs > (0x7f << (8 * (jmptbl.case_size-1))):
                 self.switches_to_fix += [(jmptbl, max_instrs)]
@@ -256,23 +309,45 @@ class Function():
                 possible = True
                 padding = {}
 
-                # this could be optimized by remembering the instrs number for each case
-                for case in sorted(set(jmptbl.cases)):
-                    instr_case = self.cache[self.addr_to_idx[case]]
-                    instrs = count_instructions(self, instr_case.address, jmptbl.base_case)
-                    alignment = (2 ** (shift - 2))
-                    # nops = (alignment - (instrs % alignment)) % alignment
-                    nops = (alignment - (instrs % alignment)) #XXX ? see line directly before
-                    # we insert just the right amount of nops to make the case aligned
-                    print("Inserted ", nops, "nops")
-                    padding[case] = nops
-                    total_nops += nops
+                cases_forwards =  list(filter(lambda x: x > jmptbl.base_case, jmptbl.cases))
+                cases_backwards = list(filter(lambda x: x < jmptbl.base_case, jmptbl.cases))
+                cases_forwards = sorted(set(cases_forwards))
+                cases_backwards = sorted(set(cases_backwards))
+                cases_backwards.reverse()
 
-                    if case == jmptbl.base_case or case == jmptbl.last_case:
-                        if (instrs + total_nops)/(alignment) > (0x7f << (8 * (jmptbl.case_size-1))):
-                            possible = False
-                            break
-                        total_nops = 0
+                # some cases are before the actual switch
+                # we need to parse the cases ahead and behind the switch in their relative order
+                # of distance from the switch, to keep track of  how many nops we used
+                for e,case_list in enumerate([cases_forwards, cases_backwards]):
+                    instrs, total_nops = 0, 0
+                    for case in case_list:
+                        instr_case = self.cache[self.addr_to_idx[case]]
+                        if e == 0:
+                            instrs = self.count_instructions(instr_case.address, jmptbl.base_case - 4)
+                            instrs -= 1
+                            # we are going forward - do not count instrumentation of this single instruction
+                            instr_length = self.get_instrumentation_length(instr_case, after=False)
+                            instrs -= instr_length
+                        else:
+                            instrs = self.count_instructions(instr_case.address - 4, jmptbl.base_case)
+                        instrs += total_nops
+                        if jmptbl.br_address == 0x003305cc:
+                            critical(f"from {hex(jmptbl.base_case)} to {hex(instr_case.address)} there are {instrs} instrs")
+                        alignment = (2 ** (shift - 2))
+                        # nops = (alignment - (instrs % alignment)) % alignment
+                        nops = (alignment - (instrs % alignment)) #XXX ? see line directly before
+                        if e == 0:
+                            padding[case] = -nops
+                        else:
+                            padding[case] = nops
+                        # we insert just the right amount of nops to make the case aligned
+                        total_nops += nops
+
+                    print(f"Inserted a total of {total_nops} nops across {len(case_list)} cases")
+
+                    if instrs and (instrs)/(alignment) > (0x7f << (8 * (jmptbl.case_size-1))):
+                        possible = False
+                        break
 
                 if not possible:
                     shift += 1 # we added so many nops there's no space left for the jmptbl
@@ -280,23 +355,88 @@ class Function():
                 break
 
             for addr, nops in padding.items():
-                previnstr_case = self.cache[self.addr_to_idx[addr] - 1]
-                previnstr_case.instrument_after(InstrumentedInstruction("\n\tnop"*nops))
+                if nops < 0:
+                    previnstr_case = self.cache[self.addr_to_idx[addr] - 1]
+                    previnstr_case.instrument_after(InstrumentedInstruction("\n\tnop"*(-nops)))
+                else:
+                    instr_case = self.cache[self.addr_to_idx[addr]]
+                    instr_case.before.insert(0, InstrumentedInstruction("\n\tnop"*nops))
+
+
+            size = jmptbl.case_size
 
             if shift <= 4: # aarch64 limitation of the add instruction
                 add_instr.op_str = add_instr.op_str[:-1] + str(shift)
             else:
                 reg = add_instr.cs.reg_name(add_instr.cs.operands[-1].reg)
+                extend_width = "b" if size == 1 else "h"
+                add_instr.instrument_before(
+                        InstrumentedInstruction(f"\tsxt{extend_width} {reg}, {reg}"))
                 add_instr.instrument_before(
                         InstrumentedInstruction(f"\tlsl {reg}, {reg}, {shift-2}"))
             add_instr.op_str = add_instr.op_str.replace("sxtb", "sxtw") # correct cast if wrong
 
-            size = jmptbl.case_size
             debug(f"Fixing up jump table at {hex(jmptbl.br_address)} with new shift {shift}")
             # change the actual jump table in memory 
-            for i in range(1, len(jmptbl.cases)):
-                swlbl = "(.LC%x-.LC%x)/%d" % (jmptbl.cases[i], jmptbl.cases[0], 2**shift)
-                memory_replace(container, jmptbl.jump_table_address + (i-1)*size, size, swlbl)
+            for i in range(len(jmptbl.cases)):
+                swlbl = "(.LC%x-.LC%x)/%d" % (jmptbl.cases[i], jmptbl.base_case, 2**shift)
+                memory_replace(container, jmptbl.jump_table_address + i*size, size, swlbl)
+
+    def fix_literal_pools(self):
+        if not self.cache or not len(self.cache): 
+            return
+        last_ltorg_addr = self.cache[0].address
+        for instruction in self.cache:
+            # .ltorg literal pools should be every 1MB, we put them every 512kb for safety
+            if self.count_instructions(last_ltorg_addr, instruction.address) > 2**17: 
+                # the litarl pool cannot be executed, so we need a non-conditional branch
+                if instruction.cs.mnemonic != "b": continue
+                for jmptbl in self.switches:
+                    if jmptbl.first_case <= instruction.address <= jmptbl.last_case:
+                        break
+                else:
+                    last_ltorg_addr = instruction.address
+                    instruction.instrument_after(InstrumentedInstruction(".ltorg"))
+        # if the function is bigger than 1 MB, we cannot just use literal pools anymore
+        # if self.count_instructions(self.cache[0].address, self.cache[-1].address) > 2**17: 
+        # if True: 
+            # to_align = []
+            # for instruction in self.cache:
+                # if instruction.mnemonic == "ldr" and "=(" in instruction.op_str:
+                    # # ldr x1, =(.bss - 0x40)
+                    # reg_name = instruction.op_str.split(",")[0]
+                    # arg = instruction.op_str.split("(")[1]
+                    # label = arg.split(" ")[0]
+                    # operation = arg.split(" ")[1]
+                    # offset = int(arg.split(" ")[2].split(")")[0], 16)
+                    # page, offset = offset // 1024, offset % 1024
+                    # instruction.mnemonic = "# " + instruction.mnemonic # comment away old one
+                    # instruction.instrument_after(InstrumentedInstruction(
+                        # "\tadrp %s, %s + %s" % (reg_name, label, page * 1024)))
+                    # if operation == "+":
+                        # instruction.instrument_after(InstrumentedInstruction(
+                            # "\tadd %s, %s, 0x%x" % (reg_name, reg_name, offset)))
+                    # elif operation == "-":
+                        # instruction.instrument_after(InstrumentedInstruction(
+                            # "\tsub %s, %s, 0x%x" % (reg_name, reg_name, offset)))
+                    # else:
+                        # assert False
+                # elif instruction.mnemonic == "ldr" and "=." in instruction.op_str:
+                    # # ldr x1, =.LC3434
+                    # reg_name = instruction.op_str.split(",")[0]
+                    # label = instruction.op_str.split("=")[1].split()[0]
+                    # instruction.mnemonic = "# " + instruction.mnemonic # comment away old one
+                    # instruction.instrument_after(InstrumentedInstruction(
+                        # "\tadrp %s, %s" % (reg_name, label)))
+                    # # https://stackoverflow.com/questions/38570495/aarch64-relocation-prefixes
+                    # instruction.instrument_after(InstrumentedInstruction(
+                        # "\tldr %s, [%s, :lo12:%s]" % (reg_name, reg_name, label)))
+                    # addr = int(label.split("LC")[-1], 16)
+                    # to_align += [addr]
+            # return to_align
+
+
+
 
 
     def __str__(self):
@@ -320,9 +460,7 @@ class Function():
 
             if instruction.address in self.bbstarts:
                 results.append(".L%x:" % (instruction.address))
-                results.append(".LC%x:" % (instruction.address))
-            else:
-                results.append(".LC%x:" % (instruction.address))
+            results.append(".LC%x:" % (instruction.address))
 
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))

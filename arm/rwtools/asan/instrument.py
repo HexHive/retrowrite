@@ -157,7 +157,6 @@ class Instrument():
                 save.append(copy.copy(sp.STACK_REG_SAVE)[0].format(to_save_regs[i]))
                 restore.insert(0, copy.copy(sp.STACK_REG_LOAD)[0].format(to_save_regs[i]))
             asan_regs += to_save_regs
-            print(asan_regs)
             push_cnt += len(to_save_regs)
 
         save_condition_reg = True
@@ -282,8 +281,6 @@ class Instrument():
         else:
             assert False, "Reached unreachable code!"
 
-        debug(f"Memcheck {acsz}:\n" + memcheck)
-
         codecache.extend(save)
         if len(fix_lexp): 
             codecache.append('\n'.join(fix_lexp))
@@ -310,7 +307,7 @@ class Instrument():
 
 
         args["addr"] = instruction.address
-        enter_lbl = "%s_%s" % (sp.ASAN_MEM_ENTER, instruction.address)
+        enter_lbl = "%s_%x" % (sp.ASAN_MEM_ENTER, instruction.address)
 
         args['acctype'] = 'load' if bool_load else 'store'
 
@@ -331,7 +328,7 @@ class Instrument():
             # copycache = copycache.replace(original_exit, new_exit)
             # codecache = codecache + "\n" + copycache
 
-        debug("Memcheck after:\n" + codecache.format(**args))
+        # debug("Memcheck after:\n" + codecache.format(**args))
 
         # exit(1)
 
@@ -342,8 +339,16 @@ class Instrument():
     def instrument_mem_accesses(self):
         for _, fn in self.rewriter.container.functions.items():
             if any([s in fn.name for s in ["alloc", "signal_is_trapped", "free"]]):
-                info("Skipping instrumentation on function {fn.name} to avoid custom heap implementations")
+                info(f"Skipping instrumentation on function {fn.name} to avoid custom heap implementations")
                 continue
+
+
+
+            if fn.name != "lower_sequence":
+                continue
+
+
+
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):
                 # Do not instrument instrumented instructions
@@ -371,20 +376,20 @@ class Instrument():
                 debug(f"{instruction} --- acsz: {acsz}, load: {bool_load}")
 
                 if acsz not in [1, 2, 4, 8, 16]:
-                    print("[*] Maybe missed an access: %s -- %d" %
+                    critical("[*] Maybe missed an access: %s -- %d" %
                           (instruction, acsz))
                     continue
 
                 if idx in fn.analysis['free_registers']:
                     free_registers = fn.analysis['free_registers'][idx]
                 else:
-                    print("[x] Missing free reglist in cache for function "+fn.name)
+                    debug("[x] Missing free reglist in cache for function "+fn.name)
                     free_registers = list()
 
                 iinstr = self.get_mem_instrumentation(
                     acsz, instruction, midx, free_registers, is_leaf, bool_load)
 
-                debug(f"now is {iinstr}")
+                # debug(f"now is {iinstr}")
 
                 # Save some stats
                 self.memcheck_sites[fn.start].append(idx)
