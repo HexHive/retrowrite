@@ -329,9 +329,13 @@ class Function():
                             instr_length = self.get_instrumentation_length(instr_case, after=False)
                             instrs -= instr_length
                         else:
-                            instrs = self.count_instructions(instr_case.address - 4, jmptbl.base_case)
+                            instrs = self.count_instructions(instr_case.address - 4, jmptbl.base_case - 4)
+                            instrs += 1
+                            # we are going backwards - do not count instrumentation of the base case
+                            # instr_length = self.get_instrumentation_length(self.cache[self.addr_to_idx[jmptbl.base_case]])
+                            # instrs -= instr_length
                         instrs += total_nops
-                        if jmptbl.br_address == 0x003305cc:
+                        if jmptbl.br_address == 0x584d04:
                             critical(f"from {hex(jmptbl.base_case)} to {hex(instr_case.address)} there are {instrs} instrs")
                         alignment = (2 ** (shift - 2))
                         # nops = (alignment - (instrs % alignment)) % alignment
@@ -343,7 +347,7 @@ class Function():
                         # we insert just the right amount of nops to make the case aligned
                         total_nops += nops
 
-                    print(f"Inserted a total of {total_nops} nops across {len(case_list)} cases")
+                    print(f"Inserted a total of {total_nops} nops across {len(case_list)} different cases")
 
                     if instrs and (instrs)/(alignment) > (0x7f << (8 * (jmptbl.case_size-1))):
                         possible = False
@@ -353,6 +357,8 @@ class Function():
                     shift += 1 # we added so many nops there's no space left for the jmptbl
                     continue
                 break
+
+            print(f"Out of {len(jmptbl.cases)} total cases")
 
             for addr, nops in padding.items():
                 if nops < 0:
@@ -365,16 +371,18 @@ class Function():
 
             size = jmptbl.case_size
 
+            extend_width = "b" if size == 1 else "h"
+            reg = add_instr.cs.reg_name(add_instr.cs.operands[-1].reg)
+            add_instr.instrument_before(
+                    InstrumentedInstruction(f"\tsxt{extend_width} {reg}, {reg}"))
+
             if shift <= 4: # aarch64 limitation of the add instruction
                 add_instr.op_str = add_instr.op_str[:-1] + str(shift)
             else:
-                reg = add_instr.cs.reg_name(add_instr.cs.operands[-1].reg)
-                extend_width = "b" if size == 1 else "h"
-                add_instr.instrument_before(
-                        InstrumentedInstruction(f"\tsxt{extend_width} {reg}, {reg}"))
                 add_instr.instrument_before(
                         InstrumentedInstruction(f"\tlsl {reg}, {reg}, {shift-2}"))
             add_instr.op_str = add_instr.op_str.replace("sxtb", "sxtw") # correct cast if wrong
+            add_instr.op_str = add_instr.op_str.replace("sxth", "sxtw") # correct cast if wrong
 
             debug(f"Fixing up jump table at {hex(jmptbl.br_address)} with new shift {shift}")
             # change the actual jump table in memory 

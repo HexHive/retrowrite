@@ -105,9 +105,15 @@ class Instrument():
         if "sp" in instruction.reg_reads() or "sp" in instruction.reg_writes():
             debug("we do not instrument push/pop for now")
             return InstrumentedInstruction("# push/pop")
-        # if "x29" in instruction.reg_reads() or "x29" in instruction.reg_writes():
-            # debug("we do not instrument stack frames for now")
-            # return InstrumentedInstruction("# stackframe push/pop")
+        if "x29" in instruction.reg_reads() or "x29" in instruction.reg_writes():
+            debug("we do not instrument stack frames for now")
+            return InstrumentedInstruction("# stackframe push/pop")
+        if "x28" in instruction.reg_reads() or "x28" in instruction.reg_writes():
+            debug("we do not instrument stack frames for now")
+            return InstrumentedInstruction("# stackframe push/pop")
+        if len(instruction.before) > 0 or len(instruction.after) > 0 or\
+            (instruction.mnemonic == "ldr" and "=" in instruction.op_str):
+            return InstrumentedInstruction("# Already instrumented - skipping bASAN")
 
 
 
@@ -341,13 +347,6 @@ class Instrument():
             if any([s in fn.name for s in ["alloc", "signal_is_trapped", "free"]]):
                 info(f"Skipping instrumentation on function {fn.name} to avoid custom heap implementations")
                 continue
-
-
-
-            if fn.name != "lower_sequence":
-                continue
-
-
 
             is_leaf = fn.analysis.get(StackFrameAnalysis.KEY_IS_LEAF, False)
             for idx, instruction in enumerate(fn.cache):

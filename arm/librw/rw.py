@@ -1,4 +1,5 @@
 import argparse
+import copy
 from collections import defaultdict, deque
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM, CS_OP_REG
@@ -200,7 +201,7 @@ class Symbolizer():
 
             for inst_idx, instruction in enumerate(function.cache):
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
-                is_call = "bl" in instruction.cs.mnemonic
+                is_call = instruction.cs.mnemonic in ["bl", "blr"]
 
                 if not (is_jmp or is_call):
                     # https://idasuckless.github.io/the-brk-is-a-lie.html
@@ -213,6 +214,10 @@ class Symbolizer():
                     else:
                         function.nexts[inst_idx].append(inst_idx + 1)
                     continue
+
+                # if any([instruction.mnemonic.startswith(op) for op in ["usubl", "tbl"]]): 
+                    # import IPython; IPython.embed()
+                    # continue # somehow capstone thinks this is a jump
 
                 instruction.cf_leaves_fn = False
 
@@ -504,7 +509,7 @@ class Symbolizer():
 
         return False
 
-    def _adjust_adrp_section_pointer(self, container, fun, secname, orig_off, instruction):
+    def _adjust_adrp_section_pointer(self, container, secname, orig_off, instruction):
         # we adjust things like adrp x0, 0x10000 (start of .bss)
         # to stuff like  ldr x0, =(.bss - (offset))
         # to make global variables work
@@ -518,14 +523,16 @@ class Symbolizer():
         # "fake_got" label so that we keep track of where the "old" got section was
         instruction.mnemonic = "ldr"
         instruction.op_str = "%s, =(%s %c 0x%x)"  % (reg_name, secname, op, abs(diff))
+        instruction.instrumented = True
 
     def _get_resolved_address(self, function, inst, inst2, path):
-        debug(inst2)
         if inst2.cs.mnemonic == "add":
             if not inst2.cs.operands[2].type == CS_OP_IMM:
                 return 0
             assert all([op.shift.value == 0 for op in inst2.cs.operands])
             return path.orig_off + inst2.cs.operands[2].imm
+        elif inst2.cs.mnemonic.startswith("mov"):
+            return inst2.cs.reg_name(inst2.cs.operands[0].reg) # moved to a different reg, new path
         elif inst2.cs.mnemonic.startswith("ldr"):
             assert inst2.cs.operands[1].type == CS_OP_MEM
             if not all([op.shift.value == 0 for op in inst2.cs.operands]):
@@ -578,7 +585,7 @@ class Symbolizer():
         if len(possible_sections) == 1:
             secname = possible_sections[0]
             if secname not in [".text"]:  # .text can get instrumented, we need to know the exact address
-                self._adjust_adrp_section_pointer(container, function, secname, orig_off, inst)
+                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
                 return
 
         debug(f"Global access at {inst}, multiple sections possible: {possible_sections}, trying to resolve address...")
@@ -588,24 +595,24 @@ class Symbolizer():
         # we will also track down stack pushes of global pointers because they can be loaded later
 
         class path:
-            def __init__(self, orig_reg="x0", idx=0, stack_stores=[], orig_off=orig_off, visited=[]):
+            def __init__(self, orig_reg="x0", idx=0, stack_stores=[], orig_off=orig_off,
+                               visited={}, function=function):
                 self.stack_stores = stack_stores
                 self.orig_reg = orig_reg
                 self.idx = idx
                 self.orig_off = orig_off
                 self.visited = visited
+                self.function = function
 
         resolved_addresses = []
-        paths = [path(orig_reg, nexti, [], visited=[0]*function.sz) for nexti in function.nexts[edx]]
+        paths = [path(orig_reg, nexti, [], visited=defaultdict(lambda: False)) for nexti in function.nexts[edx]]
         while len(paths):
             p = paths[0]
-            inst2 = function.cache[p.idx]
-            if p.visited[p.idx]:
+            inst2 = p.function.cache[p.idx]
+            if p.visited[inst2.address]:
                 del paths[0]
                 continue
-            p.visited[p.idx] = 1
-            # print(inst2.cs)
-            # debug(str(p.orig_reg) + " " + str(inst2))
+            p.visited[inst2.address] = 1
 
             # check if someone is overwriting one of the saved global pointers on the stack
             # XXX: add support for stp
@@ -617,18 +624,23 @@ class Symbolizer():
             # XXX: add support for ldp
             if inst2.mnemonic == "ldr" and inst2.cs.reg_name(inst2.cs.operands[1].reg) == "x29" and\
                     inst2.cs.operands[1].mem.disp in p.stack_stores:
-                critical(f"found it at {inst2}, from {inst}!")
+                debug(f"Found stack load at {inst2}, from {inst}!")
                 new_reg = inst2.cs.reg_name(inst2.cs.operands[0].reg)
-                paths.append(path(new_reg, p.idx + 1, [], p.orig_off, p.visited[:]))
+                paths.append(path(new_reg, p.idx + 1, [], p.orig_off, copy.deepcopy(p.visited)))
 
             if p.orig_reg in inst2.reg_reads():
                 if '=' in inst2.op_str:  # XXX: ugly hack to avoid reinstrumenting instructions
                     del paths[0]
                     continue
-                raddr = self._get_resolved_address(function, inst, inst2, p)
+                raddr = self._get_resolved_address(p.function, inst, inst2, p)
+                # if inst.address == 0x148b3c:
+                    # import IPython; IPython.embed()
                 if isinstance(raddr, tuple):  # a global pointer was pushed on the stack
                     addr, disp = raddr
+                    debug(f"Found new stack store at addr {hex(inst.address)} on x29 + {hex(disp)}")
                     p.stack_stores += [disp]
+                elif isinstance(raddr, str):  # the register we're tracking has been changed
+                    paths.append(path(raddr, p.idx + 1, p.stack_stores[:], p.orig_off, copy.deepcopy(p.visited), function))
                 elif raddr: # a global pointer was just used normally 
                     resolved_addresses += [(inst2, raddr)]
                 else:
@@ -640,8 +652,25 @@ class Symbolizer():
                     continue
                 else:  # unless we pushed it on the stack
                     p.orig_reg = "None"
-            next_instrs = list(filter(lambda x: isinstance(x, int), function.nexts[p.idx]))
-            if len(next_instrs) == 0: 
+
+            if inst2.mnemonic == "b" and inst2.cs.operands[0].type == CS_OP_IMM:
+                # we go across functions!
+                # Some restrictions: 1. only through direct jumps 2. do not go back to the original func
+                # otherwise we will get stuck in infinite loops
+                fun2 = container.function_of_address(inst2.cs.operands[0].imm)
+                if fun2 != None and fun2.start != p.function.start:
+                    idx = fun2.addr_to_idx[inst2.cs.operands[0].imm]
+                    debug(f"Found new trampoline at {inst2} from {inst}")
+                    p.function = fun2
+                    p.idx = idx
+                    # paths.append(path(p.orig_reg, idx, p.stack_stores[:], p.orig_off, p.visited, fun2))
+
+                    # del paths[0]
+                    continue
+
+            # print(p.function.nexts[p.idx])
+            next_instrs = list(filter(lambda x: isinstance(x, int), p.function.nexts[p.idx]))
+            if len(next_instrs) == 0:
                 del paths[0]
                 continue
             p.idx = next_instrs[0]
@@ -649,11 +678,11 @@ class Symbolizer():
                 # if n < idx: continue
                 if not isinstance(n, int): continue
                 if n == 0: continue # avoid recursive calls to same function
-                if p.visited[n]: continue
+                if p.visited[p.function.cache[n].address]: continue
                 # count = list(filter(lambda x: x == 1, p.visited))
                 # debug(f"Appending to {n}, {len(paths)}, {len(count)}")
-                paths.append(path(p.orig_reg, n, p.stack_stores[:], p.orig_off, p.visited))
-                # p.visited[n] = 1
+                paths.append(path(p.orig_reg, n, p.stack_stores[:], p.orig_off, p.visited, p.function))
+
 
 
         possible_sections = set()
@@ -672,7 +701,7 @@ class Symbolizer():
         if len(possible_sections) == 1:
             secname = list(possible_sections)[0]
             if secname not in [".text"]:
-                self._adjust_adrp_section_pointer(container, function, secname, orig_off, inst)
+                self._adjust_adrp_section_pointer(container, secname, orig_off, inst)
                 debug(f"We're good, false alarm, the only possible section is: {secname}. Nice!")
                 return
 

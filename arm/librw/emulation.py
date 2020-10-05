@@ -58,6 +58,8 @@ class Expr:
                 self.left = self.left >> self.right
             elif self.operation == "&":
                 self.left = (self.left & self.right)
+            elif self.operation == "^":
+                self.left = (self.left ^ self.right)
             else:
                 critical(f"Operation {self.operation} not supported.")
                 exit(1)
@@ -146,7 +148,7 @@ class Path:
             first = ops[1].imm
             self.expr.replace(result, first)
 
-        elif instr.cs.mnemonic in ["and"]:
+        elif instr.cs.mnemonic in ["and", "ands"]:
             result = reg_name(ops[0].reg)
             first = reg_name(ops[1].reg)
             assert ops[1].type == CS_OP_REG
@@ -154,6 +156,27 @@ class Path:
             if ops[2].type == CS_OP_REG:
                 second = reg_name(second)
             self.expr.replace(result, Expr(first, second, op="&"))
+
+        elif instr.cs.mnemonic in ["asr"]:
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            assert ops[1].type == CS_OP_REG
+            second = ops[2].reg
+            if ops[2].type == CS_OP_REG:
+                second = reg_name(second)
+            self.expr.replace(result, Expr(first, second, op=">>"))
+
+        elif instr.cs.mnemonic in ["eor"]:
+            result = reg_name(ops[0].reg)
+            first = reg_name(ops[1].reg)
+            if ops[2].type == CS_OP_IMM:
+                self.expr.replace(result, Expr(first, second, op="^"))
+            else:
+                second = reg_name(ops[2].reg)
+                shift = ops[2].shift.value
+                self.expr.replace(result, Expr(first, Expr(second, shift, op="<<"), op="^"))
+
+
 
         elif instr.cs.mnemonic in ["mov", "movz"]: 
             result = reg_name(ops[0].reg)
