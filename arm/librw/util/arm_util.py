@@ -23,6 +23,7 @@ def get_reg_size_arm(regname):
     return sizes[regname.upper()[0]]
 
 def get_access_size_arm(instruction):
+    print(instruction)
     bool_load = True if instruction.mnemonic.upper().startswith("L") else False
     # here we get the size from the last letter of the instruction
     # horrible hack I know, but capstone is a bad boy and is not reliable
@@ -43,7 +44,7 @@ def get_access_size_arm(instruction):
     return (acsz, bool_load)
 
 def is_reg_32bits(reg):
-    assert reg[0] in "wxhq"
+    assert reg[0] in "bhwsxdq"
     return reg[0] == 'w'
 
 def get_64bits_reg(reg):

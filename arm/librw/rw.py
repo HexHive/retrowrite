@@ -373,9 +373,16 @@ class Symbolizer():
                    instr.cs.operands[1].type == CS_OP_IMM:
                     p.found = instr.cs.operands[1].imm
                     # adjustments for differenct comparisons
-                    next_instr = function.cache[p.inst_idx + 1]
-                    if next_instr and next_instr.mnemonic in ["b.hi", "b.ls", "b.le"]:
-                        p.found += 1
+                    # we try to look for the next jump and decide
+                    for i in range(10):
+                        next_instr = function.cache[p.inst_idx + i]
+                        if not next_instr: 
+                            break
+                        is_jmp = CS_GRP_JUMP in next_instr.cs.groups
+                        if is_jmp:
+                            if next_instr.mnemonic in ["b.hi", "b.ls", "b.le"]:
+                                p.found += 1
+                            break
                     # if next_instr and next_instr.mnemonic in ["b.lt"]: p.found -= 1
                     paths_finished += [paths.pop(0)]
                     print("found path", len(paths))
@@ -853,6 +860,9 @@ class Symbolizer():
             section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_GLOB_DAT"]:
             if section.name != '.got': return
+            if rel['name'] in Rewriter.GCC_RELOCATIONS: return
+            section.replace(rel['offset'], 8, rel['name'])
+        elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_ABS64"]:
             if rel['name'] in Rewriter.GCC_RELOCATIONS: return
             section.replace(rel['offset'], 8, rel['name'])
 

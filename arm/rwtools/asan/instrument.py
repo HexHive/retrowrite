@@ -13,7 +13,7 @@ from arm.librw.container import (DataCell, InstrumentedInstruction, DataSection,
                              Function)
 from arm.librw.analysis.stackframe import StackFrameAnalysis
 from arm.librw.util.logging import *
-from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm, is_reg_32bits
+from arm.librw.util.arm_util import get_reg_size_arm, get_access_size_arm, is_reg_32bits, get_64bits_reg
 ASAN_SHADOW_OFF = 68719476736 # 0x1000000000
 
 ASAN_GLOBAL_DS_BASE = 0x3000000000000000
@@ -138,6 +138,12 @@ class Instrument():
 
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(18, 0, -1)]
+        # do not use registers used by the very same instruction!
+        for reg in instruction.reg_reads():
+            reg64 = get_64bits_reg(reg) if is_reg_32bits(reg) else reg
+            if reg64 in affinity:
+                affinity.remove(reg64)
+
         free_regs = sorted(
             list(free),
             key=lambda x: affinity.index(x) if x in affinity else len(affinity))
