@@ -9,17 +9,24 @@ If you want to see how to run a fuzzing campaign for this modules please see [RE
 
 
 To prepare the environment, compile and instrument the demo module :
-
 ```bash
-./instrument_module.sh module/demo_module.c
+cd module
+make
+cd ..
+```
+To instrument the compiled module:
+```bash
+./instrument_module.sh module/demo_module.ko
 ```
 To see the differences between the instrumented and classic binary you can use the command `objdump`:
 * `objdump -d module/demo_module.ko`
 * `objdump -d module/demo_module_asan.ko`
 
-(Bonus) To exit virtual qemu machine : `ctrl+a x`
-
 Test of the module:
+
+You will need to compile the linux kernel with `kasan` (automated in the launch script).
+
+(Bonus) To exit virtual qemu machine : `ctrl+a x`
 
 ```bash
 $ ./launch_vm.sh

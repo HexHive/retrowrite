@@ -511,10 +511,17 @@ if __name__ == "__main__":
 
     argp.add_argument("bin", type=str, help="Input binary to load")
     argp.add_argument("outfile", type=str, help="Symbolized ASM output")
+    argp.add_argument("--ignore-no-pie", dest="ignore_no_pie", action='store_true', help="Ignore position-independent-executable check (use with caution)")
+    argp.set_defaults(ignore_no_pie=False)
 
     args = argp.parse_args()
 
     loader = Loader(args.bin)
+
+    if loader.is_pie() == False and args.ignore_no_pie == False:
+        print("RetroWrite requires a position-independent module.")
+        print("It looks like %s is not position independent" % args.bin)
+        sys.Exit(1)
 
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
