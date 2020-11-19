@@ -351,6 +351,8 @@ class Symbolizer():
             section.replace(rel['offset'], 4, swlbl)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
             value = rel['st_value'] + rel['addend']
+            if value == 0:
+                value = rel['offset'] + rel['addend']
             label = ".LC%x" % value
             section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
