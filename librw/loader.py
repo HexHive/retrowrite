@@ -80,13 +80,15 @@ class Loader():
         for sec in seclist:
             if sec == '.plt':
                 self.container.plt_base = seclist[sec]['base']
-            if sec == ".plt.got":
+            if sec == '.plt.sec': # support old gcc version, skip one plt entry
+                self.container.plt_base = seclist[sec]['base'] - 16 
+            if sec == ".plt.got" or sec == ".plt.sec":
                 section = self.elffile.get_section_by_name(sec)
                 data = section.data()
                 entries = list(
                     disasm_bytes(section.data(), seclist[sec]['base']))
                 self.container.gotplt_base = seclist[sec]['base']
-                self.container.gotplt_sz = seclist[sec]['sz']
+                self.container.gotplt_sz = seclist[sec]['sz'] + 16
                 self.container.gotplt_entries = entries
 
     def load_relocations(self, relocs):
