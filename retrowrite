@@ -77,7 +77,7 @@ def asank(rw, loader, args):
 
     return rw
 if __name__ == "__main__":
-    argp = argparse.ArgumentParser(description='Process some integers.')
+    argp = argparse.ArgumentParser(description='Retrofitting compiler passes though binary rewriting.')
 
     argp.add_argument("bin", type=str, help="Input binary to load")
     argp.add_argument("outfile", type=str, help="Symbolized ASM output")
