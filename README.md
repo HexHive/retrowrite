@@ -43,24 +43,23 @@ To start with use retrowrite command:
 
 ```bash
 (retro) $ retrowrite --help
-usage: retrowrite [-h] [-a] [-s] [-k] [--kcov] [-c] bin outfile
+usage: retrowrite [-h] [-a] [-s] [-k] [--kcov] [-c] [--ignore-no-pie] [--ignore-stripped] bin outfile
+
+Retrofitting compiler passes though binary rewriting.
 
 positional arguments:
-  bin             Input binary to load
-  outfile         Symbolized ASM output
+  bin                Input binary to load
+  outfile            Symbolized ASM output
 
 optional arguments:
-  -h, --help      show this help message and exit
-  -a, --asan      Add binary address sanitizer instrumentation
-  -s, --assembly  Generate Symbolized Assembly
-  -k, --kernel    Instrument a kernel module
-  --kcov          Instrument the kernel module with kcov
-  -c, --cache     Save/load register analysis cache (only used with --asan)
-  --ignore-no-pie     Ignore position-independent-executable check (use with
-                  caution)
+  -h, --help         show this help message and exit
+  -a, --asan         Add binary address sanitizer instrumentation
+  -s, --assembly     Generate Symbolized Assembly
+  -k, --kernel       Instrument a kernel module
+  --kcov             Instrument the kernel module with kcov
+  -c, --cache        Save/load register analysis cache (only used with --asan)
+  --ignore-no-pie    Ignore position-independent-executable check (use with caution)
   --ignore-stripped  Ignore stripped executable check (use with caution)
-
-
 ```
 
 In case you load a non position independent code you will get the following message:
