@@ -7,7 +7,7 @@ heap: heap.c
 	${CC} ${OPT} heap.c -o heap
 
 heap.asan: heap
-	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./heap ./heap.asan
+	retrowrite --asan ./heap ./heap.asan.s
 	sed -i 's/asan_init_v4/asan_init/g' heap.asan.s
 	${CC} heap.asan.s -lasan -o heap.asan
 
@@ -22,7 +22,7 @@ stack: stack.c
 	${CC} ${OPT} stack.c -o stack
 
 stack.asan: stack
-	PYTHONPATH=../../ python3 -m rwtools.asan.asantool ./stack ./stack.asan
+	retrowrite --asan ./stack ./stack.asan.s
 	sed -i 's/asan_init_v4/asan_init/g' stack.asan.s
 	${CC} stack.asan.s -lasan -o stack.asan
 

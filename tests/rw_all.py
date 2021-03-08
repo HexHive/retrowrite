@@ -29,7 +29,7 @@ def do_tests(tests, filter, args, outdir):
             cmd = "python -m debug.ddbg {} {}".format(binp, outp)
         elif args.asan:
             outp = os.path.join(outdir, test["name"] + "_asan")
-            cmd = "python -m rwtools.asan.asantool {} {}".format(binp, outp)
+            cmd = "retrowrite --asan {} {}".format(binp, outp)
         else:
             cmd = "python -m librw.rw {} {}".format(binp, outp)
 
