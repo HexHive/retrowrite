@@ -84,7 +84,6 @@ if __name__ == "__main__":
 
     argp.add_argument("-a", "--asan", action='store_true',
                       help="Add binary address sanitizer instrumentation")
-    # python3 -m rwtools.asan.asantool /bin/ls ls-basan-instrumented
 
     argp.add_argument("-s", "--assembly", action="store_true",
                       help="Generate Symbolized Assembly")
@@ -111,7 +110,6 @@ if __name__ == "__main__":
         from librw.analysis.kstackframe import StackFrameAnalysis
         from rwtools.kasan.instrument import Instrument
         from rwtools.kasan.asantool import KcovInstrument
-        from rwtools.kasan import asantool
         from librw.kloader import Loader
         from librw.analysis import kregister
     else:
