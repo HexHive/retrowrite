@@ -7,6 +7,7 @@ from capstone.x86_const import X86_REG_RIP
 
 from elftools.elf.descriptions import describe_reloc_type
 from elftools.elf.enums import ENUM_RELOC_TYPE_x64
+from elftools.elf.sections import SymbolTableSection
 
 
 class Rewriter():
@@ -68,6 +69,11 @@ class Rewriter():
         results.append(".align 16")
 
         for _, function in sorted(self.container.functions.items()):
+            """
+            if function.name == "frame_dummy":
+                results.append("\t.extern frame_dummy\n")
+                continue
+            """
             if function.name in Rewriter.GCC_FUNCTIONS:
                 continue
             results.append("\t.text\n%s" % (function))
@@ -87,6 +93,9 @@ class Symbolizer():
     def symbolize_text_section(self, container, context):
         # Symbolize using relocation information.
         for rel in container.relocations[".text"]:
+            if rel["offset"] == 4624:
+                print("Hurray")
+                print(rel)
             fn = container.function_of_address(rel['offset'])
             if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
                 continue
@@ -147,11 +156,22 @@ class Symbolizer():
 
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
+            print(function.name)
+            if(function.name == "_GLOBAL__sub_I_azerty"):
+                print(function.__dict__)
             addr_to_idx = dict()
             for inst_idx, instruction in enumerate(function.cache):
                 addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
+
+                # print(instruction)
+                """
+                if rel["offset"] == 4624:
+                    print("Hurray CF")
+                    print(rel)
+                """
+
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups
 
@@ -350,9 +370,11 @@ class Symbolizer():
             swlbl = ".LC%x-.LC%x" % (value, swbase)
             section.replace(rel['offset'], 4, swlbl)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_64"]:
-            value = rel['st_value'] + rel['addend']
-            label = ".LC%x" % value
-            section.replace(rel['offset'], 8, label)
+            # C++ ABI functions, to be ignored
+            if not (rel["name"].startswith("_ZTV") or rel["name"] == "__gxx_personality_v0"):
+                value = rel['st_value'] + rel['addend']
+                label = ".LC%x" % value
+                section.replace(rel['offset'], 8, label)
         elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
             value = rel['addend']
             label = ".LC%x" % value
@@ -375,10 +397,37 @@ class Symbolizer():
         for rel in dyn:
             section = container.section_of_address(rel['offset'])
             if section:
+                # rela.dyn relocations in .init_array are likely libc-specific 
+                # logic, e.g. frame_dummy, so let us skip this and allow libc to rebuild this
+                # when we recompile.
+                if section.__dict__['name'] == '.init_array':
+                    continue
+                # TODO Remove dynamic relocation related to frame_dummy
                 self._handle_relocation(container, section, rel)
             else:
                 print("[x] Couldn't find valid section {:x}".format(
                     rel['offset']))
+    
+    # We find all vtables and put them in self.vtables
+    def _find_all_vtables(self, container):
+        container.put_vtable_stuff_here()
+
+        symbol_tables = [
+            sec for sec in container.loader.elffile.iter_sections()
+            if isinstance(sec, SymbolTableSection)
+        ]
+
+        for section in symbol_tables:
+            for symbol in section.iter_symbols():
+                # We find the vtable entries in the symbol table
+                if (symbol['st_info']['type'] == "STT_OBJECT"
+                        and symbol.name.startswith("_ZTV")):
+                    # self.vtables[symbol['']]
+                    # print(symbol.name)
+                    pass
+    
+    def is_vtable_relocation(self, relocation):
+        return True
 
 
 if __name__ == "__main__":

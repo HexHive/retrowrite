@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import struct
 from collections import defaultdict
 
 from elftools.elf.elffile import ELFFile
@@ -52,6 +53,20 @@ class Loader():
                                 fvalue["bind"])
             self.container.add_function(function)
 
+        section = self.elffile.get_section_by_name(".init_array")
+        data = section.data()
+        base = section['sh_addr']
+        for i in range(0, len(data), 8):
+            address = data[i:i+8]
+            addr_int = struct.unpack("<Q", address)[0]
+            func = self.container.functions.get(addr_int, None)
+            if func == None:
+                print("I NEED SOMEBODY HELP")
+            print(func.__dict__)
+            # We need to add them to the function list
+            # we need to "add_function" like right above
+
+
     def load_data_sections(self, seclist, section_filter=lambda x: True):
         for sec in [sec for sec in seclist if section_filter(sec)]:
             sval = seclist[sec]
@@ -59,10 +74,13 @@ class Loader():
             data = section.data()
             more = bytearray()
             if sec == ".init_array":
+                print(data)
                 if len(data) > 8:
                     data = data[8:]
                 else:
                     data = b''
+                print(data)
+                # data = b''
                 more.extend(data)
             else:
                 more.extend(data)
