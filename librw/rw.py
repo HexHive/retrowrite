@@ -375,6 +375,17 @@ class Symbolizer():
         for rel in dyn:
             section = container.section_of_address(rel['offset'])
             if section:
+                # rela.dyn relocations in .init_array are likely libc-specific 
+                # logic, e.g. frame_dummy, so let us skip this and allow libc to rebuild this
+                # when we recompile.
+                if section.__dict__['name'] == '.init_array':
+                    # If the address does not point to anywhere
+                    if not container.function_of_address(rel["addend"]):
+                        continue
+                    # Because we removed the frame_dummy pointer from the
+                    # beginning of init_array, we should offset the other
+                    # pointers in that section
+                    rel["offset"] -= 8
                 self._handle_relocation(container, section, rel)
             else:
                 print("[x] Couldn't find valid section {:x}".format(
