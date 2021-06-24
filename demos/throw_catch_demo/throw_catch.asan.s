@@ -251,6 +251,7 @@ _ZTS5Shape_2071: # 2071 -- 2078
 	.byte 0x0
 .section .init_array
 .align 8
+.LC3d48:
 	.quad .LC1120
 .section .data.rel.ro
 .align 8
