@@ -1,5 +1,6 @@
 from collections import defaultdict
 import struct
+import subprocess as sp
 
 from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
 
@@ -28,6 +29,8 @@ class Container():
         self.globals = None
         self.relocations = defaultdict(list)
         self.loader = None
+        # Imports
+        self.imports = None
         # PLT information
         self.plt_base = None
         self.plt = dict()
@@ -36,11 +39,19 @@ class Container():
         self.gotplt_sz = None
         self.gotplt_entries = list()
 
+        # Dwarf information
+        self.dwarf_info = dict()
+        self.personality = None
+
     def add_function(self, function):
         if function.name in self.function_names:
             function.name = "%s_%x" % (function.name, function.start)
         self.functions[function.start] = function
         self.function_names.add(function.name)
+
+        # Check for mangled names
+        if function.name.startswith("_Z"):
+            function.is_mangled = True
 
     def add_section(self, section):
         self.sections[section.name] = section
@@ -130,6 +141,9 @@ class Function():
         self.bbstarts = set()
         self.bind = bind
 
+        self.except_table = None
+        self.cfi_map = None
+
         # Populated during symbolization.
         # Invalidated by any instrumentation.
         self.nexts = defaultdict(list)
@@ -142,8 +156,23 @@ class Function():
         # Is this an instrumented function?
         self.instrumented = False
 
+        self.is_mangled = False
+        self._true_name = None
+
     def set_instrumented(self):
         self.instrumented = True
+    
+    @property
+    def true_name(self):
+        if self.is_mangled and not self._true_name:
+            call = sp.check_output("c++filt " + self.name, shell=True)
+            call = call.strip().decode('utf-8')
+            self._true_name = call
+            return call
+        elif self._true_name:
+            return self._true_name
+        return self.name
+
 
     def disasm(self):
         assert not self.cache
@@ -174,12 +203,20 @@ class Function():
         results = []
         # Put all function names and define them.
         if self.bind == "STB_GLOBAL":
-            results.append(".globl %s" % (self.name))
+            results.append("\t.globl %s" % (self.name))
         else:
-            results.append(".local %s" % (self.name))
-        results.append(".type %s, @function" % (self.name))
+            results.append("\t.local %s" % (self.name))
+        results.append("\t.type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
 
+        # Add .cfi_startproc directive
+        results.append("\t.cfi_startproc")
+        # Add GCC except table, lsda information
+        if self.except_table:
+            results.append("\t.cfi_personality 0x9b,DW.ref.__gxx_personality_v0")
+            results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.start))
+
+        current_offset = 0x0
         for instruction in self.cache:
             if isinstance(instruction, InstrumentedInstruction):
                 if not self.instrumented:
@@ -199,10 +236,25 @@ class Function():
             results.append(
                 "\t%s %s" % (instruction.mnemonic, instruction.op_str))
 
+            current_offset += instruction.sz
+
+            if self.cfi_map:
+                for cfi in self.cfi_map[current_offset]:
+                    results.append(cfi)
+
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))
 
-        results.append(".size %s,.-%s" % (self.name, self.name))
+        results.append(".LCE%x:" % (self.cache[-1].address + self.cache[-1].sz))
+
+        # Add .cfi_endproc directive
+        results.append("\t.cfi_endproc")
+
+        if self.except_table:
+            results.append(self.except_table)
+            results.append("\t.text")
+
+        results.append("\t.size %s,.-%s" % (self.name, self.name))
 
         return "\n".join(results)
 

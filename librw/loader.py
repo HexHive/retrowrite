@@ -4,6 +4,8 @@ import argparse
 import struct
 from collections import defaultdict
 
+from intervaltree import IntervalTree
+
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
@@ -74,13 +76,11 @@ class Loader():
             data = section.data()
             more = bytearray()
             if sec == ".init_array":
-                print(data)
                 if len(data) > 8:
-                    data = data[8:]
+                    # data = data[8:]
+                    data = data
                 else:
                     data = b''
-                print(data)
-                # data = b''
                 more.extend(data)
             else:
                 more.extend(data)
@@ -106,6 +106,11 @@ class Loader():
                 self.container.gotplt_base = seclist[sec]['base']
                 self.container.gotplt_sz = seclist[sec]['sz']
                 self.container.gotplt_entries = entries
+            if sec == ".got":
+                self.container.got = IntervalTree()
+                base = seclist[sec]['base']
+                end = base + seclist[sec]['sz']
+                self.container.got[base:end] = "GOT"
 
     def load_relocations(self, relocs):
         for reloc_section, relocations in relocs.items():
@@ -237,6 +242,32 @@ class Loader():
 
         return global_list
 
+    def identify_imports(self):
+        symbol_tables = [
+            sec for sec in self.elffile.iter_sections()
+            if isinstance(sec, SymbolTableSection)
+        ]
+
+        symmap = IntervalTree()
+
+        for section in symbol_tables:
+            if not isinstance(section, SymbolTableSection):
+                continue
+
+            if section.name != ".dynsym":
+                continue
+
+            for symbol in section.iter_symbols():
+                if (symbol['st_info']['type'] == 'STT_OBJECT'
+                    and symbol['st_shndx'] != 'SHN_UNDEF'):
+
+                    start = symbol['st_value']
+                    end = symbol['st_value'] + symbol['st_size']
+
+                    symmap[start:end] = symbol.name
+
+        self.container.imports = symmap
+        print("IDENTIFIED IMPORTS")
 
 if __name__ == "__main__":
     from .rw import Rewriter
@@ -262,3 +293,5 @@ if __name__ == "__main__":
 
     global_list = loader.global_data_list_from_symtab()
     loader.load_globals_from_glist(global_list)
+
+    loader.identify_imports()

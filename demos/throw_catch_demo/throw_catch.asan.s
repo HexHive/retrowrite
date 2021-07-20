@@ -253,6 +253,22 @@ _ZTS5Shape_2071: # 2071 -- 2078
 .align 8
 .LC3d48:
 	.quad .LC1120
+.LC3d50:
+	.byte 0x20
+.LC3d51:
+	.byte 0x11
+.LC3d52:
+	.byte 0x0
+.LC3d53:
+	.byte 0x0
+.LC3d54:
+	.byte 0x0
+.LC3d55:
+	.byte 0x0
+.LC3d56:
+	.byte 0x0
+.LC3d57:
+	.byte 0x0
 .section .data.rel.ro
 .align 8
 .type	_ZTV9Rectangle_3d60,@object
@@ -282,42 +298,14 @@ _ZTV9Rectangle_3d60: # 3d60 -- 3d78
 .globl _ZTI5Shape_3d78
 _ZTI5Shape_3d78: # 3d78 -- 3d88
 .LC3d78:
-	.byte 0x0
-.LC3d79:
-	.byte 0x0
-.LC3d7a:
-	.byte 0x0
-.LC3d7b:
-	.byte 0x0
-.LC3d7c:
-	.byte 0x0
-.LC3d7d:
-	.byte 0x0
-.LC3d7e:
-	.byte 0x0
-.LC3d7f:
-	.byte 0x0
+	.quad _ZTVN10__cxxabiv117__class_type_infoE+16
 .LC3d80:
 	.quad .LC2071
 .type	_ZTI9Rectangle_3d88,@object
 .globl _ZTI9Rectangle_3d88
 _ZTI9Rectangle_3d88: # 3d88 -- 3da0
 .LC3d88:
-	.byte 0x0
-.LC3d89:
-	.byte 0x0
-.LC3d8a:
-	.byte 0x0
-.LC3d8b:
-	.byte 0x0
-.LC3d8c:
-	.byte 0x0
-.LC3d8d:
-	.byte 0x0
-.LC3d8e:
-	.byte 0x0
-.LC3d8f:
-	.byte 0x0
+	.quad _ZTVN10__cxxabiv120__si_class_type_infoE+16
 .LC3d90:
 	.quad .LC2066
 .LC3d98:
@@ -366,21 +354,7 @@ _ZTV5Shape_3da0: # 3da0 -- 3db8
 .LC4080:
 	.quad .LC4080
 .LC4088:
-	.byte 0x0
-.LC4089:
-	.byte 0x0
-.LC408a:
-	.byte 0x0
-.LC408b:
-	.byte 0x0
-.LC408c:
-	.byte 0x0
-.LC408d:
-	.byte 0x0
-.LC408e:
-	.byte 0x0
-.LC408f:
-	.byte 0x0
+	.quad __gxx_personality_v0+0
 .section .bss
 .align 8
 .type	completed.8060_4090,@object
@@ -424,9 +398,10 @@ azerty_4098: # 4098 -- 40a0
 .section .text
 .align 16
 	.text
-.local __cxx_global_var_init
-.type __cxx_global_var_init, @function
+	.local __cxx_global_var_init
+	.type __cxx_global_var_init, @function
 __cxx_global_var_init:
+	.cfi_startproc
 .L1100:
 .LC1100:
 	pushq %rbp
@@ -440,11 +415,14 @@ __cxx_global_var_init:
 	popq %rbp
 .LC1111:
 	retq 
-.size __cxx_global_var_init,.-__cxx_global_var_init
+.LCE1112:
+	.cfi_endproc
+	.size __cxx_global_var_init,.-__cxx_global_var_init
 	.text
-.local _GLOBAL__sub_I_throw_catch.cpp
-.type _GLOBAL__sub_I_throw_catch.cpp, @function
+	.local _GLOBAL__sub_I_throw_catch.cpp
+	.type _GLOBAL__sub_I_throw_catch.cpp, @function
 _GLOBAL__sub_I_throw_catch.cpp:
+	.cfi_startproc
 .L1120:
 .LC1120:
 	pushq %rbp
@@ -456,11 +434,14 @@ _GLOBAL__sub_I_throw_catch.cpp:
 	popq %rbp
 .LC112a:
 	retq 
-.size _GLOBAL__sub_I_throw_catch.cpp,.-_GLOBAL__sub_I_throw_catch.cpp
+.LCE112b:
+	.cfi_endproc
+	.size _GLOBAL__sub_I_throw_catch.cpp,.-_GLOBAL__sub_I_throw_catch.cpp
 	.text
-.globl main
-.type main, @function
+	.globl main
+	.type main, @function
 main:
+	.cfi_startproc
 .L1220:
 .LC1220:
 	pushq %rbp
@@ -635,11 +616,14 @@ main:
 	movl %edx, -0x54(%rbp)
 .LC1369:
 	callq .L1400
-.size main,.-main
+.LCE136e:
+	.cfi_endproc
+	.size main,.-main
 	.text
-.local _ZN9RectangleC2Ev
-.type _ZN9RectangleC2Ev, @function
+	.local _ZN9RectangleC2Ev
+	.type _ZN9RectangleC2Ev, @function
 _ZN9RectangleC2Ev:
+	.cfi_startproc
 .L1370:
 .LC1370:
 	pushq %rbp
@@ -679,11 +663,14 @@ _ZN9RectangleC2Ev:
 	popq %rbp
 .LC13b6:
 	retq 
-.size _ZN9RectangleC2Ev,.-_ZN9RectangleC2Ev
+.LCE13b7:
+	.cfi_endproc
+	.size _ZN9RectangleC2Ev,.-_ZN9RectangleC2Ev
 	.text
-.local _ZN5ShapeC2Ev
-.type _ZN5ShapeC2Ev, @function
+	.local _ZN5ShapeC2Ev
+	.type _ZN5ShapeC2Ev, @function
 _ZN5ShapeC2Ev:
+	.cfi_startproc
 .L13c0:
 .LC13c0:
 	pushq %rbp
@@ -703,11 +690,14 @@ _ZN5ShapeC2Ev:
 	popq %rbp
 .LC13dd:
 	retq 
-.size _ZN5ShapeC2Ev,.-_ZN5ShapeC2Ev
+.LCE13de:
+	.cfi_endproc
+	.size _ZN5ShapeC2Ev,.-_ZN5ShapeC2Ev
 	.text
-.local _ZN9Rectangle5helloEv
-.type _ZN9Rectangle5helloEv, @function
+	.local _ZN9Rectangle5helloEv
+	.type _ZN9Rectangle5helloEv, @function
 _ZN9Rectangle5helloEv:
+	.cfi_startproc
 .L13e0:
 .LC13e0:
 	pushq %rbp
@@ -729,11 +719,14 @@ _ZN9Rectangle5helloEv:
 	popq %rbp
 .LC13ff:
 	retq 
-.size _ZN9Rectangle5helloEv,.-_ZN9Rectangle5helloEv
+.LCE1400:
+	.cfi_endproc
+	.size _ZN9Rectangle5helloEv,.-_ZN9Rectangle5helloEv
 	.text
-.local __clang_call_terminate
-.type __clang_call_terminate, @function
+	.local __clang_call_terminate
+	.type __clang_call_terminate, @function
 __clang_call_terminate:
+	.cfi_startproc
 .L1400:
 .LC1400:
 	pushq %rax
@@ -743,11 +736,14 @@ __clang_call_terminate:
 	movq %rax, (%rsp)
 .LC140a:
 	callq _ZSt9terminatev@PLT
-.size __clang_call_terminate,.-__clang_call_terminate
+.LCE140f:
+	.cfi_endproc
+	.size __clang_call_terminate,.-__clang_call_terminate
 	.text
-.local _ZN9Rectangle4drawEv
-.type _ZN9Rectangle4drawEv, @function
+	.local _ZN9Rectangle4drawEv
+	.type _ZN9Rectangle4drawEv, @function
 _ZN9Rectangle4drawEv:
+	.cfi_startproc
 .L1410:
 .LC1410:
 	pushq %rbp
@@ -798,11 +794,14 @@ _ZN9Rectangle4drawEv:
 	movq -0x10(%rbp), %rdi
 .LC1472:
 	callq _Unwind_Resume@PLT
-.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv
+.LCE1477:
+	.cfi_endproc
+	.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv
 	.text
-.local _ZN5Shape4drawEv
-.type _ZN5Shape4drawEv, @function
+	.local _ZN5Shape4drawEv
+	.type _ZN5Shape4drawEv, @function
 _ZN5Shape4drawEv:
+	.cfi_startproc
 .L1480:
 .LC1480:
 	pushq %rbp
@@ -814,4 +813,19 @@ _ZN5Shape4drawEv:
 	popq %rbp
 .LC1489:
 	retq 
-.size _ZN5Shape4drawEv,.-_ZN5Shape4drawEv
+.LCE148a:
+	.cfi_endproc
+	.size _ZN5Shape4drawEv,.-_ZN5Shape4drawEv
+
+            .hidden DW.ref.__gxx_personality_v0
+            .weak   DW.ref.__gxx_personality_v0
+            .section .data.rel.local.DW.ref.__gxx_personality_v0,"awG",@progbits,DW.ref.__gxx_personality_v0,comdat
+            .align 8
+            .type   DW.ref.__gxx_personality_v0, @object
+            .size   DW.ref.__gxx_personality_v0, 8
+        DW.ref.__gxx_personality_v0:
+            .quad   __gxx_personality_v0
+            .hidden __dso_handle
+            .ident  "GCC: (Ubuntu 7.4.0-1ubuntu1~18.04.1) 7.4.0"
+            .section        .note.GNU-stack,"",@progbits
+        
