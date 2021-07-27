@@ -253,22 +253,6 @@ _ZTS5Shape_2071: # 2071 -- 2078
 .align 8
 .LC3d48:
 	.quad .LC1120
-.LC3d50:
-	.byte 0x20
-.LC3d51:
-	.byte 0x11
-.LC3d52:
-	.byte 0x0
-.LC3d53:
-	.byte 0x0
-.LC3d54:
-	.byte 0x0
-.LC3d55:
-	.byte 0x0
-.LC3d56:
-	.byte 0x0
-.LC3d57:
-	.byte 0x0
 .section .data.rel.ro
 .align 8
 .type	_ZTV9Rectangle_3d60,@object
@@ -398,6 +382,8 @@ azerty_4098: # 4098 -- 40a0
 .section .text
 .align 16
 	.text
+	.align 2
+	.p2align 4,,15
 	.local __cxx_global_var_init
 	.type __cxx_global_var_init, @function
 __cxx_global_var_init:
@@ -419,6 +405,8 @@ __cxx_global_var_init:
 	.cfi_endproc
 	.size __cxx_global_var_init,.-__cxx_global_var_init
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _GLOBAL__sub_I_throw_catch.cpp
 	.type _GLOBAL__sub_I_throw_catch.cpp, @function
 _GLOBAL__sub_I_throw_catch.cpp:
@@ -438,6 +426,8 @@ _GLOBAL__sub_I_throw_catch.cpp:
 	.cfi_endproc
 	.size _GLOBAL__sub_I_throw_catch.cpp,.-_GLOBAL__sub_I_throw_catch.cpp
 	.text
+	.align 2
+	.p2align 4,,15
 	.globl main
 	.type main, @function
 main:
@@ -620,6 +610,8 @@ main:
 	.cfi_endproc
 	.size main,.-main
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _ZN9RectangleC2Ev
 	.type _ZN9RectangleC2Ev, @function
 _ZN9RectangleC2Ev:
@@ -667,6 +659,8 @@ _ZN9RectangleC2Ev:
 	.cfi_endproc
 	.size _ZN9RectangleC2Ev,.-_ZN9RectangleC2Ev
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _ZN5ShapeC2Ev
 	.type _ZN5ShapeC2Ev, @function
 _ZN5ShapeC2Ev:
@@ -694,6 +688,8 @@ _ZN5ShapeC2Ev:
 	.cfi_endproc
 	.size _ZN5ShapeC2Ev,.-_ZN5ShapeC2Ev
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _ZN9Rectangle5helloEv
 	.type _ZN9Rectangle5helloEv, @function
 _ZN9Rectangle5helloEv:
@@ -723,6 +719,8 @@ _ZN9Rectangle5helloEv:
 	.cfi_endproc
 	.size _ZN9Rectangle5helloEv,.-_ZN9Rectangle5helloEv
 	.text
+	.align 2
+	.p2align 4,,15
 	.local __clang_call_terminate
 	.type __clang_call_terminate, @function
 __clang_call_terminate:
@@ -740,6 +738,8 @@ __clang_call_terminate:
 	.cfi_endproc
 	.size __clang_call_terminate,.-__clang_call_terminate
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _ZN9Rectangle4drawEv
 	.type _ZN9Rectangle4drawEv, @function
 _ZN9Rectangle4drawEv:
@@ -798,6 +798,8 @@ _ZN9Rectangle4drawEv:
 	.cfi_endproc
 	.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv
 	.text
+	.align 2
+	.p2align 4,,15
 	.local _ZN5Shape4drawEv
 	.type _ZN5Shape4drawEv, @function
 _ZN5Shape4drawEv:

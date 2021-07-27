@@ -67,6 +67,7 @@ class Loader():
             print(func.__dict__)
             # We need to add them to the function list
             # we need to "add_function" like right above
+            # self.container.add_function(func)
 
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
@@ -77,8 +78,8 @@ class Loader():
             more = bytearray()
             if sec == ".init_array":
                 if len(data) > 8:
-                    # data = data[8:]
-                    data = data
+                    data = data[8:]
+                    # data = data
                 else:
                     data = b''
                 more.extend(data)

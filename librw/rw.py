@@ -345,9 +345,6 @@ class Symbolizer():
     def symbolize_text_section(self, container, context):
         # Symbolize using relocation information.
         for rel in container.relocations[".text"]:
-            if rel["offset"] == 4624:
-                print("Hurray")
-                print(rel)
             fn = container.function_of_address(rel['offset'])
             if not fn or fn.name in Rewriter.GCC_FUNCTIONS:
                 continue
@@ -408,21 +405,11 @@ class Symbolizer():
 
     def symbolize_cf_transfer(self, container, context=None):
         for _, function in container.functions.items():
-            print(function.name)
-            if(function.name == "_GLOBAL__sub_I_azerty"):
-                print(function.__dict__)
             addr_to_idx = dict()
             for inst_idx, instruction in enumerate(function.cache):
                 addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
-
-                # print(instruction)
-                """
-                if rel["offset"] == 4624:
-                    print("Hurray CF")
-                    print(rel)
-                """
 
                 is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = CS_GRP_CALL in instruction.cs.groups

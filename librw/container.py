@@ -202,6 +202,8 @@ class Function():
 
         results = []
         # Put all function names and define them.
+        results.append("\t.align 2")
+        results.append("\t.p2align 4,,15")
         if self.bind == "STB_GLOBAL":
             results.append("\t.globl %s" % (self.name))
         else:
