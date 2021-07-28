@@ -10,6 +10,10 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_x64
 from elftools.elf.sections import SymbolTableSection
 from elftools.dwarf.callframe import FDE, CIE, ZERO
 from elftools.dwarf.constants import *
+from elftools.dwarf.enums import *
+from elftools.dwarf.structs import DWARFStructs
+from elftools.common.utils import struct_parse
+from elftools.construct import Struct
 
 
 class Rewriter():
@@ -226,43 +230,61 @@ class Templates:
             return "\t.long\t.LC%x-." % (ty["typeinfo"])
         return "\t.long\t0"
 
-# Technically technically, the LSDA is language-dependent. It is entirely 
-# possible different compilers are doing different stuff here; we should not 
-# assume gcc_except_table matches GNU output except for: anything produced 
-# by the GNU compiler collection, and probably Clang/Clang++.
-class LSDATable(object):
-
-    def __init__(self, elffile, fileoffset):
-        
-        self.elf = elffile
-        self.lsda_offset = fileoffset
-        self._parse_lsda()
-
-    def _parse_lsda(self):
-        self._parse_lsda_header()
-        self._parse_lsda_entries()
-
-    def _parse_lsda_header(self):
-        raise Exception("LSDA = Language-Specific Data Area. Please implement for your chosen personality.")
-
-    def _parse_lsda_entries(self):
-        raise Exception("LSDA = Language-Specific Data Area. Please implement for your chosen personality.")
 
 # This code borrows from Angr's CLE loader. We basically ask pyelftools to 
 # parse dwarf structs based on the lsda_pointers we find in the _eh_frame 
 # FDEs. This isn't done yet, but that is a next step, and this info should 
 # probably be attached there as an LSDA entry so we can decode it into 
 # assembler.
-class LSDATableGCCPersonality(LSDATable):
+class LSDATable():
     """
     The LSDA Table in GCC-Frontend Compilers (All GCC Languages) implements the 
     LSDA using __gxx_personality_v0. Thus this should work for all GCC-languages 
     we care about, but that isn't guaranteed.
     """
+    def __init__(self, elffile, fileoffset, fstart):
+        self.elf = elffile
+        self.lsda_offset = fileoffset
+        self.entry_structs = DWARFStructs(True, 64, 8)
+        self.entries = []
+        self.fstart = fstart
+        self._formats = self._eh_encoding_to_field(self.entry_structs)
+        self.actions = {}
+        self._parse_lsda()
 
-    def __init__(self, elffile, fileoffset):
-        # Super will trigger language-specific parsing.
-        super().__init__(elffile, fileoffset)
+    @staticmethod
+    def _eh_encoding_to_field(entry_structs):
+        """
+        Shamelessly copied from pyelftools since the original method is a bounded method.
+        Return a mapping from basic encodings (DW_EH_encoding_flags) the
+        corresponding field constructors (for instance
+        entry_structs.Dwarf_uint32).
+        """
+        return {
+            DW_EH_encoding_flags['DW_EH_PE_absptr']:
+                entry_structs.Dwarf_target_addr,
+            DW_EH_encoding_flags['DW_EH_PE_uleb128']:
+                entry_structs.Dwarf_uleb128,
+            DW_EH_encoding_flags['DW_EH_PE_udata2']:
+                entry_structs.Dwarf_uint16,
+            DW_EH_encoding_flags['DW_EH_PE_udata4']:
+                entry_structs.Dwarf_uint32,
+            DW_EH_encoding_flags['DW_EH_PE_udata8']:
+                entry_structs.Dwarf_uint64,
+
+            DW_EH_encoding_flags['DW_EH_PE_sleb128']:
+                entry_structs.Dwarf_sleb128,
+            DW_EH_encoding_flags['DW_EH_PE_sdata2']:
+                entry_structs.Dwarf_int16,
+            DW_EH_encoding_flags['DW_EH_PE_sdata4']:
+                entry_structs.Dwarf_int32,
+            DW_EH_encoding_flags['DW_EH_PE_sdata8']:
+                entry_structs.Dwarf_int64,
+        }
+
+    def _parse_lsda(self):
+        self._parse_lsda_header()
+        self._parse_lsda_entries()
 
     def _parse_lsda_header(self):
         # https://www.airs.com/blog/archives/464
@@ -272,47 +294,65 @@ class LSDATableGCCPersonality(LSDATable):
         lpstart_raw = self.elf.read(1)[0]
         lpstart = None
         if lpstart_raw != DW_EH_encoding_flags['DW_EH_PE_omit']:
+            # See https://www.airs.com/blog/archives/460, it should be omit in
+            # practice
+            raise Exception("We do not handle this case for now")
             base_encoding = lpstart_raw & 0x0F
             modifier      = lpstart_raw & 0xF0
 
             lpstart = struct_parse(
                 Struct('dummy',
                        self._formats[base_encoding]('LPStart')),
-                self.stream
+                self.elf
             )['LPStart']
 
             if modifier == 0:
                 pass
             elif modifier == DW_EH_encoding_flags['DW_EH_PE_pcrel']:
-                lpstart += self.address + (self.stream.tell() - self.base_offset)
+                lpstart += self.address + (self.elf.tell() - self.base_offset)
             else:
                 raise Exception("what")
 
-        typetable_encoding = self.stream.read(1)[0]
+        typetable_encoding = self.elf.read(1)[0]
         typetable_offset = None
-        if ttype_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
+        if typetable_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
             typetable_offset = struct_parse(
                 Struct('dummy',
                        self.entry_structs.Dwarf_uleb128('TType')),
-                self.stream
+                self.elf
             )['TType']
 
-        callsitetable_encoding = self.stream.read(1)[0]
-        callsitetable_length = struct_parse(
+        call_site_table_encoding = self.elf.read(1)[0]
+        call_site_table_len = struct_parse(
             Struct('dummy',
                    self.entry_structs.Dwarf_uleb128('CSTable')),
-            self.stream
+            self.elf
         )['CSTable']
+
+        print("lpstart", lpstart_raw)
+        print("typetable_encoding", typetable_encoding)
+        print("call_site_table_encoding", call_site_table_encoding)
+
+        self.end_label = ".LLSDATT%x" % self.fstart
+        self.table_label = ".LLSDATTD%x" % self.fstart
+        self.action_label = ".LLSDACSE%x" % self.fstart
+        self.callsite_label = ".LLSDACSB%x" % self.fstart
 
         # Need to construct some representation here.
         # TODO: store what we need.
+        self.header = {
+            "lpstart": lpstart_raw,
+            "encoding": call_site_table_encoding,
+            "typetable_encoding": typetable_encoding,
+            "call_site_table_len": call_site_table_len,
+        }
 
     def _parse_lsda_entries(self):
         # THIS IS WHERE WORK NEEDS TO BE DONE. THE DATA RETURNED HERE SHOULD BE PASSED TO dwarf_map[whatever]
-        start_offset = self.stream.tell()
-        while self.stream.tell() - start_offset < header.call_site_table_len:
-            base_encoding = encoding & 0x0f
-            modifier = encoding & 0xf0
+        start_offset = self.elf.tell()
+        while self.elf.tell() - start_offset < self.header["call_site_table_len"]:
+            base_encoding = self.header["encoding"] & 0x0f
+            modifier = self.header["encoding"] & 0xf0
 
             # header
             s = struct_parse(
@@ -329,10 +369,81 @@ class LSDATableGCCPersonality(LSDATable):
             cs_len = s['cs_len']
             cs_lp = s['cs_lp']
             cs_action = s['cs_action']
-            # TODO: store what we need. These should correspond to catch 
-            # locations.
-            # In any case _here_ we want to reconstruct .gcc_except_table in 
-            # symbolized form in assembler.
+
+            if cs_action not in self.actions:
+                action = struct_parse(
+                    Struct("ActionEntry",
+                        self.entry_structs.Dwarf_uleb128('act_filter'),
+                        self.entry_structs.Dwarf_uleb128('act_next')
+                    ),
+                    self.elf
+                )
+                self.actions[cs_action] = action
+
+            self.entries.append(s)
+    
+    def generate_header(self):
+        table_header = """
+            .LFE%x:
+                .section	.gcc_except_table,"a",@progbits
+	            .align 4
+            .LLSDA%x:
+                .byte %x
+                .byte %x
+                .uleb128 %s-%s
+        """ % (
+            self.fstart,
+            self.fstart,
+            self.header["lpstart"],
+            self.header["typetable_encoding"],
+            self.end_label,
+            self.table_label
+        )
+        return table_header
+    
+    def generate_table(self):
+        table = """
+            .LLSDATTD%s:
+                .byte 0x1
+	            .uleb128 %s-%s
+            .LLSDACSB%s:
+                %s
+            .LLSDACSE%s:
+                %s
+        """ % (
+            self.fstart,
+            self.action_label,
+            self.callsite_label,
+            self.fstart,
+            self.generate_callsites(),
+            self.fstart,
+            self.generate_actions()
+        )
+        return table
+    
+    def generate_callsites(self):
+        # TODO 3
+        # STILL TBD
+        return ""
+    
+    def generate_actions(self):
+        # TODO 2
+        # Generate the assembly using the TODO 1 results
+        pass
+
+        # SUSHANT'S
+
+        # if isinstance(action["type_idx"], str):
+        #     action["type_idx"] = -1
+
+        # return "\t.byte\t0x%x\n\t.byte\t0x%x" % (action["type_idx"] + 1,
+        #                                          action["next_action"] or 0)
+
+        # OURS
+        return "".join(["\t\n\t" for action in self.actions])
+    
+    def generate_footer(self):
+        return "%s:\n" % self.end_label
 
 class Symbolizer():
     def __init__(self):
@@ -701,10 +812,8 @@ class Symbolizer():
         ehframe_entries = container.loader.elffile.get_dwarf_info().EH_CFI_entries()
 
         lsda_encoding = None
-        """
-        lsdas = list(sorted(container.loader.elffile.get_dwarf_info()["gcc_except_table"]["lsdas"],
-                            key=lambda x: x["idx"]))
-        """
+        # lsdas = list(sorted(container.loader.elffile.get_dwarf_info()["gcc_except_table"]["lsdas"],
+        #                     key=lambda x: x["idx"]))
 
         print(container.functions)
 
@@ -736,15 +845,16 @@ class Symbolizer():
                 # what they use.
 
                 print("Function Address: %s" % hex(initial_location))
-                # THE LSDA STUFF SHOULD GO HERE
                 lsda_table = None
+                print("lsda pointer", entry.lsda_pointer)
                 if entry.lsda_pointer:
                     print("LDSA Pointer: %s" % entry.lsda_pointer)
-                    # lsda_table = LSDATableGCCPersonality(container.loader.elffile, entry.lsda_pointer)
+                    lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location)
+                    dwarf_map[initial_location] = lsda_table.generate_header()
+                    dwarf_map[initial_location] += lsda_table.generate_table()
                     # SHOULD LOOK LIKE THIS :
                     # for entry in lsda_table.entries
                     #     dwarf_map[...] = entry...
-
 
                 location = initial_location
 

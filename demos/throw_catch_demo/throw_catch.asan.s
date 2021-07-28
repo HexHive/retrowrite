@@ -432,6 +432,8 @@ _GLOBAL__sub_I_throw_catch.cpp:
 	.type main, @function
 main:
 	.cfi_startproc
+	.cfi_personality 0x9b,DW.ref.__gxx_personality_v0
+	.cfi_lsda 0x1b,.LLSDA1220
 .L1220:
 .LC1220:
 	pushq %rbp
@@ -608,6 +610,24 @@ main:
 	callq .L1400
 .LCE136e:
 	.cfi_endproc
+
+            .LFE1220:
+                .section	.gcc_except_table,"a",@progbits
+	            .align 4
+            .LLSDA1220:
+                .byte ff
+                .byte 9c
+                .uleb128 .LLSDATT1220-.LLSDATTD1220
+        
+            .LLSDATTD4640:
+                .byte 0x1
+	            .uleb128 .LLSDACSE1220-.LLSDACSB1220
+            .LLSDACSB4640:
+                None
+            .LLSDACSE4640:
+                None
+        
+	.text
 	.size main,.-main
 	.text
 	.align 2
@@ -744,6 +764,8 @@ __clang_call_terminate:
 	.type _ZN9Rectangle4drawEv, @function
 _ZN9Rectangle4drawEv:
 	.cfi_startproc
+	.cfi_personality 0x9b,DW.ref.__gxx_personality_v0
+	.cfi_lsda 0x1b,.LLSDA1410
 .L1410:
 .LC1410:
 	pushq %rbp
@@ -796,6 +818,24 @@ _ZN9Rectangle4drawEv:
 	callq _Unwind_Resume@PLT
 .LCE1477:
 	.cfi_endproc
+
+            .LFE1410:
+                .section	.gcc_except_table,"a",@progbits
+	            .align 4
+            .LLSDA1410:
+                .byte ff
+                .byte ff
+                .uleb128 .LLSDATT1410-.LLSDATTD1410
+        
+            .LLSDATTD5136:
+                .byte 0x1
+	            .uleb128 .LLSDACSE1410-.LLSDACSB1410
+            .LLSDACSB5136:
+                None
+            .LLSDACSE5136:
+                None
+        
+	.text
 	.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv
 	.text
 	.align 2
