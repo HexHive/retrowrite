@@ -59,11 +59,30 @@ class Loader():
             data = section.data()
             more = bytearray()
             if sec == ".init_array":
-                if len(data) > 8:
-                    data = data[8:]
-                else:
-                    data = b''
-                more.extend(data)
+                # TODO: get INTPTR_SIZE from specific architecture as needed.
+                INTPTR_SIZE = 8
+
+                for i in range(0, len(data), INTPTR_SIZE):
+
+                    ptr_raw = data[i:i+INTPTR_SIZE]
+                    ptr = struct.unpack("<Q", ptr_raw)[0]
+
+                    func = self.container.functions.get(ptr, None)
+                    if func == None:
+                        print("Found .init_array pointer to an unknown function at address 0x%08x" % (ptr))
+                        print("This could be a bug. Please report it your case here: https://github.com/HexHive/retrowrite/issues/new")
+                    else:
+                        # GCC will output frame_dummy by default in most new 
+                        # binaries as needed, as part of libc. If we find it 
+                        # here we should strip it out so that it isn't 
+                        # symbolized when we process relocations.
+                        if func.name == "frame_dummy":
+                            print(".init_array frame_dummy pointer removed.")
+                            continue
+                        # we are all good.
+                        print(".init_array function %s left in place" % func.name)
+
+                    more.extend(ptr_raw)
             else:
                 more.extend(data)
                 if len(more) < sval['sz']:
