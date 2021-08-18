@@ -252,6 +252,7 @@ class LSDATable():
         self.sz = container.functions[fstart].sz
         self._formats = self._eh_encoding_to_field(self.entry_structs)
         self.actions = []
+        self.ttentries = []
         self.typetable_offset_present = False
         self._parse_lsda()
 
@@ -344,6 +345,7 @@ class LSDATable():
         self.table_label = ".LLSDATTD%x" % self.fstart
         self.action_label = ".LLSDACSE%x" % self.fstart
         self.callsite_label = ".LLSDACSB%x" % self.fstart
+        self.ttable_prefix_label = ".LLSDATYP%x" % self.fstart 
 
         # Need to construct some representation here.
         self.header = {
@@ -382,6 +384,8 @@ class LSDATable():
             self.entries.append(s)
 
         idx = action_count
+        processed_action_count = 0
+
         while idx>0: 
             
             action = struct_parse(
@@ -393,8 +397,23 @@ class LSDATable():
             )
             
             self.actions.append(action)
+            processed_action_count += 1
             if action['act_next'] == 0:
                 idx -= 1
+
+        idx = processed_action_count
+        while idx>0:
+            if self.typetable_offset_present == False:
+                assert("This is a bug, this gcc_except_table should not have a type table")
+
+            typedef = struct_parse(
+                Struct("TypeTableEntry",
+                    self.entry_structs.Dwarf_uint64('offset'),
+                ),
+                self.elf
+            )
+            self.ttentries.append(typedef)
+            idx -= 1
     
     def generate_tableoffset(self):
         ttoffset = ""
@@ -437,6 +456,8 @@ class LSDATable():
 %s
 .LLSDACSE%x:
     %s
+
+    %s
 .LLSDATT%x:
         """ % (
             self.fstart,
@@ -446,6 +467,7 @@ class LSDATable():
             self.generate_callsites(),
             self.fstart,
             self.generate_actions(),
+            self.generate_typetable(),
             self.fstart
         )
         return table
@@ -518,6 +540,23 @@ class LSDATable():
 
         
         return "\n".join(map(callsite_ftr, self.entries))
+
+    def generate_typetable(self):
+
+        ttable = ""
+        i = 1
+        for tp in self.ttentries:
+            label = "%sE%s" % (self.ttable_prefix_label,i)
+            i+=1
+
+            # TODO: correctly enumerate types.
+            ttable += """
+%s:
+    # TODO: FIX THIS .quad 0x%08x
+
+            """ % (label, tp['offset'])
+
+        return ttable
     
     def generate_actions(self):
         # Generate the assembly using the TODO 1 results
