@@ -350,6 +350,9 @@ class LSDATable():
 
     def _parse_lsda_entries(self):
         start_offset = self.elf.tell()
+
+        action_count = 0
+
         while self.elf.tell() - start_offset < self.header["call_site_table_len"]:
             base_encoding = self.header["encoding"] & 0x0f
             modifier = self.header["encoding"] & 0xf0
@@ -367,9 +370,15 @@ class LSDATable():
                 self.elf
             )
 
+            cs_action = s['cs_action']
+            if cs_action != 0:
+                action_count += 1
+
             self.entries.append(s)
 
-        while True:
+        idx = 0
+        while (action_count-idx) > 0:
+
             action = struct_parse(
                 Struct("ActionEntry",
                     self.entry_structs.Dwarf_sleb128('act_filter'),
@@ -380,7 +389,7 @@ class LSDATable():
             self.actions.append(action)
             if action["act_next"] == 0:
                 break
-
+            idx += 1
     
     def generate_header(self):
         print("generate header", self.fstart)
@@ -392,6 +401,7 @@ class LSDATable():
             .LLSDA%x:
                 .byte 0x%x
                 .byte 0x%x
+                .byte 0x1
                 .uleb128 %s-%s
         """ % (
             self.fstart,
@@ -407,7 +417,6 @@ class LSDATable():
         print("generate table", self.fstart)
         table = """
             .LLSDATTD%x:
-                .byte 0x1
 	            .uleb128 %s-%s
             .LLSDACSB%x:
                 %s
@@ -471,20 +480,30 @@ class LSDATable():
     
     def generate_actions(self):
         # Generate the assembly using the TODO 1 results
-        pass
-
+        
         # SUSHANT'S
 
         # if isinstance(action["type_idx"], str):
         #     action["type_idx"] = -1
 
         # return "\t.byte\t0x%x\n\t.byte\t0x%x" % (action["type_idx"] + 1,
-        #                                          action["next_action"] or 0)
+        #       
+        action_table = "\n"
+        
+        for action in self.actions:
 
-        return "\n".join(["\t.byte\t0x%x\n\t.byte\t0x%x" % (
-            action["act_filter"],
-            action["act_next"]
-        ) for action in self.actions])
+            filter_bytes = action["act_filter"].to_bytes(16, 'little')
+            next_bytes = action["act_next"].to_bytes(16, 'little')
+
+            action_table += "# Action Table Filter Bytes\n\n"
+            for byte in filter_bytes:
+                action_table += "    .byte 0x%x\n" % (byte)
+            action_table += "# Action Table Next Bytes\n\n"
+            for byte in filter_bytes:
+                action_table += "    .byte 0x%x\n" % (byte)    
+            action_table += "\n"
+
+        return action_table
     
     def generate_footer(self):
         return "%s:\n" % self.end_label
