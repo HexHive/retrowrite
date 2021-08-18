@@ -615,17 +615,49 @@ main:
                 .section	.gcc_except_table,"a",@progbits
 	            .align 4
             .LLSDA1220:
-                .byte ff
-                .byte 9c
+                .byte 0xff
+                .byte 0x9c
                 .uleb128 .LLSDATT1220-.LLSDATTD1220
         
             .LLSDATTD4640:
                 .byte 0x1
 	            .uleb128 .LLSDACSE1220-.LLSDACSB1220
             .LLSDACSB4640:
-                None
+                	.uleb128 .LC1220-.L1220
+	.uleb128 .LC12a0-.LC1220
+	.uleb128 .LC1220-.L1220
+	.uleb128 0x0
+	.uleb128 .LC12a0-.L1220
+	.uleb128 .LC12b0-.LC12a0
+	.uleb128 .LC12c2-.L1220
+	.uleb128 0x0
+	.uleb128 .LC12e1-.L1220
+	.uleb128 .LC12e6-.LC12e1
+	.uleb128 .LC12f0-.L1220
+	.uleb128 0x1
+	.uleb128 .LC12e6-.L1220
+	.uleb128 .LC1300-.LC12e6
+	.uleb128 .LC1220-.L1220
+	.uleb128 0x0
+	.uleb128 .LC1300-.L1220
+	.uleb128 .LC1314-.LC1300
+	.uleb128 .LC1344-.L1220
+	.uleb128 0x0
+	.uleb128 .LC1314-.L1220
+	.uleb128 .LC134b-.LC1314
+	.uleb128 .LC1220-.L1220
+	.uleb128 0x0
+	.uleb128 .LC134b-.L1220
+	.uleb128 .LC1350-.LC134b
+	.uleb128 .LC1363-.L1220
+	.uleb128 0x1
+	.uleb128 .LC1350-.L1220
+	.uleb128 .LC136e-.LC1350
+	.uleb128 .LC1220-.L1220
+	.uleb128 0x0
             .LLSDACSE4640:
-                None
+                	.byte	0x1
+	.byte	0x0
         
 	.text
 	.size main,.-main
@@ -823,17 +855,29 @@ _ZN9Rectangle4drawEv:
                 .section	.gcc_except_table,"a",@progbits
 	            .align 4
             .LLSDA1410:
-                .byte ff
-                .byte ff
+                .byte 0xff
+                .byte 0xff
                 .uleb128 .LLSDATT1410-.LLSDATTD1410
         
             .LLSDATTD5136:
                 .byte 0x1
 	            .uleb128 .LLSDACSE1410-.LLSDACSB1410
             .LLSDACSB5136:
-                None
+                	.uleb128 .LC1410-.L1410
+	.uleb128 .LC1429-.LC1410
+	.uleb128 .LC1410-.L1410
+	.uleb128 0x0
+	.uleb128 .LC1429-.L1410
+	.uleb128 .LC143c-.LC1429
+	.uleb128 .LC145e-.L1410
+	.uleb128 0x0
+	.uleb128 .LC143c-.L1410
+	.uleb128 .LC1477-.LC143c
+	.uleb128 .LC1410-.L1410
+	.uleb128 0x0
             .LLSDACSE5136:
-                None
+                	.byte	0x0
+	.byte	0x0
         
 	.text
 	.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv

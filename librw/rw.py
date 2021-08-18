@@ -249,7 +249,7 @@ class LSDATable():
         self.entries = []
         self.fstart = fstart
         self._formats = self._eh_encoding_to_field(self.entry_structs)
-        self.actions = {}
+        self.actions = []
         self._parse_lsda()
 
     @staticmethod
@@ -333,13 +333,13 @@ class LSDATable():
         print("typetable_encoding", typetable_encoding)
         print("call_site_table_encoding", call_site_table_encoding)
 
+        print("generate during parsing", self.fstart)
         self.end_label = ".LLSDATT%x" % self.fstart
         self.table_label = ".LLSDATTD%x" % self.fstart
         self.action_label = ".LLSDACSE%x" % self.fstart
         self.callsite_label = ".LLSDACSB%x" % self.fstart
 
         # Need to construct some representation here.
-        # TODO: store what we need.
         self.header = {
             "lpstart": lpstart_raw,
             "encoding": call_site_table_encoding,
@@ -348,11 +348,12 @@ class LSDATable():
         }
 
     def _parse_lsda_entries(self):
-        # THIS IS WHERE WORK NEEDS TO BE DONE. THE DATA RETURNED HERE SHOULD BE PASSED TO dwarf_map[whatever]
         start_offset = self.elf.tell()
         while self.elf.tell() - start_offset < self.header["call_site_table_len"]:
             base_encoding = self.header["encoding"] & 0x0f
             modifier = self.header["encoding"] & 0xf0
+
+            # Maybe we need to store the offset in the entry ?
 
             # header
             s = struct_parse(
@@ -365,31 +366,31 @@ class LSDATable():
                 self.elf
             )
 
-            cs_start = s['cs_start']
-            cs_len = s['cs_len']
-            cs_lp = s['cs_lp']
-            cs_action = s['cs_action']
-
-            if cs_action not in self.actions:
-                action = struct_parse(
-                    Struct("ActionEntry",
-                        self.entry_structs.Dwarf_uleb128('act_filter'),
-                        self.entry_structs.Dwarf_uleb128('act_next')
-                    ),
-                    self.elf
-                )
-                self.actions[cs_action] = action
-
             self.entries.append(s)
+
+        while True:
+            action = struct_parse(
+                Struct("ActionEntry",
+                    self.entry_structs.Dwarf_sleb128('act_filter'),
+                    self.entry_structs.Dwarf_sleb128('act_next')
+                ),
+                self.elf
+            )
+            self.actions.append(action)
+            if action["act_next"] == 0:
+                break
+
     
     def generate_header(self):
+        print("generate header", self.fstart)
+        print("generate table label", self.table_label)
         table_header = """
             .LFE%x:
                 .section	.gcc_except_table,"a",@progbits
 	            .align 4
             .LLSDA%x:
-                .byte %x
-                .byte %x
+                .byte 0x%x
+                .byte 0x%x
                 .uleb128 %s-%s
         """ % (
             self.fstart,
@@ -402,6 +403,7 @@ class LSDATable():
         return table_header
     
     def generate_table(self):
+        print("generate table", self.fstart)
         table = """
             .LLSDATTD%s:
                 .byte 0x1
@@ -422,12 +424,51 @@ class LSDATable():
         return table
     
     def generate_callsites(self):
+        #.LLSDACSB2:
+        #   .uleb128 .LEHB4-.LFB2    ; uint8_t start
+        #   .uleb128 .LEHE4-.LEHB4   ; uint8_t len
+        #   .uleb128 .L19-.LFB2      ; uint8_t lp
+        #   .uleb128 0x3             ; uint8_t action
+
+        # SUSHANT'S
+        """
+        cs_start = fstart + csinfo["position"]
+        cs_end = cs_start + csinfo["length"]
+        cs_lp =  "\t.uleb128 0x0"
+        action = 0x0
+
+        function_end = function.start + function.sz
+
+        if csinfo["has_action"]:
+            action = csinfo["first_action"] + 1
+        if csinfo["landing_pad"]:
+            cs_lp = fstart + csinfo["landing_pad"]
+            if cs_lp >= function_end:
+                cs_lp = "\t.uleb128 .LCE%x-.L%x" % (cs_lp, fstart)
+            else:
+                cs_lp = "\t.uleb128 .LC%x-.L%x" % (cs_lp, fstart)
+
+        # TODO: This will fail on case where there is no action
+        return "\n".join([
+            "\t.uleb128 .LC%x-.L%x" % (cs_start, fstart),
+            "\t.uleb128 .LC%x-.LC%x" % (cs_end, cs_start) if cs_end <
+            function_end else "\t.uleb128 .LCE%x-.LC%x" % (cs_end, cs_start),
+            cs_lp,
+            "\t.uleb128 0x%x" % (action)])
+        """
         # TODO 3
-        # STILL TBD
-        return ""
+        print("entries", self.entries)
+        return "\n".join([ # For each function
+            "\n".join([
+                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_start"], self.fstart),
+                "\t.uleb128 .LC%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
+                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_lp"], self.fstart),
+                "\t.uleb128 0x%x" % (entry["cs_action"])])
+            for entry in self.entries
+        ])
     
     def generate_actions(self):
-        # TODO 2
+        # TODO 2 => MAYBE DONE ?
         # Generate the assembly using the TODO 1 results
         pass
 
@@ -440,7 +481,11 @@ class LSDATable():
         #                                          action["next_action"] or 0)
 
         # OURS
-        return "".join(["\t\n\t" for action in self.actions])
+        print("actions", self.actions)
+        return "\n".join(["\t.byte\t0x%x\n\t.byte\t0x%x" % (
+            action["act_filter"],
+            action["act_next"]
+        ) for action in self.actions])
     
     def generate_footer(self):
         return "%s:\n" % self.end_label
