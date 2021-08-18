@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import struct
 from collections import defaultdict
 
 from elftools.elf.elffile import ELFFile
