@@ -1,5 +1,6 @@
 import argparse
 import sys
+import io
 from collections import defaultdict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
@@ -376,20 +377,21 @@ class LSDATable():
 
             self.entries.append(s)
 
-        idx = 0
-        while (action_count-idx) > 0:
-
+        idx = action_count
+        while idx>0: 
+            
             action = struct_parse(
                 Struct("ActionEntry",
-                    self.entry_structs.Dwarf_sleb128('act_filter'),
-                    self.entry_structs.Dwarf_sleb128('act_next')
+                    self.entry_structs.Dwarf_uint8('act_filter'),
+                    self.entry_structs.Dwarf_uint8('act_next')
                 ),
                 self.elf
             )
+            
             self.actions.append(action)
-            if action["act_next"] == 0:
-                break
-            idx += 1
+            if action['act_next'] == 0:
+                idx -= 1
+            
     
     def generate_header(self):
         print("generate header", self.fstart)
@@ -492,15 +494,9 @@ class LSDATable():
         
         for action in self.actions:
 
-            filter_bytes = action["act_filter"].to_bytes(16, 'little')
-            next_bytes = action["act_next"].to_bytes(16, 'little')
-
-            action_table += "# Action Table Filter Bytes\n\n"
-            for byte in filter_bytes:
-                action_table += "    .byte 0x%x\n" % (byte)
-            action_table += "# Action Table Next Bytes\n\n"
-            for byte in filter_bytes:
-                action_table += "    .byte 0x%x\n" % (byte)    
+            action_table += "# Action Filter and Next Record\n"
+            action_table += "    .byte %u\n" % (action["act_filter"])
+            action_table += "    .byte %u\n" % (action["act_next"]) 
             action_table += "\n"
 
         return action_table
