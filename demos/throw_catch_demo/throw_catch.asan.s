@@ -616,13 +616,13 @@ main:
 	            .align 4
             .LLSDA1220:
                 .byte 0xff
-                .byte 0x9c
+                .byte 0x9b
                 .uleb128 .LLSDATT1220-.LLSDATTD1220
         
-            .LLSDATTD4640:
+            .LLSDATTD1220:
                 .byte 0x1
 	            .uleb128 .LLSDACSE1220-.LLSDACSB1220
-            .LLSDACSB4640:
+            .LLSDACSB1220:
                 	.uleb128 .LC1220-.L1220
 	.uleb128 .LC12a0-.LC1220
 	.uleb128 .LC1220-.L1220
@@ -652,12 +652,13 @@ main:
 	.uleb128 .LC1363-.L1220
 	.uleb128 0x1
 	.uleb128 .LC1350-.L1220
-	.uleb128 .LC136e-.LC1350
+	.uleb128 .LCE136e-.LC1350
 	.uleb128 .LC1220-.L1220
 	.uleb128 0x0
-            .LLSDACSE4640:
+            .LLSDACSE1220:
                 	.byte	0x1
 	.byte	0x0
+            .LLSDATT1220:
         
 	.text
 	.size main,.-main
@@ -859,10 +860,10 @@ _ZN9Rectangle4drawEv:
                 .byte 0xff
                 .uleb128 .LLSDATT1410-.LLSDATTD1410
         
-            .LLSDATTD5136:
+            .LLSDATTD1410:
                 .byte 0x1
 	            .uleb128 .LLSDACSE1410-.LLSDACSB1410
-            .LLSDACSB5136:
+            .LLSDACSB1410:
                 	.uleb128 .LC1410-.L1410
 	.uleb128 .LC1429-.LC1410
 	.uleb128 .LC1410-.L1410
@@ -872,12 +873,13 @@ _ZN9Rectangle4drawEv:
 	.uleb128 .LC145e-.L1410
 	.uleb128 0x0
 	.uleb128 .LC143c-.L1410
-	.uleb128 .LC1477-.LC143c
+	.uleb128 .LCE1477-.LC143c
 	.uleb128 .LC1410-.L1410
 	.uleb128 0x0
-            .LLSDACSE5136:
+            .LLSDACSE1410:
                 	.byte	0x0
 	.byte	0x0
+            .LLSDATT1410:
         
 	.text
 	.size _ZN9Rectangle4drawEv,.-_ZN9Rectangle4drawEv

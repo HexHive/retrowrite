@@ -242,12 +242,13 @@ class LSDATable():
     LSDA using __gxx_personality_v0. Thus this should work for all GCC-languages 
     we care about, but that isn't guaranteed.
     """
-    def __init__(self, elffile, fileoffset, fstart):
+    def __init__(self, elffile, fileoffset, fstart, container):
         self.elf = elffile
         self.lsda_offset = fileoffset
         self.entry_structs = DWARFStructs(True, 64, 8)
         self.entries = []
         self.fstart = fstart
+        self.sz = container.functions[fstart].sz
         self._formats = self._eh_encoding_to_field(self.entry_structs)
         self.actions = []
         self._parse_lsda()
@@ -315,6 +316,7 @@ class LSDATable():
 
         typetable_encoding = self.elf.read(1)[0]
         typetable_offset = None
+        # NOW TODO : the encoding is the right one + 1, which is weird
         if typetable_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
             typetable_offset = struct_parse(
                 Struct('dummy',
@@ -333,7 +335,6 @@ class LSDATable():
         print("typetable_encoding", typetable_encoding)
         print("call_site_table_encoding", call_site_table_encoding)
 
-        print("generate during parsing", self.fstart)
         self.end_label = ".LLSDATT%x" % self.fstart
         self.table_label = ".LLSDATTD%x" % self.fstart
         self.action_label = ".LLSDACSE%x" % self.fstart
@@ -405,13 +406,14 @@ class LSDATable():
     def generate_table(self):
         print("generate table", self.fstart)
         table = """
-            .LLSDATTD%s:
+            .LLSDATTD%x:
                 .byte 0x1
 	            .uleb128 %s-%s
-            .LLSDACSB%s:
+            .LLSDACSB%x:
                 %s
-            .LLSDACSE%s:
+            .LLSDACSE%x:
                 %s
+            .LLSDATT%x:
         """ % (
             self.fstart,
             self.action_label,
@@ -419,7 +421,8 @@ class LSDATable():
             self.fstart,
             self.generate_callsites(),
             self.fstart,
-            self.generate_actions()
+            self.generate_actions(),
+            self.fstart
         )
         return table
     
@@ -456,19 +459,17 @@ class LSDATable():
             cs_lp,
             "\t.uleb128 0x%x" % (action)])
         """
-        # TODO 3
-        print("entries", self.entries)
+        function_end = self.sz + self.fstart
         return "\n".join([ # For each function
             "\n".join([
                 "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_start"], self.fstart),
-                "\t.uleb128 .LC%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
-                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_lp"], self.fstart),
+                "\t.uleb128 .LC%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]) if self.fstart + entry["cs_start"] + entry["cs_len"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
+                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_lp"], self.fstart) if self.fstart + entry["cs_lp"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_lp"], self.fstart),
                 "\t.uleb128 0x%x" % (entry["cs_action"])])
             for entry in self.entries
         ])
     
     def generate_actions(self):
-        # TODO 2 => MAYBE DONE ?
         # Generate the assembly using the TODO 1 results
         pass
 
@@ -480,8 +481,6 @@ class LSDATable():
         # return "\t.byte\t0x%x\n\t.byte\t0x%x" % (action["type_idx"] + 1,
         #                                          action["next_action"] or 0)
 
-        # OURS
-        print("actions", self.actions)
         return "\n".join(["\t.byte\t0x%x\n\t.byte\t0x%x" % (
             action["act_filter"],
             action["act_next"]
@@ -894,7 +893,7 @@ class Symbolizer():
                 print("lsda pointer", entry.lsda_pointer)
                 if entry.lsda_pointer:
                     print("LDSA Pointer: %s" % entry.lsda_pointer)
-                    lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location)
+                    lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location, container)
                     dwarf_map[initial_location] = lsda_table.generate_header()
                     dwarf_map[initial_location] += lsda_table.generate_table()
                     # SHOULD LOOK LIKE THIS :

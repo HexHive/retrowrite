@@ -1,4 +1,4 @@
-CC=g++
+CC=clang++
 OPT=-O0 -ggdb -Wall -Wpedantic -Wextra -fPIC -fPIE -pie
 
 all: throw_catch
