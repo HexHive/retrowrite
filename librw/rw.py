@@ -434,7 +434,7 @@ class LSDATable():
 .LLSDATTD%x:
     .uleb128 %s-%s
 .LLSDACSB%x:
-    %s
+%s
 .LLSDACSE%x:
     %s
 .LLSDATT%x:
@@ -484,14 +484,40 @@ class LSDATable():
             "\t.uleb128 0x%x" % (action)])
         """
         function_end = self.sz + self.fstart
-        return "\n".join([ # For each function
-            "\n".join([
-                "\t.uleb128 .LC%x-.L%x  \t# Call Site Entry" % (self.fstart + entry["cs_start"], self.fstart),
-                "\t.uleb128 .LC%x-.LC%x \t# Call Between" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]) if self.fstart + entry["cs_start"] + entry["cs_len"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
-                "\t.uleb128 .LC%x-.L%x  \t# Jump Location" % (self.fstart + entry["cs_lp"], self.fstart) if self.fstart + entry["cs_lp"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_lp"], self.fstart),
-                "\t.uleb128 0x%x        \t# Action\n" % (entry["cs_action"])])
-            for entry in self.entries
-        ])
+
+        def callsite_ftr(entry):
+            
+            cbw_e = ""
+            if self.fstart + entry["cs_start"] + entry["cs_len"] >= function_end:
+                cbw_e = "E"
+            jlo_e = ""
+            if self.fstart + entry["cs_lp"] >= function_end:
+                jlo_e = "E"
+
+            """
+
+            cse: The start of the instructions for the current call site, 
+                 a byte offset from the landing pad base. This is encoded 
+                 using the encoding from the header.
+            cbw: The length of the instructions for the current call site, 
+                 in bytes. This is encoded using the encoding from the header.
+            jlo: A pointer to the landing pad for this sequence of instructions, 
+                 or 0 if there isn’t one. This is a byte offset from the 
+                 landing pad base. This is encoded using the encoding from the header.
+            act: The action to take, an unsigned LEB128. 
+                 This is 1 plus a byte offset into the action table. 
+                 The value zero means that there is no action.
+
+            """
+
+            cse = "\t.uleb128 .LC%x-.L%x    \t# Call Site Entry (%u)" % (self.fstart + entry["cs_start"], self.fstart, entry["cs_start"])
+            cbw = "\t.uleb128 .LC%s%x-.LC%x \t# Call Between (%u)" % (cbw_e, self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"], entry["cs_len"])
+            jlo = "\t.uleb128 .LC%s%x-.L%x  \t# Jump Location (%u)" % (jlo_e, self.fstart + entry["cs_lp"], self.fstart, entry["cs_lp"]) 
+            act = "\t.uleb128 0x%x          \t# Action\n" % (entry["cs_action"])
+            return "\n".join([cse, cbw, jlo, act])
+
+        
+        return "\n".join(map(callsite_ftr, self.entries))
     
     def generate_actions(self):
         # Generate the assembly using the TODO 1 results
