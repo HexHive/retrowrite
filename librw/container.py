@@ -188,7 +188,7 @@ class Function():
                 continue
 
             if instruction.address in self.bbstarts:
-                results.append(".L%x:" % (instruction.address))
+                results.append(".L%d:" % (instruction.address))
                 results.append(".LC%x:" % (instruction.address))
             else:
                 results.append(".LC%x:" % (instruction.address))

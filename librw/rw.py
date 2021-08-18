@@ -187,7 +187,7 @@ class Symbolizer():
                     # Check if the target is in .text section.
                     if container.is_in_section(".text", target):
                         function.bbstarts.add(target)
-                        instruction.op_str = ".L%x" % (target)
+                        instruction.op_str = ".L%d" % (target)
                     elif target in container.plt:
                         instruction.op_str = "{}@PLT".format(
                             container.plt[target])
