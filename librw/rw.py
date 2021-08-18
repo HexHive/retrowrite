@@ -499,7 +499,7 @@ class LSDATable():
             for byte in filter_bytes:
                 action_table += "    .byte 0x%x\n" % (byte)
             action_table += "# Action Table Next Bytes\n\n"
-            for byte in filter_bytes:
+            for byte in next_bytes:
                 action_table += "    .byte 0x%x\n" % (byte)    
             action_table += "\n"
 
