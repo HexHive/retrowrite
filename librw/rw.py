@@ -189,7 +189,7 @@ class Templates:
         return "\n".join([
             "\t.uleb128 .LC%x-.L%x" % (cs_start, fstart),
             "\t.uleb128 .LC%x-.LC%x" % (cs_end, cs_start) if cs_end <
-            function_end else "\t.uleb128 .LCE%x-.LC%x" % (cs_end, cs_start),
+            function_end else "\t.byte .LCE%x-.LC%x" % (cs_end, cs_start),
             cs_lp,
             "\t.uleb128 0x%x" % (action)])
 
@@ -252,6 +252,7 @@ class LSDATable():
         self.sz = container.functions[fstart].sz
         self._formats = self._eh_encoding_to_field(self.entry_structs)
         self.actions = []
+        self.typetable_offset_present = False
         self._parse_lsda()
 
     @staticmethod
@@ -319,11 +320,14 @@ class LSDATable():
         typetable_offset = None
         # NOW TODO : the encoding is the right one + 1, which is weird
         if typetable_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
-            typetable_offset = struct_parse(
+            self.typetable_offset = struct_parse(
                 Struct('dummy',
                        self.entry_structs.Dwarf_uleb128('TType')),
                 self.elf
             )['TType']
+            self.typetable_offset_present = True
+        else:
+            self.typetable_offset_present = False
 
         call_site_table_encoding = self.elf.read(1)[0]
         call_site_table_len = struct_parse(
@@ -391,40 +395,49 @@ class LSDATable():
             self.actions.append(action)
             if action['act_next'] == 0:
                 idx -= 1
-            
+    
+    def generate_tableoffset(self):
+        ttoffset = ""
+        if self.typetable_offset_present:
+            ttoffset = ".uleb128 %s-%s" % (self.end_label, self.table_label)
+        else:
+            ttoffset = "# @TType Encoding is DW_EH_PE_omit, ignoring."
+        return ttoffset    
     
     def generate_header(self):
         print("generate header", self.fstart)
         print("generate table label", self.table_label)
+
+        ttoffset = self.generate_tableoffset()
+
         table_header = """
-            .LFE%x:
-                .section	.gcc_except_table,"a",@progbits
-	            .align 4
-            .LLSDA%x:
-                .byte 0x%x
-                .byte 0x%x
-                .byte 0x1
-                .uleb128 %s-%s
+.LFE%x:
+    .section	.gcc_except_table,"a",@progbits
+    .align 4
+.LLSDA%x:
+    .byte 0x%x   # @LPStart encoding
+    .byte 0x%x   # @TType Encoding
+    %s
+    .byte 0x1
         """ % (
             self.fstart,
             self.fstart,
             self.header["lpstart"],
             self.header["typetable_encoding"],
-            self.end_label,
-            self.table_label
+            ttoffset,
         )
         return table_header
     
     def generate_table(self):
         print("generate table", self.fstart)
         table = """
-            .LLSDATTD%x:
-	            .uleb128 %s-%s
-            .LLSDACSB%x:
-                %s
-            .LLSDACSE%x:
-                %s
-            .LLSDATT%x:
+.LLSDATTD%x:
+    .uleb128 %s-%s
+.LLSDACSB%x:
+    %s
+.LLSDACSE%x:
+    %s
+.LLSDATT%x:
         """ % (
             self.fstart,
             self.action_label,
@@ -473,10 +486,10 @@ class LSDATable():
         function_end = self.sz + self.fstart
         return "\n".join([ # For each function
             "\n".join([
-                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_start"], self.fstart),
-                "\t.uleb128 .LC%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]) if self.fstart + entry["cs_start"] + entry["cs_len"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
-                "\t.uleb128 .LC%x-.L%x" % (self.fstart + entry["cs_lp"], self.fstart) if self.fstart + entry["cs_lp"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_lp"], self.fstart),
-                "\t.uleb128 0x%x" % (entry["cs_action"])])
+                "\t.uleb128 .LC%x-.L%x  \t# Call Site Entry" % (self.fstart + entry["cs_start"], self.fstart),
+                "\t.uleb128 .LC%x-.LC%x \t# Call Between" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]) if self.fstart + entry["cs_start"] + entry["cs_len"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_start"] + entry["cs_len"], self.fstart + entry["cs_start"]),
+                "\t.uleb128 .LC%x-.L%x  \t# Jump Location" % (self.fstart + entry["cs_lp"], self.fstart) if self.fstart + entry["cs_lp"] < function_end else "\t.uleb128 .LCE%x-.LC%x" % (self.fstart + entry["cs_lp"], self.fstart),
+                "\t.uleb128 0x%x        \t# Action\n" % (entry["cs_action"])])
             for entry in self.entries
         ])
     
