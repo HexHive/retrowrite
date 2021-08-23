@@ -1,6 +1,8 @@
+
 import argparse
 import sys
 import io
+import struct
 from collections import defaultdict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
@@ -320,6 +322,9 @@ class LSDATable():
         typetable_encoding = self.elf.read(1)[0]
         typetable_offset = None
         # NOW TODO : the encoding is the right one + 1, which is weird
+
+        self.typetable_offset = 0
+
         if typetable_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
             self.typetable_offset = struct_parse(
                 Struct('dummy',
@@ -337,9 +342,15 @@ class LSDATable():
             self.elf
         )['CSTable']
 
+        if self.typetable_offset_present == False:
+            self.typetable_offset = call_site_table_len
+
         print("lpstart", lpstart_raw)
         print("typetable_encoding", typetable_encoding)
         print("call_site_table_encoding", call_site_table_encoding)
+
+        print("CALL SITE TABLE LENGTH %d" % call_site_table_len)
+        print("TYPETABLE OFFSET %d" % self.typetable_offset)
 
         self.end_label = ".LLSDATT%x" % self.fstart
         self.table_label = ".LLSDATTD%x" % self.fstart
@@ -353,14 +364,15 @@ class LSDATable():
             "encoding": call_site_table_encoding,
             "typetable_encoding": typetable_encoding,
             "call_site_table_len": call_site_table_len,
+            "cs_act_tt_total_len": self.typetable_offset, # Don't forget to check typetable_offset_present
         }
 
     def _parse_lsda_entries(self):
-        start_offset = self.elf.tell()
+        start_cs_offset = self.elf.tell()
 
         action_count = 0
 
-        while self.elf.tell() - start_offset < self.header["call_site_table_len"]:
+        while self.elf.tell() - start_cs_offset < self.header["call_site_table_len"]:
             base_encoding = self.header["encoding"] & 0x0f
             modifier = self.header["encoding"] & 0xf0
 
@@ -379,14 +391,18 @@ class LSDATable():
 
             cs_action = s['cs_action']
             if cs_action != 0:
-                action_count += 1
+                action_offset_bytes = (cs_action+1) >> 1
+                action_count = max(action_count, action_offset_bytes)
 
             self.entries.append(s)
+
+        processed_bytes = self.elf.tell()-start_cs_offset
+        print("+++++ %d bytes read, %d to go, %d actions" % (processed_bytes, self.typetable_offset-processed_bytes, action_count))
 
         idx = action_count
         processed_action_count = 0
 
-        while idx>0: 
+        while idx > 0: 
             
             action = struct_parse(
                 Struct("ActionEntry",
@@ -396,24 +412,48 @@ class LSDATable():
                 self.elf
             )
             
+            print(">>>> ACTION ", action)
             self.actions.append(action)
-            processed_action_count += 1
-            if action['act_next'] == 0:
-                idx -= 1
+            processed_action_count = processed_action_count + 1
+            idx -= 1
+
+        
+        remaining_bytes = self.typetable_offset-processed_bytes
+
+        if remaining_bytes > 0:
+            x = self.elf.tell() % 4
+            if x > 0:
+                print(x)
+                y = 4 - x
+                print("We are %d bytes over alignment, advancing by %d" % (x,y))
+                self.elf.read(y)
+
+        processed_bytes = self.elf.tell()-start_cs_offset
+        remaining_bytes = self.typetable_offset-processed_bytes
+
+        print("+++++ %d bytes read, %d to go, %f pointers will fit" % (processed_bytes, remaining_bytes, remaining_bytes/8.0))
 
         idx = processed_action_count
-        while idx>0:
+        while idx > 0:
             if self.typetable_offset_present == False:
                 assert("This is a bug, this gcc_except_table should not have a type table")
 
-            typedef = struct_parse(
-                Struct("TypeTableEntry",
-                    self.entry_structs.Dwarf_uint64('offset'),
-                ),
-                self.elf
-            )
-            self.ttentries.append(typedef)
-            idx -= 1
+            current_loc = self.elf.tell()
+            pointer = self.elf.read(8)
+            decoded = struct.unpack("<Q", pointer)[0]
+
+            ptr_loc = decoded+current_loc
+
+            print("******** TTT Offset: %x" % decoded)
+            print("******** TTT LOC: %x" % current_loc)
+            print("******** TTT Points To: %x" % ptr_loc)
+            
+            #typedef.address = abs_addr
+
+            ##self.ttentries.append(typedef)
+            idx = idx - 1
+
+        print("%d, %d" % (self.elf.tell()-start_cs_offset, self.typetable_offset))
     
     def generate_tableoffset(self):
         ttoffset = ""
@@ -456,7 +496,6 @@ class LSDATable():
 %s
 .LLSDACSE%x:
     %s
-
     %s
 .LLSDATT%x:
         """ % (
@@ -552,9 +591,9 @@ class LSDATable():
             # TODO: correctly enumerate types.
             ttable += """
 %s:
-    # TODO: FIX THIS .quad 0x%08x
+     .quad .LC%x - %s
 
-            """ % (label, tp['offset'])
+            """ % (label, tp['offset'], label)
 
         return ttable
     
@@ -981,11 +1020,11 @@ class Symbolizer():
                 # is gxx_personality_v0. If not, it could be e.g. Rust. Not checked 
                 # what they use.
 
-                print("Function Address: %s" % hex(initial_location))
+                #print("Function Address: %s" % hex(initial_location))
                 lsda_table = None
-                print("lsda pointer", entry.lsda_pointer)
+                #print("lsda pointer", entry.lsda_pointer)
                 if entry.lsda_pointer:
-                    print("LDSA Pointer: %s" % entry.lsda_pointer)
+                    #print("LDSA Pointer: %s" % entry.lsda_pointer)
                     lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location, container)
                     dwarf_map[initial_location] = lsda_table.generate_header()
                     dwarf_map[initial_location] += lsda_table.generate_table()
@@ -1013,9 +1052,9 @@ class Symbolizer():
                     opcode = instruction.opcode
                     args = instruction.args
 
-                    print([opcode] + args)
+                    #print([opcode] + args)
                     location, cfi_line = interpret_dwarf_instruction(location, [opcode] + args)
-                    print("Were're at", location, "and CFI line is", cfi_line)
+                    #print("Were're at", location, "and CFI line is", cfi_line)
                     if cfi_line:
                         current[location].append("\t"+cfi_line)
 
@@ -1042,7 +1081,7 @@ class Symbolizer():
                 print(entry.offset)
             else:
                 raise Exception("Unhandled type %s" % (type(entry)))
-            print("----\n")
+            #print("----\n")
 
 
         # BEGIN rewrite_table
@@ -1101,7 +1140,8 @@ def interpret_dwarf_instruction(current_loc, instruction):
     elif instruction[0] == DW_CFA_nop:
         pass
     else:
-        print("[x] Unhandled DWARF instruction:", instruction[0])
+        pass
+        #print("[x] Unhandled DWARF instruction:", instruction[0])
 
     return current_loc, cfi_line
 
