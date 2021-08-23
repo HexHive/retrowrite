@@ -437,9 +437,6 @@ class LSDATable():
             if ptr != 0:
                 symbolized_target = ptr + ttentryloc
 
-                if action.act_filter != 1:
-                    symbolized_target+=8
-
             typeentry = {'address': symbolized_target}
             self.ttentries[action.act_filter] = typeentry
             print("****** TT x: %x" % (symbolized_target))            
@@ -1097,7 +1094,7 @@ class Symbolizer():
             .data
             .hidden DW.ref.__gxx_personality_v0
             .weak   DW.ref.__gxx_personality_v0
-            .section .data.rel.local.DW.ref.__gxx_personality_v0,"awG",@progbits,DW.ref.__gxx_personality_v0,comdat
+            .section .data.rel.ro.DW.ref.__gxx_personality_v0,"awG",@progbits,DW.ref.__gxx_personality_v0,comdat
             .align 8
             .type   DW.ref.__gxx_personality_v0, @object
             .size   DW.ref.__gxx_personality_v0, 8
