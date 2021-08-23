@@ -4,6 +4,7 @@ import sys
 import io
 import struct
 from collections import defaultdict
+from collections import OrderedDict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM
 from capstone.x86_const import X86_REG_RIP
@@ -254,7 +255,7 @@ class LSDATable():
         self.sz = container.functions[fstart].sz
         self._formats = self._eh_encoding_to_field(self.entry_structs)
         self.actions = []
-        self.ttentries = []
+        self.ttentries = OrderedDict()
         self.typetable_offset_present = False
         self._parse_lsda()
 
@@ -346,6 +347,7 @@ class LSDATable():
             self.typetable_offset = call_site_table_len
 
         print("lpstart", lpstart_raw)
+        print("lpstart_pcrel", lpstart)
         print("typetable_encoding", typetable_encoding)
         print("call_site_table_encoding", call_site_table_encoding)
 
@@ -417,43 +419,31 @@ class LSDATable():
             processed_action_count = processed_action_count + 1
             idx -= 1
 
+
+        ttendloc = self.lsda_offset+self.typetable_offset+3
         
-        remaining_bytes = self.typetable_offset-processed_bytes
+        print("TT %x" % (ttendloc))
+        for action in self.actions:
 
-        if remaining_bytes > 0:
-            x = self.elf.tell() % 4
-            if x > 0:
-                print(x)
-                y = 4 - x
-                print("We are %d bytes over alignment, advancing by %d" % (x,y))
-                self.elf.read(y)
+            type_bytes_offset = (action.act_filter * -8)
+            ttentryloc = ttendloc + type_bytes_offset
+            print("****** TT LOC: %x" % (ttentryloc))
+            self.elf.seek(ttentryloc, io.SEEK_SET)
+            ptrbytes = self.elf.read(8)
+            ptr = struct.unpack("<Q", ptrbytes)[0]
+            print("****** TT PTR: %x" % ptr)
 
-        processed_bytes = self.elf.tell()-start_cs_offset
-        remaining_bytes = self.typetable_offset-processed_bytes
+            symbolized_target = 0
+            if ptr != 0:
+                symbolized_target = ptr + ttentryloc
 
-        print("+++++ %d bytes read, %d to go, %f pointers will fit" % (processed_bytes, remaining_bytes, remaining_bytes/8.0))
+                if action.act_filter != 1:
+                    symbolized_target+=8
 
-        idx = processed_action_count
-        while idx > 0:
-            if self.typetable_offset_present == False:
-                assert("This is a bug, this gcc_except_table should not have a type table")
+            typeentry = {'address': symbolized_target}
+            self.ttentries[action.act_filter] = typeentry
+            print("****** TT x: %x" % (symbolized_target))            
 
-            current_loc = self.elf.tell()
-            pointer = self.elf.read(8)
-            decoded = struct.unpack("<Q", pointer)[0]
-
-            ptr_loc = decoded+current_loc
-
-            print("******** TTT Offset: %x" % decoded)
-            print("******** TTT LOC: %x" % current_loc)
-            print("******** TTT Points To: %x" % ptr_loc)
-            
-            #typedef.address = abs_addr
-
-            ##self.ttentries.append(typedef)
-            idx = idx - 1
-
-        print("%d, %d" % (self.elf.tell()-start_cs_offset, self.typetable_offset))
     
     def generate_tableoffset(self):
         ttoffset = ""
@@ -496,8 +486,10 @@ class LSDATable():
 %s
 .LLSDACSE%x:
     %s
+    .align 4
     %s
 .LLSDATT%x:
+    .p2align 2
         """ % (
             self.fstart,
             self.action_label,
@@ -584,16 +576,21 @@ class LSDATable():
 
         ttable = ""
         i = 1
-        for tp in self.ttentries:
+        for idx, tp in reversed(list(self.ttentries.items())):
+            print("*******", idx)
             label = "%sE%s" % (self.ttable_prefix_label,i)
             i+=1
 
-            # TODO: correctly enumerate types.
+            target_label = ""
+            if tp["address"] != 0:
+                target_label = ".LC%x-." % (tp["address"])
+            else:
+                target_label = "0"
+            
             ttable += """
 %s:
-     .quad .LC%x - %s
-
-            """ % (label, tp['offset'], label)
+     .quad %s
+            """ % (label, target_label)
 
         return ttable
     
@@ -1019,7 +1016,7 @@ class Symbolizer():
                 # We should check that it points to a CIE and that the personality function 
                 # is gxx_personality_v0. If not, it could be e.g. Rust. Not checked 
                 # what they use.
-
+                print(entry.__dict__)
                 #print("Function Address: %s" % hex(initial_location))
                 lsda_table = None
                 #print("lsda pointer", entry.lsda_pointer)
@@ -1042,6 +1039,7 @@ class Symbolizer():
 
                 # For each DWARF instruction in the instruction list, what do we do?
                 for instruction in entry.instructions:
+                    print(">>>>>", instruction)
                     
                     # This is decoding the DWARF virtual machine instructions :)
                     # Some of these directly correspond to assembler directives we 
@@ -1082,20 +1080,21 @@ class Symbolizer():
             else:
                 raise Exception("Unhandled type %s" % (type(entry)))
             #print("----\n")
-
-
-        # BEGIN rewrite_table
-        for addr, table in dwarf_map.items():
-            func = container.functions[addr]
-            func.except_table = table
+      
 
         # Check if any cfi information needs to be added
         for addr, cfi_map in cfi_map.items():
             func = container.functions[addr]
             func.cfi_map = cfi_map
 
+          # BEGIN rewrite_table
+        for addr, table in dwarf_map.items():
+            func = container.functions[addr]
+            func.except_table = table
+
         # Add definition for personality at the end
         personality='''
+            .data
             .hidden DW.ref.__gxx_personality_v0
             .weak   DW.ref.__gxx_personality_v0
             .section .data.rel.local.DW.ref.__gxx_personality_v0,"awG",@progbits,DW.ref.__gxx_personality_v0,comdat
@@ -1104,45 +1103,78 @@ class Symbolizer():
             .size   DW.ref.__gxx_personality_v0, 8
         DW.ref.__gxx_personality_v0:
             .quad   __gxx_personality_v0
-            .hidden __dso_handle
             .ident  "GCC: (Ubuntu 7.4.0-1ubuntu1~18.04.1) 7.4.0"
             .section        .note.GNU-stack,"",@progbits
         '''
+        # .hidden __dso_handle
         container.personality = personality
         # END rewrite_table
+
+
     
 def interpret_dwarf_instruction(current_loc, instruction):
     DATA_ALIGN = 8
     cfi_line = None
     # instruction = instruction.strip().split()
+
+    # ADVANCE_LOC = 64 = 0x40
+    # OFFSET = 128 = 0x80
+    # RESTORE = 192 = 
+
+    #General Purpose Register RAX 0 %rax
+    #General Purpose Register RDX 1 %rdx
+    #General Purpose Register RCX 2 %rcx
+    #General Purpose Register RBX 3 %rbx
+    #General Purpose Register RSI 4 %rsi
+    #General Purpose Register RDI 5 %rdi
+    #Frame Pointer Register RBP 6 %rbp
+    #Stack Pointer Register RSP 7 %rsp
+    #Extended Integer Registers 8-15 8-15 %r8–%r15
+
+    dwarf_x86_64_regmap = {0: 'rax', 1: 'rdx', 2: 'rcx', 3: 'rbi', 4: 'rsi', 5: 'rdi', 6: 'rbp', 7: 'rsp'}
+
+    for i in range(8, 16):
+        dwarf_x86_64_regmap[i] = 'r%d' % i
+
+
     if instruction[0] == DW_CFA_advance_loc + DW_CFA_advance_loc1:
         current_loc += instruction[1]
     elif instruction[0] == DW_CFA_advance_loc + DW_CFA_advance_loc2:
         current_loc += instruction[1]
     elif instruction[0] == DW_CFA_advance_loc + DW_CFA_advance_loc4:
         current_loc += instruction[1]
+    elif instruction[0] == DW_CFA_advance_loc + DW_CFA_set_loc:
+        current_loc = instruction[1]
+
     elif instruction[0] == DW_CFA_def_cfa_offset:
-        cfi_line = ".cfi_def_cfa_offset %s" % instruction[1]
+        cfi_line = ".cfi_def_cfa_offset %s" % (instruction[1])
     elif instruction[0] == DW_CFA_offset:
-        cfi_line = ".cfi_offset %s, -%d" % (instruction[1],
+        cfi_line = ".cfi_offset %s, -%d" % (dwarf_x86_64_regmap.get(instruction[1], instruction[1]),
                                             instruction[2] * DATA_ALIGN)
     elif instruction[0] == DW_CFA_def_cfa_register:
-        cfi_line = ".cfi_def_cfa_register %s" % instruction[1]
+        cfi_line = ".cfi_def_cfa_register %s" % dwarf_x86_64_regmap.get(instruction[1], instruction[1])
     elif instruction[0] == DW_CFA_def_cfa:
-        cfi_line = ".cfi_def_cfa %s, %s" % (instruction[1],
+        cfi_line = ".cfi_def_cfa %s, %s" % (dwarf_x86_64_regmap.get(instruction[1], instruction[1]),
                                             instruction[2])
     elif instruction[0] == DW_CFA_remember_state:
         cfi_line = ".cfi_remember_state"
     elif instruction[0] == DW_CFA_restore:
-        cfi_line = ".cfi_restore %s" % instruction[1]
+        cfi_line = ".cfi_restore %s" % dwarf_x86_64_regmap.get(instruction[1], instruction[1])
     elif instruction[0] == DW_CFA_restore + DW_CFA_restore_state:
         cfi_line = ".cfi_restore_state" 
     elif instruction[0] == DW_CFA_nop:
         pass
+    
     else:
-        pass
-        #print("[x] Unhandled DWARF instruction:", instruction[0])
+        print("[x] Unhandled DWARF instruction: %x" % instruction[0])
+        if instruction[0] > 192:
+            print("RESTORE+",instruction[0]-192)
+        if instruction[0] > 128 and instruction[0] < 192:
+            print("OFFSET",instruction[0]-128)
+        if instruction[0] > 64 and instruction[0] < 128:
+            print("ADVANCE_LOC+",instruction[0]-64)
 
+        print(instruction)
     return current_loc, cfi_line
 
 

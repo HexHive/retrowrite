@@ -215,7 +215,7 @@ class Function():
         results.append("\t.cfi_startproc")
         # Add GCC except table, lsda information
         if self.except_table:
-            results.append("\t.cfi_personality 0x9b,DW.ref.__gxx_personality_v0")
+            results.append("\t.cfi_personality 155, DW.ref.__gxx_personality_v0")
             results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.start))
 
         current_offset = 0x0
