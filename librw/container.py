@@ -219,6 +219,9 @@ class Function():
             results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.start))
 
         current_offset = 0x0
+
+        ret_prepend = ""
+
         for instruction in self.cache:
             if isinstance(instruction, InstrumentedInstruction):
                 if not self.instrumented:
@@ -235,6 +238,8 @@ class Function():
             for iinstr in instruction.before:
                 results.append("{}".format(iinstr))
 
+            if instruction.mnemonic.startswith("ret"):
+                results.append(ret_prepend)
             results.append(
                 "\t%s %s" % (instruction.mnemonic, instruction.op_str))
 
@@ -242,7 +247,10 @@ class Function():
 
             if self.cfi_map:
                 for cfi in self.cfi_map[current_offset]:
-                    results.append(cfi)
+                    if ".cfi_def_cfa " in cfi:
+                        ret_prepend = cfi
+                    else:
+                        results.append(cfi)
 
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))

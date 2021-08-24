@@ -246,6 +246,10 @@ class Loader():
                 # XXX: HACK
                 if "@@GLIBC" in symbol.name:
                     continue
+
+                if "@GLIBCXX" in symbol.name:
+                    continue
+
                 if symbol['st_other']['visibility'] == "STV_HIDDEN":
                     continue
                 if symbol['st_size'] == 0:

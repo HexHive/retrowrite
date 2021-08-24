@@ -48,6 +48,10 @@ class Rewriter():
         "__stack_chk_fail",
         "__cxa_atexit",
         "__cxa_finalize",
+        "__cxa_begin_catch",
+        "__cxa_end_catch",
+        "__cxa_allocate_exception",
+        "__gxx_personality_v0",
     ]
 
     DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
@@ -460,24 +464,28 @@ class LSDATable():
 .LFE%x:
     .section	.gcc_except_table,"a",@progbits
     .align 4
+GCC_except_table%x:
 .LLSDA%x:
     .byte 0x%x   # @LPStart encoding
     .byte 0x%x   # @TType Encoding
     %s
+.LLSDATTD%x:
     .byte 0x1
+
         """ % (
+            self.fstart,
             self.fstart,
             self.fstart,
             self.header["lpstart"],
             self.header["typetable_encoding"],
             ttoffset,
+            self.fstart,
         )
         return table_header
     
     def generate_table(self):
         print("generate table", self.fstart)
         table = """
-.LLSDATTD%x:
     .uleb128 %s-%s
 .LLSDACSB%x:
 %s
@@ -488,7 +496,6 @@ class LSDATable():
 .LLSDATT%x:
     .p2align 2
         """ % (
-            self.fstart,
             self.action_label,
             self.callsite_label,
             self.fstart,
@@ -581,6 +588,7 @@ class LSDATable():
             target_label = ""
             if tp["address"] != 0:
                 target_label = ".LC%x-." % (tp["address"])
+                #target_label = ".LC%x" % (tp["address"])
             else:
                 target_label = "0"
             
@@ -588,6 +596,7 @@ class LSDATable():
 %s:
      .quad %s
             """ % (label, target_label)
+
 
         return ttable
     
@@ -1048,6 +1057,7 @@ class Symbolizer():
                     args = instruction.args
 
                     #print([opcode] + args)
+                    original_location = location
                     location, cfi_line = interpret_dwarf_instruction(location, [opcode] + args)
                     #print("Were're at", location, "and CFI line is", cfi_line)
                     if cfi_line:
@@ -1131,9 +1141,10 @@ def interpret_dwarf_instruction(current_loc, instruction):
     dwarf_x86_64_regmap = {0: 'rax', 1: 'rdx', 2: 'rcx', 3: 'rbi', 4: 'rsi', 5: 'rdi', 6: 'rbp', 7: 'rsp'}
 
     for i in range(8, 16):
-        dwarf_x86_64_regmap[i] = 'r%d' % i
+        dwarf_x86_64_regmap[i] = "r%d" % i
 
 
+    print("+++++ Instruction being handled! ++++++", instruction)
     if instruction[0] == DW_CFA_advance_loc + DW_CFA_advance_loc1:
         current_loc += instruction[1]
     elif instruction[0] == DW_CFA_advance_loc + DW_CFA_advance_loc2:
@@ -1144,7 +1155,7 @@ def interpret_dwarf_instruction(current_loc, instruction):
         current_loc = instruction[1]
 
     elif instruction[0] == DW_CFA_def_cfa_offset:
-        cfi_line = ".cfi_def_cfa_offset %s" % (instruction[1])
+        cfi_line = ".cfi_def_cfa_offset %s\n\t.cfi_offset rbp, -%d" % (instruction[1], instruction[1])
     elif instruction[0] == DW_CFA_offset:
         cfi_line = ".cfi_offset %s, -%d" % (dwarf_x86_64_regmap.get(instruction[1], instruction[1]),
                                             instruction[2] * DATA_ALIGN)
