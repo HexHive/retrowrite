@@ -5,7 +5,6 @@
 
 #include <iostream>
 #include <exception>
-#include <numbers> // C++20
 #include <stdexcept>
 
 class ExceptionCode {
@@ -168,10 +167,10 @@ public:
     virtual ~Circle() {
     }
     virtual double area() {
-        return (0.5)*(std::numbers::pi)*std::pow(r,2);
+        return (0.5)*3.14*std::pow(r,2);
     }
     virtual double circumference() {
-        return 2*r*(std::numbers::pi);
+        return 2*r*3.14;
     }
     
 };
