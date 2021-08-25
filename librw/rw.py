@@ -100,145 +100,6 @@ class Rewriter():
             outfd.write("\n".join(results + ['']))
 
 
-class Templates:
-    @staticmethod
-    def gcc_except_table(cie, lsda, container):
-        gcc_table = list()
-        fstart = cie["initial_location"]
-
-        print("Processing", cie["function_guess"])
-
-        gcc_table.append(".globl\t__gxx_personality_v0")
-
-        gcc_table.append(
-            ".section\t.gcc_except_table,\"a\",@progbits"
-        )
-
-        gcc_table.extend([
-            ".align 4",
-            ".LLSDA%x:" % (fstart)
-        ])
-
-        tysl = ".LLSDATT%x" % (fstart)
-        cshsl = ".LLSDATTD%x" % (fstart)
-
-        gcc_table.append(Templates._LSDA_header(tysl, cshsl))
-        gcc_table.append(cshsl + ":")
-
-        cssl = ".LLSDACSB%x" % (fstart)
-        csel = ".LLSDACSE%x" % (fstart)
-
-        gcc_table.append(Templates._LSDA_CS_header(cssl, csel))
-        gcc_table.append(cssl + ":")
-
-        function = container.functions[fstart]
-
-        gcc_table.append(Templates._LSDA_CS_table(fstart, lsda["callsites"],
-                                                  function))
-        gcc_table.append(csel + ":")
-
-        gcc_table.append(Templates._LSDA_action_table(lsda["actions"]))
-
-        gcc_table.append(".align 4")
-        gcc_table.append(Templates._LSDA_types_table(lsda["types"], container))
-        gcc_table.append(tysl + ":")
-
-        return "\n".join(gcc_table)
-
-    @staticmethod
-    def _LSDA_header(tysl, cssl):
-        #.LLSDA2:
-	#   .byte	0xff              ; uint8_t start_encoding
-	#   .byte	0x9b              ; uint8_t type_encoding
-	#   .uleb128 .LLSDATT2-.LLSDATTD2 ; uint8_t ttype
-        return "\t.byte\t0xff\n\t.byte\t0x9b\n\t.uleb128 %s-%s" % (tysl,
-                                                                   cssl)
-
-    @staticmethod
-    def _LSDA_CS_header(cstart_lbl, cend_lbl):
-        #.LLSDATTD2:
-	#   .byte	0x1                 ; uint8_t encoding
-	#   .uleb128 .LLSDACSE2-.LLSDACSB2  ; uint8_t length
-        return "\t.byte\t0x1\n\t.uleb128 %s-%s" % (cend_lbl, cstart_lbl)
-
-    @staticmethod
-    def _LSDA_CS_table(fstart, css, function):
-        # Wrapper around individual lsda_cs_records to generate the full table
-        cs_entries = list()
-        for cs in css:
-            cs_entries.append(Templates._LSDA_CS_record(fstart, cs, function))
-        return "\n".join(cs_entries)
-
-    @staticmethod
-    def _LSDA_CS_record(fstart, csinfo, function):
-        #.LLSDACSB2:
-	#   .uleb128 .LEHB4-.LFB2    ; uint8_t start
-	#   .uleb128 .LEHE4-.LEHB4   ; uint8_t len
-	#   .uleb128 .L19-.LFB2      ; uint8_t lp
-	#   .uleb128 0x3             ; uint8_t action
-        cs_start = fstart + csinfo["position"]
-        cs_end = cs_start + csinfo["length"]
-        cs_lp =  "\t.uleb128 0x0"
-        action = 0x0
-
-        function_end = function.start + function.sz
-
-        if csinfo["has_action"]:
-            action = csinfo["first_action"] + 1
-        if csinfo["landing_pad"]:
-            cs_lp = fstart + csinfo["landing_pad"]
-            if cs_lp >= function_end:
-                cs_lp = "\t.uleb128 .LCE%x-.L%x" % (cs_lp, fstart)
-            else:
-                cs_lp = "\t.uleb128 .LC%x-.L%x" % (cs_lp, fstart)
-
-        # TODO: This will fail on case where there is no action
-        return "\n".join([
-            "\t.uleb128 .LC%x-.L%x" % (cs_start, fstart),
-            "\t.uleb128 .LC%x-.LC%x" % (cs_end, cs_start) if cs_end <
-            function_end else "\t.byte .LCE%x-.LC%x" % (cs_end, cs_start),
-            cs_lp,
-            "\t.uleb128 0x%x" % (action)])
-
-    @staticmethod
-    def _LSDA_action_table(actions):
-        # Wrapper around individual lsda_action_table_records to
-        # generate the full action table.
-        actions_entries = []
-        for action in sorted(actions, key=lambda x: x["idx"]):
-            actions_entries.append(Templates._LSDA_action_table_record(action))
-        return "\n".join(actions_entries)
-
-    @staticmethod
-    def _LSDA_action_table_record(action):
-        #.LLSDACSE2:
-	#   .byte	0x2    ; index in the types table
-	#   .byte	0      ; uint8_t dist_to_next_action
-        if isinstance(action["type_idx"], str):
-            action["type_idx"] = -1
-
-        return "\t.byte\t0x%x\n\t.byte\t0x%x" % (action["type_idx"] + 1,
-                                                 action["next_action"] or 0)
-
-    @staticmethod
-    def _LSDA_types_table(types, container):
-        # Wrapper around individual lsda_types_table_records to
-        # generate the full types table.
-        types_entries = []
-        for ty in sorted(types, key=lambda x: x["idx"]):
-            types_entries.append(Templates._LSDA_types_table_record(ty, container))
-        return "\n".join(types_entries)
-
-    @staticmethod
-    def _LSDA_types_table_record(ty, container):
-	# .long	 DW.ref._ZTI13FakeException-.  ; ptr to type information
-        # NOTE: The above pointer should already be defined and symbolized in
-        # the .rodata section, so no more pointer chasing here.
-        if container.section_of_address(ty["typeinfo"]):
-            return "\t.long\t.LC%x-." % (ty["typeinfo"])
-        return "\t.long\t0"
-
-
 # This code borrows from Angr's CLE loader. We basically ask pyelftools to 
 # parse dwarf structs based on the lsda_pointers we find in the _eh_frame 
 # FDEs. This isn't done yet, but that is a next step, and this info should 
@@ -514,32 +375,6 @@ GCC_except_table%x:
         #   .uleb128 .L19-.LFB2      ; uint8_t lp
         #   .uleb128 0x3             ; uint8_t action
 
-        # SUSHANT'S
-        """
-        cs_start = fstart + csinfo["position"]
-        cs_end = cs_start + csinfo["length"]
-        cs_lp =  "\t.uleb128 0x0"
-        action = 0x0
-
-        function_end = function.start + function.sz
-
-        if csinfo["has_action"]:
-            action = csinfo["first_action"] + 1
-        if csinfo["landing_pad"]:
-            cs_lp = fstart + csinfo["landing_pad"]
-            if cs_lp >= function_end:
-                cs_lp = "\t.uleb128 .LCE%x-.L%x" % (cs_lp, fstart)
-            else:
-                cs_lp = "\t.uleb128 .LC%x-.L%x" % (cs_lp, fstart)
-
-        # TODO: This will fail on case where there is no action
-        return "\n".join([
-            "\t.uleb128 .LC%x-.L%x" % (cs_start, fstart),
-            "\t.uleb128 .LC%x-.LC%x" % (cs_end, cs_start) if cs_end <
-            function_end else "\t.uleb128 .LCE%x-.LC%x" % (cs_end, cs_start),
-            cs_lp,
-            "\t.uleb128 0x%x" % (action)])
-        """
         function_end = self.sz + self.fstart
 
         def callsite_ftr(entry):
@@ -601,15 +436,6 @@ GCC_except_table%x:
         return ttable
     
     def generate_actions(self):
-        # Generate the assembly using the TODO 1 results
-        
-        # SUSHANT'S
-
-        # if isinstance(action["type_idx"], str):
-        #     action["type_idx"] = -1
-
-        # return "\t.byte\t0x%x\n\t.byte\t0x%x" % (action["type_idx"] + 1,
-        #       
         action_table = "\n"
         
         for action in self.actions:
@@ -1002,18 +828,6 @@ class Symbolizer():
                 # This is called every time we deal with a function descriptor
                 if type(entry) != FDE:
                     raise Exception("This function requires an elftools.dwarf.callframe.FDE")
-
-                # WE SHOULD TO THIS NEXT, BUT WITH OUR OWN LSDA IMPLEMENTATION
-                # First we populate dwarf_map
-                """
-                lsda = lsdas[fde["lsda_idx"]]
-                gcc_table = Templates.gcc_except_table(fde, lsda, container)
-                function = container.functions[fde["initial_location"]].start
-                dwarf_map[function] = gcc_table
-                print("Adding", function)
-                """
-
-                # Now we populate cfi_map
 
                 initial_location = entry.header.initial_location
             
