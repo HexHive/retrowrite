@@ -85,6 +85,9 @@ if __name__ == "__main__":
     argp.add_argument("-a", "--asan", action='store_true',
                       help="Add binary address sanitizer instrumentation")
 
+    argp.add_argument("-x", "--cpp", action="store_true",
+                      help="Enable C++ Support")
+ 
     argp.add_argument("-s", "--assembly", action="store_true",
                       help="Generate Symbolized Assembly")
     # python3 -m librw.rw </path/to/binary> <path/to/output/asm/files>
@@ -98,6 +101,7 @@ if __name__ == "__main__":
     argp.add_argument("--ignore-stripped", dest="ignore_stripped", action='store_true',
                       help="Ignore stripped executable check (use with caution)")
 
+    argp.set_defaults(cpp=False)
     argp.set_defaults(ignore_no_pie=False)
     argp.set_defaults(ignore_stripped=False)
 
@@ -119,8 +123,6 @@ if __name__ == "__main__":
         from rwtools.asan.instrument import Instrument
         from librw.loader import Loader
         from librw.analysis import register
-
-
 
 
     loader = Loader(args.bin)
@@ -150,9 +152,19 @@ if __name__ == "__main__":
     global_list = loader.global_data_list_from_symtab()
     loader.load_globals_from_glist(global_list)
 
+    loader.identify_imports()
+
     loader.container.attach_loader(loader)
 
-    rw = Rewriter(loader.container, args.outfile)
+    kwarg = {}
+    if args.cpp == True:
+        kwarg["eh_frame"] = True
+        kwarg["lang_cpp"] = True
+    else:
+        kwarg["eh_frame"] = False
+        kwarg["lang_cpp"] = False
+
+    rw = Rewriter(loader.container, args.outfile, **kwarg)
     rw.symbolize()
 
 

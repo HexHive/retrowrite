@@ -4,6 +4,8 @@ import argparse
 import struct
 from collections import defaultdict
 
+from intervaltree import IntervalTree
+
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
@@ -52,6 +54,21 @@ class Loader():
             function = Function(fvalue["name"], faddr, fvalue["sz"], bytes,
                                 fvalue["bind"])
             self.container.add_function(function)
+
+        section = self.elffile.get_section_by_name(".init_array")
+        data = section.data()
+        base = section['sh_addr']
+        for i in range(0, len(data), 8):
+            address = data[i:i+8]
+            addr_int = struct.unpack("<Q", address)[0]
+            func = self.container.functions.get(addr_int, None)
+            if func == None:
+                print("I NEED SOMEBODY HELP")
+            print(func.__dict__)
+            # We need to add them to the function list
+            # we need to "add_function" like right above
+            # self.container.add_function(func)
+
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
         for sec in [sec for sec in seclist if section_filter(sec)]:
@@ -108,6 +125,11 @@ class Loader():
                 self.container.gotplt_base = seclist[sec]['base']
                 self.container.gotplt_sz = seclist[sec]['sz']
                 self.container.gotplt_entries = entries
+            if sec == ".got":
+                self.container.got = IntervalTree()
+                base = seclist[sec]['base']
+                end = base + seclist[sec]['sz']
+                self.container.got[base:end] = "GOT"
 
     def load_relocations(self, relocs):
         for reloc_section, relocations in relocs.items():
@@ -223,6 +245,10 @@ class Loader():
                 # XXX: HACK
                 if "@@GLIBC" in symbol.name:
                     continue
+
+                if "@GLIBCXX" in symbol.name:
+                    continue
+
                 if symbol['st_other']['visibility'] == "STV_HIDDEN":
                     continue
                 if symbol['st_size'] == 0:
@@ -239,6 +265,32 @@ class Loader():
 
         return global_list
 
+    def identify_imports(self):
+        symbol_tables = [
+            sec for sec in self.elffile.iter_sections()
+            if isinstance(sec, SymbolTableSection)
+        ]
+
+        symmap = IntervalTree()
+
+        for section in symbol_tables:
+            if not isinstance(section, SymbolTableSection):
+                continue
+
+            if section.name != ".dynsym":
+                continue
+
+            for symbol in section.iter_symbols():
+                if (symbol['st_info']['type'] == 'STT_OBJECT'
+                    and symbol['st_shndx'] != 'SHN_UNDEF'):
+
+                    start = symbol['st_value']
+                    end = symbol['st_value'] + symbol['st_size']
+
+                    symmap[start:end] = symbol.name
+
+        self.container.imports = symmap
+        print("IDENTIFIED IMPORTS")
 
 if __name__ == "__main__":
     from .rw import Rewriter
@@ -264,3 +316,5 @@ if __name__ == "__main__":
 
     global_list = loader.global_data_list_from_symtab()
     loader.load_globals_from_glist(global_list)
+
+    loader.identify_imports()
