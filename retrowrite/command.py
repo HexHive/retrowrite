@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#/usr/bin/env python3
 
 import argparse
 import json
@@ -7,75 +7,6 @@ import subprocess
 import os
 import sys
 
-def load_analysis_cache(loader, outfile):
-    with open(outfile + ".analysis_cache") as fd:
-        analysis = json.load(fd)
-    print("[*] Loading analysis cache")
-    for func, info in analysis.items():
-        for key, finfo in info.items():
-            loader.container.functions[int(func)].analysis[key] = dict()
-            for k, v in finfo.items():
-                try:
-                    addr = int(k)
-                except ValueError:
-                    addr = k
-                loader.container.functions[int(func)].analysis[key][addr] = v
-
-def save_analysis_cache(loader, outfile):
-    analysis = dict()
-
-    for addr, func in loader.container.functions.items():
-        analysis[addr] = dict()
-        analysis[addr]["free_registers"] = dict()
-        for k, info in func.analysis["free_registers"].items():
-            analysis[addr]["free_registers"][k] = list(info)
-
-    with open(outfile + ".analysis_cache", "w") as fd:
-        json.dump(analysis, fd)
-
-
-def asan(rw, loader, args):
-    StackFrameAnalysis.analyze(loader.container)
-    if args.cache:
-        try:
-            load_analysis_cache(loader, args.outfile)
-        except IOError:
-            print("[*] Analyzing free registers")
-            RegisterAnalysis.analyze(loader.container)
-            save_analysis_cache(loader, args.outfile)
-    else:
-        print("[*] Analyzing free registers")
-        RegisterAnalysis.analyze(loader.container)
-
-
-    instrumenter = Instrument(rw)
-    instrumenter.do_instrument()
-    instrumenter.dump_stats()
-
-def asank(rw, loader, args):
-    StackFrameAnalysis.analyze(loader.container)
-
-    with tempfile.NamedTemporaryFile(mode='w') as cf_file:
-        with tempfile.NamedTemporaryFile(mode='r') as regs_file:
-            rw.dump_cf_info(cf_file)
-            cf_file.flush()
-
-            subprocess.check_call(['cftool', cf_file.name, regs_file.name])
-
-            analysis = json.load(regs_file)
-
-            for func, info in analysis.items():
-                for key, finfo in info.items():
-                    fn = loader.container.get_function_by_name(func)
-                    fn.analysis[key] = dict()
-                    for k, v in finfo.items():
-                        try:
-                            addr = int(k)
-                        except ValueError:
-                            addr = k
-                        fn.analysis[key][addr] = v
-
-    return rw
 if __name__ == "__main__":
     argp = argparse.ArgumentParser(description='Retrofitting compiler passes though binary rewriting.')
 
@@ -107,6 +38,7 @@ if __name__ == "__main__":
 
     args = argp.parse_args()
 
+    # TODO: sort this out:
     if args.kernel:
         from librw_x64.krw import Rewriter
         from librw_x64 import krw
