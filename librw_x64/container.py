@@ -73,7 +73,8 @@ class Container():
             for gobj in gobjs:
                 if gobj['name'] in done:
                     continue
-                self.sections[found].add_global(location, gobj['name'],
+                fixed_name = gobj["name"].replace("@", "_")
+                self.sections[found].add_global(location, fixed_name,
                                                 gobj['sz'])
                 done.add(gobj['name'])
 

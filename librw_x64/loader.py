@@ -50,8 +50,9 @@ class Loader():
         for faddr, fvalue in fnlist.items():
             section_offset = faddr - base
             bytes = data[section_offset:section_offset + fvalue["sz"]]
+            fixed_name = fvalue["name"].replace("@", "_")
 
-            function = Function(fvalue["name"], faddr, fvalue["sz"], bytes,
+            function = Function(fixed_name, faddr, fvalue["sz"], bytes,
                                 fvalue["bind"])
             self.container.add_function(function)
 

@@ -642,7 +642,13 @@ class Symbolizer():
                 break
             sec = sval
 
-        assert sec is not None
+        if sec is None: # check if it is in text
+            if not container.is_in_section(".text", target):
+                assert False
+            else:
+                section = container.loader.elffile.get_section_by_name(".text")
+                base = section['sh_addr']
+                return base, target - base
 
         end = sec.base  # + sec.sz - 1
         adjust = target - end
