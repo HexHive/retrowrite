@@ -1,11 +1,10 @@
 from capstone import *
-from keystone import *
-from arm.librw.util.logging import *
+from librw_arm64.util.logging import *
 import subprocess
 import sys
 import os
 
-coreutils_path = os.path.expanduser("~/coreutils/src/")
+coreutils_path = os.path.expanduser("~/wares/coreutils/src/")
 test_bins = [
         ("ls",        [ "/etc", "/etc -la", "/home"]),
         ("od",        [ "/etc/passwd"]),
@@ -51,6 +50,7 @@ def check_files():
 
 
 def run_test():
+    cmd("mkdir -p /tmp/retrowrite")
     for test in test_bins:
         binary = test[0]
         binary_path = coreutils_path + binary
@@ -58,14 +58,15 @@ def run_test():
         print(f"[{BLUE}TEST{CLEAR}] Testing {binary} ... ", end="")
         sys.stdout.flush()
 
+
         #retrowriting
-        cmd(f"python3 -m arm.librw.rw {binary_path} /tmp/{binary}_rw.s")
-        cmd(f"gcc -g /tmp/{binary}_rw.s -o /tmp/{binary}_rw.out")
+        output_1 = cmd(f"./retrowrite --asan {binary_path} /tmp/retrowrite/{binary}_rw.s")
+        output_2 = cmd(f"./retrowrite -a  /tmp/retrowrite/{binary}_rw.s /tmp/retrowrite/{binary}_rw.out")
 
         #exec with each possible arg
         for args in test[1]:
-            output_rw = cmd(f"/tmp/{binary}_rw.out {args}")
-            output    = cmd(f"{binary_path} {args}")
+            output_rw = cmd(f"ASAN_OPTIONS=detect_leaks=0 /tmp/retrowrite/{binary}_rw.out {args}")
+            output    = cmd(f"ASAN_OPTIONS=detect_leaks=0 {binary_path} {args}")
             if output != output_rw:
                 critical(f"Output of {binary}_rw: {output_rw}")
                 critical(f"Output of {binary}: {output}")
@@ -73,6 +74,8 @@ def run_test():
 
         print(f"{GREEN}PASSED{CLEAR}")
 
+        # cleanup
+        cmd(f"rm /tmp/retrowrite/{binary}_rw.out /tmp/retrowrite/{binary}_rw.s")
 
 
 if __name__ == "__main__":

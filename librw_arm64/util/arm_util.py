@@ -6,8 +6,10 @@ cs.detail = True
 
 # Clobbered registers (reserved by caller, cannot overwrite)
 clobbered_registers = ["x" + str(i) for i in range(19, 29)] + ["w" + str(i) for i in range(19, 29)]
-# Non-clobbered registers (can be overwrited by a function)
+# Non-clobbered registers (can be overwritten by a function)
 non_clobbered_registers = ["x" + str(i) for i in range(0, 19)] + ["w" + str(i) for i in range(0, 19)]
+# Argument registers (used to pass function arguments)
+argument_registers = ["x" + str(i) for i in range(0, 8)] + ["w" + str(i) for i in range(0, 8)]
 
 
 def get_reg_size_arm(regname):
@@ -23,7 +25,6 @@ def get_reg_size_arm(regname):
     return sizes[regname.upper()[0]]
 
 def get_access_size_arm(instruction):
-    print(instruction)
     bool_load = True if instruction.mnemonic.upper().startswith("L") else False
     # here we get the size from the last letter of the instruction
     # horrible hack I know, but capstone is a bad boy and is not reliable

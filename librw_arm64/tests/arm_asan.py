@@ -1,6 +1,6 @@
 from capstone import *
 from keystone import *
-from arm.librw.util.logging import *
+from librw_arm64.util.logging import *
 import subprocess
 import sys
 
@@ -16,22 +16,28 @@ def instr(assembly):
 
 def cmd(text):
     try:
-        return subprocess.check_output(text, shell=True, stderr=subprocess.STDOUT)
+        return (False, subprocess.check_output(text, shell=True, stderr=subprocess.STDOUT))
     except subprocess.CalledProcessError as e:
-        return e.output
+        return (True, e.output)
 
 def gcc(code):
     with open("test.s", "w") as f:
         f.write(code)
-    cmd("gcc -g -fsanitize=address test.s -o test.out")
-    # cmd("rm test.s")
+    return cmd("gcc -g -fsanitize=address test.s -o test.out")
 
 def retrowrite_and_exec(code):
-    gcc(code)
-    cmd("python3 -m arm.rwtools.asan.asantool ./test.out ./test_rw.s")
-    cmd("gcc -g -fsanitize=address test_rw.s -o test_rw.out")
-    return cmd("./test_rw.out")
-    
+    err, out = gcc(code)
+    if err: print(out); exit(1)
+    print(".", end=""); sys.stdout.flush()
+
+    err, out = cmd("python3 -m arm.rwtools.asan.asantool ./test.out ./test_rw.s")
+    if err: print(out); exit(1)
+    print(".", end=""); sys.stdout.flush()
+
+    err, out = cmd("gcc -g -fsanitize=address test_rw.s -o test_rw.out")
+    if err: print(out); exit(1)
+    print(".", end=""); sys.stdout.flush()
+    return cmd("./test_rw.out")[1]
 
 
 def run_test(test_func):
@@ -152,7 +158,37 @@ def asan_store_1_2_4_8_16():
     output = retrowrite_and_exec(code)
     assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
 
+    code = start_main + """
+           mov x0, 0x101
+           bl malloc
+           strb w1, [x0, 0x101]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
 
+    code = start_main + """
+           mov x0, 0x104
+           bl malloc
+           str w1, [x0, 0x104]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 4"]])
+
+    code = start_main + """
+           mov x0, 0x102
+           bl malloc
+           strb w1, [x0, 0x105]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
+
+    code = start_main + """
+           mov x0, 0x200
+           bl malloc
+           strb w1, [x0, 0x105]
+    """ + end_main
+    output = retrowrite_and_exec(code)
+    assert all([x not in output for x in [b"heap-buffer-overflow", b"WRITE of size 1"]])
 
 
 

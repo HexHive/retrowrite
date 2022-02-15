@@ -30,17 +30,11 @@ class StackFrameAnalysis(object):
     def analyze_is_fn_leaf(self, function, container):
         is_leaf = True
         for instruction in function.cache:
-            if instruction.mnemonic == "bl":
-                is_leaf = False
-                break
-            # mem, midx = instruction.get_mem_access_op()
-            # if not mem:
-                # continue
-            # # XXX: ARM
-            # if mem.base != X86_REG_RSP:
-                # continue
-            # if mem.disp >= 0:
-                # continue
+            if "bl" in instruction.mnemonic: #bl or blr
+                target = instruction.cs.operands[-1].imm
+                if target != function.start:  # not a recursive call
+                    is_leaf = False
+                    break
 
         self.analysis[function.start][
             StackFrameAnalysis.KEY_IS_LEAF] = is_leaf

@@ -2,12 +2,46 @@ from collections import defaultdict
 import struct
 
 from capstone import CS_OP_IMM, CS_OP_MEM, CS_GRP_JUMP, CS_OP_REG
+from capstone import CS_ARCH_ARM64, CS_MODE_ARM, CS_OPT_SYNTAX_ATT, Cs
 
-from . import disasm
-from arm.librw.util.logging import *
-from arm.librw.util.arm_util import non_clobbered_registers, memory_replace
+from librw_arm64.util.logging import *
+import librw_arm64.rw
+from librw_arm64.util.arm_util import non_clobbered_registers, memory_replace, argument_registers
 
 INSTR_SIZE = 4
+
+# this sections can (and will) be modified by the linker.
+# they will destroy our very carefully built exact copy of
+# the virtual space of the original binary
+# for this reason, we just use a renamed version of them (.fake.got etc)
+TRAITOR_SECS = {
+    ".got",
+    ".bss",
+    ".data",
+    ".rodata",
+    ".init_array",
+    ".fini_array",
+    ".interp",
+    ".data.rel.ro",
+}
+
+def disasm_bytes(bytes, addr):
+    md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+    md.syntax = CS_OPT_SYNTAX_ATT
+    md.detail = True
+    result = []
+    for ins in range(0, len(bytes), 4):
+        disasm = list(md.disasm(bytes[ins:ins+4], addr+ins))
+        if len(disasm):
+            result += disasm
+        else:
+            # the instruction is invalid, so we craft a fake "nop" (to make the rest of the code work)
+            # and we just overwrite it as data with a comment
+            fake_ins = InstructionWrapper(list(md.disasm(b"\x1f\x20\x03\xd5", addr+ins))[0]) # bytes for nop
+            fake_ins.mnemonic = ".quad 0x%x // invalid instruction" % int.from_bytes(bytes[ins:ins+4], byteorder="little") # are we sure about 'little'? 
+            result += [fake_ins]
+    return result
+
 
 class SzPfx():
     PREFIXES = {
@@ -27,7 +61,8 @@ class Container():
     def __init__(self):
         self.functions = dict()
         self.function_names = set()
-        self.sections = dict()
+        self.datasections = dict()
+        self.codesections = dict()
         self.globals = None
         self.relocations = defaultdict(list)
         self.loader = None
@@ -47,9 +82,13 @@ class Container():
         self.functions[function.start] = function
         self.function_names.add(function.name)
 
-    def add_section(self, section):
-        print(f"Added {section.name}")
-        self.sections[section.name] = section
+    def add_data_section(self, section):
+        debug(f"Added data section {section.name}")
+        self.datasections[section.name] = section
+
+    def add_code_section(self, section):
+        debug(f"Added code section {section.name}")
+        self.codesections[section.name] = section
 
     def add_globals(self, globals):
         self.globals = globals
@@ -57,7 +96,7 @@ class Container():
 
         for location, gobjs in globals.items():
             found = None
-            for sec, section in self.sections.items():
+            for sec, section in self.datasections.items():
                 if section.base <= location < section.base + section.sz:
                     found = sec
                     break
@@ -68,7 +107,7 @@ class Container():
             for gobj in gobjs:
                 if gobj['name'] in done:
                     continue
-                self.sections[found].add_global(location, gobj['name'],
+                self.datasections[found].add_global(location, gobj['name'],
                                                 gobj['sz'])
                 done.add(gobj['name'])
 
@@ -87,23 +126,62 @@ class Container():
 
         return False
 
+
+    def _fix_broken_functions(self):
+        # some functions (like register_tm_clones) report a size of 0
+        # here we try to work around that
+        # XXX: ideally all this code should be in loader.load_functions()
+        fnlist = sorted(list(self.functions.items()))
+        for e, (faddr, function) in enumerate(fnlist):
+            if function.sz > 0:  # this is not broken
+                continue
+
+
+            newsec = self.section_of_address(function.start)
+            # newsec.functions += [function.start]
+            base = newsec.base
+            data = newsec.bytes
+
+            section_offset = function.start - base
+            next_addr = fnlist[e+1][0] if e < len(fnlist)-1 else faddr + 0x100
+            max_len = next_addr - faddr # this function can't go over the start of the next
+
+            bytes = b""
+            for c in range(0, max_len, 4):
+                bytes += data[section_offset + c:section_offset + c + 4]
+                # we declare the function to be big until the first ret
+                if bytes[-4:] == b"\xc0\x03\x5f\xd6": break
+                # special case for _start, there is no ret, as it ends on the call to abort
+                if function.name == "_start":
+                    decoded = disasm_bytes(bytes[-4:], function.start + c)[0]
+                    target = decoded.operands[-1].imm
+                    if decoded.mnemonic == "bl":
+                        if target in self.plt  and self.plt[target] == "abort":
+                            break
+                # special case, only 2 instructions for those functions
+                if function.name in ["frame_dummy", "format_address_none"]:
+                    if c == 4: break
+
+            function.bytes = bytes
+            function.sz = len(bytes)
+
+
     def attach_loader(self, loader):
         self.loader = loader
         self.text_section = self.loader.elffile.get_section_by_name(".text")
 
+        self._fix_broken_functions()
+
 
     def is_in_section(self, secname, value):
-        assert self.loader, "No loader found!"
+        if secname in self.codesections:
+            section = self.codesections[secname]
+        elif secname in self.datasections:
+            section = self.datasections[secname]
+        else:
+            return False
 
-        if secname in self.sections:
-            section = self.sections[secname]
-        if secname == ".text":
-            if self.text_section == None: return True
-            section = self.text_section
-
-        base = section['sh_addr']
-        sz = section['sh_size']
-        if base <= value < base + sz:
+        if section.base <= value < section.base + section.sz:
             return True
         return False
 
@@ -111,12 +189,12 @@ class Container():
         self.relocations[section_name].extend(relocations)
 
     def section_of_address(self, addr):
-        for _, section in self.sections.items():
+        for section in list(self.datasections.values()) + list(self.codesections.values()):
+            if section.name in librw_arm64.rw.Rewriter.IGNORE_SECTIONS: continue
+            if section.name in librw_arm64.rw.Rewriter.TLS_SECTIONS: continue
+            if section.base == 0: continue # ignore stuff such as .debug_info
             if section.base <= addr < section.base + section.sz:
                 return section
-        # check for .text, as container.sections has only datasections
-        if self.is_in_section(".text", addr):
-            return self.text_section
         return None
 
     def function_of_address(self, addr):
@@ -180,11 +258,15 @@ class Function():
     def set_instrumented(self):
         self.instrumented = True
 
+
     def disasm(self):
         assert not self.cache
-        for decoded in disasm.disasm_bytes(self.bytes, self.start):
-            ins = InstructionWrapper(decoded)
-            self.cache.append(ins)
+        for decoded in disasm_bytes(self.bytes, self.start):
+            if type(decoded) == InstructionWrapper:
+                # means the instruction is invalid and we fake crafted a nop
+                self.cache.append(decoded)
+            else:
+                self.cache.append(InstructionWrapper(decoded))
 
 
     def is_valid_instruction(self, address):
@@ -208,7 +290,9 @@ class Function():
     def add_switch(self, jump_table):
         self.switches += [jump_table]
         for case in set(jump_table.cases):
-            instr = self.cache[self.addr_to_idx[case]]
+            addr = self.addr_to_idx[case]
+            self.bbstarts.add(addr)
+            instr = self.cache[addr]
             same_cases = [e for e,x in enumerate(jump_table.cases) if x == instr.address]
             instr.op_str += f" // Case {same_cases} of switch at {hex(jump_table.br_address)}"
 
@@ -219,7 +303,7 @@ class Function():
         for iinstr in instr_list:
             for line in iinstr.code.split('\n'):
                 subinstr = line.strip()
-                if len(subinstr) and subinstr[0] != '.' and subinstr[0] != '#':
+                if len(subinstr) and subinstr[0] not in ".#/":
                     instr_count += 1
         return instr_count
 
@@ -303,6 +387,58 @@ class Function():
                 instr_no /= 2
                 shift += 1
 
+
+            for case in set(jmptbl.cases).union(set([jmptbl.base_case])):
+                instr_case = self.cache[self.addr_to_idx[case]]
+                instr_case.align = shift  # mark this instruction to be aligned with .align
+
+            size = jmptbl.case_size
+
+            extend_width = "b" if size == 1 else "h"
+            reg = add_instr.cs.reg_name(add_instr.cs.operands[-1].reg)
+            add_instr.instrument_before(
+                    InstrumentedInstruction(f"\tsxt{extend_width} {reg}, {reg}"))
+
+            if shift <= 4: # aarch64 limitation of the add instruction
+                add_instr.op_str = add_instr.op_str[:-1] + str(shift)
+            else:
+                add_instr.instrument_before(
+                        InstrumentedInstruction(f"\tlsl {reg}, {reg}, {shift-2}"))
+            add_instr.op_str = add_instr.op_str.replace("sxtb", "sxtw") # correct cast if wrong
+            add_instr.op_str = add_instr.op_str.replace("sxth", "sxtw") # correct cast if wrong
+
+            debug(f"Fixing up jump table at {hex(jmptbl.br_address)} with new shift {shift}")
+            # change the actual jump table in memory 
+            for i in range(len(jmptbl.cases)):
+                swlbl = "(.LC%x-.LC%x)/%d" % (jmptbl.cases[i], jmptbl.base_case, 2**shift)
+                memory_replace(container, jmptbl.jump_table_address + i*size, size, swlbl)
+
+    def fix_jmptbl_size_old(self, container):
+        # this old method relied on manually inserting nops instead
+        # of using the assembler .align directive. It sucked.
+
+        # jump tables may not fit if there is too much instrumentation. 
+        for jmptbl in self.switches:
+            # jump tables can have negative values
+            # so we start from the first possible landing point
+            # and we get what is the number of instructions between that
+            # and the base case. We do the same, backwards, from the 
+            # latest possible landing point
+
+            max_instrs = max(self.count_instructions(jmptbl.first_case, jmptbl.base_case),
+                             self.count_instructions(jmptbl.base_case, jmptbl.last_case))
+
+            if max_instrs > (0x7f << (8 * (jmptbl.case_size-1))):
+                self.switches_to_fix += [(jmptbl, max_instrs)]
+
+        for (jmptbl,instr_no) in self.switches_to_fix:
+            add_instr = self.cache[self.addr_to_idx[jmptbl.br_address]-1]
+            assert add_instr.mnemonic == "add"
+            shift = add_instr.cs.operands[2].shift.value
+            while instr_no > (0x7f << (8 * (jmptbl.case_size-1))): # 0x7f -> no negative numbers!
+                instr_no /= 2
+                shift += 1
+
             # now we need to add nop padding to fix alignment of each case
             while True:
                 total_nops = 0
@@ -335,8 +471,6 @@ class Function():
                             # instr_length = self.get_instrumentation_length(self.cache[self.addr_to_idx[jmptbl.base_case]])
                             # instrs -= instr_length
                         instrs += total_nops
-                        if jmptbl.br_address == 0x584d04:
-                            critical(f"from {hex(jmptbl.base_case)} to {hex(instr_case.address)} there are {instrs} instrs")
                         alignment = (2 ** (shift - 2))
                         # nops = (alignment - (instrs % alignment)) % alignment
                         nops = (alignment - (instrs % alignment)) #XXX ? see line directly before
@@ -466,6 +600,10 @@ class Function():
                 results.append("%s" % (instruction))
                 continue
 
+            if instruction.align:
+                results.append(".align %d" % (instruction.align))
+
+
             if instruction.address in self.bbstarts:
                 results.append(".L%x:" % (instruction.address))
             results.append(".LC%x:" % (instruction.address))
@@ -501,6 +639,8 @@ class InstructionWrapper():
         self.mnemonic = instruction.mnemonic
         self.op_str = instruction.op_str
         self.sz = instruction.size
+        self.align = 0
+        self.instrumented = False
 
         # Instrumentation cache for this instruction
         self.before = list()
@@ -527,8 +667,16 @@ class InstructionWrapper():
         regs = self.cs.regs_access()[0]
         return [self.cs.reg_name(x) for x in regs]
 
+    def reg_reads_common(self):
+        if self.mnemonic.startswith("br"):
+            return non_clobbered_registers # jumptable, we don't know, assume every reg is used
+        if self.mnemonic.startswith("bl"):
+            return argument_registers      # assume the called function reads arguments
+        if self.mnemonic.startswith("ret"):
+            return argument_registers      # values can be returned in the first 8 regiters
+        return self.reg_reads()
+
     def reg_writes(self):
-        # Handle nop
         if self.mnemonic.startswith("nop"):
             return []
         regs = self.cs.regs_access()[1]
@@ -565,21 +713,27 @@ class InstrumentedInstruction():
             return "%s" % (self.code)
 
 
-class DataSection():
-    def __init__(self, name, base, sz, bytes, align=16):
+class Section():
+    def __init__(self, name, base, sz, bytes, align=16, flags=""):
         self.name = name
         self.cache = list()
         self.base = base
         self.sz = sz
         self.bytes = bytes
         self.relocations = list()
-        self.align = align
+        self.functions = list()  # list of addrs of functions that are in this section
+        self.align = min(16, align)
         self.named_globals = defaultdict(list)
+        self.flags = f", \"{flags}\"" if len(flags) else ""
 
     def load(self):
         assert not self.cache
         for byte in self.bytes:
             self.cache.append(DataCell(byte, 1))
+
+    def delete(self, offset, length):
+        for cell in self.cache[offset:offset+length]:
+            cell.set_ignored()
 
     def add_relocations(self, relocations):
         self.relocations.extend(relocations)
@@ -605,7 +759,6 @@ class DataSection():
         bytes_read = [x.value for x in self.cache[cacheoff:cacheoff + sz]]
         bytes_read_padded = bytes_read + [0]*(sz - len(bytes_read))
 
-        
         # https://docs.python.org/2/library/struct.html
         if sz == 1: letter = "B"
         elif sz == 2: letter = "H"
@@ -620,7 +773,7 @@ class DataSection():
 
         if cacheoff >= len(self.cache):
             critical("[x] Could not replace value in {} addr {}".format(self.name, address))
-            return
+            exit(1)
 
         self.cache[cacheoff].value = value
         self.cache[cacheoff].sz = sz
@@ -640,16 +793,40 @@ class DataSection():
         if not self.cache:
             return ""
 
+        debug(f"Adding section {self.name}")
+        perms = {
+                ".got": "aw",
+                ".bss": "aw",
+                ".data": "aw",
+                ".rodata": "a",
+                ".data.rel.ro": "aw",
+                ".text": "ax",
+                ".init": "ax",
+                ".init_array": "ax",
+                ".fini_array": "ax",
+                ".fini": "ax",
+                ".plt": "ax",
+                ".fake_text": "ax",
+        }
+
+        newsecname = ""
+        if self.name in TRAITOR_SECS:
+            progbits = "@progbits" if self.name != ".bss" else "@nobits"
+            secperms = perms[self.name] if self.name in perms else "aw"
+            newsecname = f".fake{self.name}, \"{secperms}\", {progbits}"
+        else:
+            newsecname = f"{self.name} {self.flags}"
+
+
         results = []
-        results.append(".section {}".format(self.name))
+        results.append(".section {}".format(newsecname))
 
-        # fake got is a way to evade relocation hell.
+        # this is a way to evade relocation hell.
         # see the comment in _adjust_adrp_section_pointer() for more
-        if self.name == '.got':
-            results.append(".fake_got:")
+        results.append("{}_start:".format(self.name))
 
-        if self.name != ".fini_array":
-            results.append(".align {}".format(self.align))
+        # if self.name != ".fini_array":
+            # results.append(".align {}".format(self.align)) # removed alignment for better compatibility with original binary
 
         location = self.base
         valid_cells = False

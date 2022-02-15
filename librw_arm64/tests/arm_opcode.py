@@ -1,6 +1,10 @@
 from capstone import *
 from keystone import *
-from arm.librw.util.logging import *
+from librw_arm64.util.logging import *
+from librw_arm64.analysis.register import RegisterAnalysis
+from librw_arm64.container import Container
+from librw_arm64.rw import Symbolizer
+from librw_arm64.container import Function
 
 
 ks = Ks(KS_ARCH_ARM64, KS_MODE_LITTLE_ENDIAN)
@@ -25,14 +29,14 @@ def run_test(test_func):
 
 
 def test_reg_size():
-    from arm.librw.util.arm_util import get_reg_size_arm
+    from librw_arm64.util.arm_util import get_reg_size_arm
     assert get_reg_size_arm("x0") == 8
     assert get_reg_size_arm("q0") == 16
     assert get_reg_size_arm("h0") == 2
 
 
 def test_mem_access_size():
-    from arm.librw.util.arm_util import get_access_size_arm
+    from librw_arm64.util.arm_util import get_access_size_arm
     is_load, is_store = (1, 0)
     assert get_access_size_arm(instr("ldr x0, [x0]"))     == (8, is_load)
     assert get_access_size_arm(instr("ldr w0, [x0]"))     == (4, is_load)
@@ -43,34 +47,30 @@ def test_mem_access_size():
     assert get_access_size_arm(instr("strh w0, [x0]"))    == (2, is_store)
 
 
-def test_free_registers():
-    from arm.librw.analysis.register import RegisterAnalysis
-    from arm.librw.container import Container
-    from arm.librw.rw import Symbolizer
-    from arm.librw.container import Function
+def used_regs(assembly):
+    class fake_elf():
+        def get_section_by_name(self, secname):
+            return {"sh_addr":0, "sh_size": 0xffffffffff}
+    encoding, instr_count = ks.asm(assembly)
+    byts = bytes(encoding)
+    fun = Function("fun", 0x0, len(byts), byts)
+    fun.disasm()
+    container = Container()
+    container.functions[0] = fun
+    container.loader = type("fake_text", (object,), {"elffile":fake_elf()})
+    rw = Symbolizer()
+    rw.symbolize_cf_transfer(container)
+    ra = RegisterAnalysis()
+    ra.analyze_function(fun)
+    return {idx:sorted(regs) for idx,regs in ra.used_regs.items()}, len(fun.cache)
 
-    def used_regs(assembly):
-        class fake_elf():
-            def get_section_by_name(self, secname):
-                return {"sh_addr":0, "sh_size": 0xffffffffff}
-        encoding, instr_count = ks.asm(assembly)
-        byts = bytes(encoding)
-        fun = Function("fun", 0x0, len(byts), byts)
-        fun.disasm()
-        container = Container()
-        container.functions[0] = fun
-        container.loader = type("fake_text", (object,), {"elffile":fake_elf()})
-        rw = Symbolizer()
-        rw.symbolize_cf_transfer(container)
-        ra = RegisterAnalysis()
-        ra.analyze_function(fun)
-        return {idx:sorted(regs) for idx,regs in ra.used_regs.items()}, len(fun.cache)
+def test_free_registers():
 
     code = """
     add x0, x1, x1
     add x2, x3, x3
     add x4, x5, x5
-    br x11
+    blr x11
     """
     regs, instr_cnt = used_regs(code)
     assert regs[3] == sorted(["x11", "w11"])
@@ -84,11 +84,13 @@ def test_free_registers():
     cmp x2, x3
     b.eq .ok
     add x0, x1, x1
-    br x11
+    blr x11
     .ok:
-    br x12
+    blr x12
     """
     regs, instr_cnt = used_regs(code)
+    for i,r in sorted(regs.items()):
+        print(code.split('\n')[i], r)
     #assert all(["x2" in regs[i] for i in [0,1,2]]) XXX: capstone bug
     assert all(["x2" not in regs[i] for i in [3,4,5,6]])
     assert all(["x12" in regs[i] for i in [0,1,2,3,6]])
@@ -96,8 +98,30 @@ def test_free_registers():
     assert all(["x10" in regs[i] for i in [1]])
     assert all(["x10" not in regs[i] for i in [0,2,3,4,5,6]])
 
+def test_free_registers_complex():
+    code = """\
+    movz x0, 10
+    .loop:
+    sub x1, x1, 1
+    cbz x0, .end
+    ldr x1, [x2, 32]
+    b .loop
+    .end:
+    mov x0, x0
+    ret
+    """
+    regs, instr_cnt = used_regs(code)
+    print()
+    for i,r in sorted(regs.items()):
+        if i >= 1: i += 1
+        if i >= 6: i += 1
+        print(code.split('\n')[i], r)
+    assert all(["x0" in regs[i] for i in [4]])
+
+
 if __name__ == "__main__":
     run_test(test_reg_size)
     run_test(test_mem_access_size)
     run_test(test_free_registers)
+    run_test(test_free_registers_complex)
 

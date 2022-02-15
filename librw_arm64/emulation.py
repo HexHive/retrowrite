@@ -1,7 +1,7 @@
 
 from capstone import CS_OP_REG, CS_OP_IMM
-from arm.librw.util.arm_util import reg_name, get_access_size_arm, is_stackframe_mov
-from arm.librw.util.logging import *
+from librw_arm64.util.arm_util import reg_name, get_access_size_arm, is_stackframe_mov
+from librw_arm64.util.logging import *
 import copy
 
 
@@ -31,7 +31,7 @@ class Expr:
         # print("  "*d, "exit")
 
     def simplify(self):
-        print("OK", self.left, self.right)
+        debug("OK" + str(self.left) + "," + str(self.right))
         # if self.left is None or self.right is None: return
         if isinstance(self.left, Expr):
             self.left.simplify()
@@ -41,8 +41,8 @@ class Expr:
             self.right.simplify()
             if self.right.right == None and not self.right.mem:
                 self.right = self.right.left
-        print("OK", self.left, self.right)
-        print("OK", type(self.left), type(self.right))
+        debug(f"simplifying, {self.left}, {self.right}")
+        debug(f"simplifying, {type(self.left)}, {type(self.right)}")
         if isinstance(self.left, int) and isinstance(self.right, int):
             if self.operation == "+":
                 self.left = self.left + self.right
@@ -84,6 +84,7 @@ class Path:
         self.inst_idx = inst_idx
         self.expr = Expr(exprvalue)
         self.visited = visited
+        self.steps = 0
 
     def __copy__(self):
         return Path(self.function, self.inst_idx, copy.copy(self.reg_pool),
@@ -93,6 +94,10 @@ class Path:
         if instr.mnemonic in ["cmp", "cmn", "tst", "ccmp"]: #skip comparisons
             return
         if instr.mnemonic in ["tbl", "dup"]: #skip vector instructions
+            return
+        if instr.mnemonic in ["csinv"]: # skip comparison based instructions
+            return
+        if instr.mnemonic in ["fcvtzs"]: # skip floating point instructions
             return
 
 
@@ -132,7 +137,7 @@ class Path:
         if instr.cs.mnemonic in ["bl", "blr"]:
             return
 
-        if instr.cs.mnemonic in ["add", "adds"] or instr.mnemonic in ["sub", "subs"]:
+        if instr.cs.mnemonic in ["add", "adds"] or instr.cs.mnemonic in ["sub", "subs"]:
             operation = "+" if instr.mnemonic == "add" else "-"
             result = reg_name(ops[0].reg)
             first = reg_name(ops[1].reg)

@@ -1,10 +1,10 @@
 import argparse
 import json
 
-from arm.librw.loader import Loader
-from arm.librw.rw import Rewriter
-from arm.librw.analysis.register import RegisterAnalysis
-from arm.librw.analysis.stackframe import StackFrameAnalysis
+from librw_arm64.loader import Loader
+from librw_arm64.rw import Rewriter
+from librw_arm64.analysis.register import RegisterAnalysis
+from librw_arm64.analysis.stackframe import StackFrameAnalysis
 
 from .instrument import Instrument
 

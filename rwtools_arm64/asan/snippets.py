@@ -11,114 +11,48 @@ ASAN_LIB_INIT = "__asan_init"
 ASAN_MEM_EXIT = ".LC_ASAN_EX"
 ASAN_MEM_ENTER = ".LC_ASAN_ENTER"
 
-MODULE_INIT = [
-    "    .align    16, 0x90",
-    "# BB#0:",
-    "    pushq    %rax",
-    ".Ltmp11:",
-    "    callq    {}@PLT".format(ASAN_LIB_INIT),
-    "    popq    %rax",
-    "    retq",
-]
+ASAN_BASE = "	mov {rbase}, 0x1000000000"
 
-MODULE_DEINIT = [
-    "    .align    16, 0x90",
-    "# BB#0:",
-    "    pushq    %rax",
-    ".Ltmp12:",
-    "    popq    %rax",
-    "    retq",
-]
-
-
-
-### WARNING:
-# the following snippets were copy-pasted from gcc -fsanitize=address, _without_ optimization,
-# so there is probably a faster/shorter alternative!
 
 MEM_LOAD_1 = """
-	mov	    {clob1}, {lexp}
-	lsr	    {clob2}, {clob1}, 3
-	mov	    {tgt}, 68719476736
-	add	    {tgt}, {clob2}, {tgt}
-	ldrsb   {tgt_32}, [{tgt}]
-	cmp	    {tgt_32}, 0
-	cset    {clob2_32}, ne
-	and	    {clob2_32}, {clob2_32}, 255
-	and	    {clob3}, {clob1}, 7
-	sxtb    {clob3_32}, {clob3_32}
-	cmp	    {clob3_32}, {tgt_32}
-	cset    {tgt_32}, ge
-	and	    {tgt_32}, {tgt_32}, 255
-	and	    {tgt_32}, {clob2_32}, {tgt_32}
-	and	    {tgt_32}, {tgt_32}, 255
-	cmp	    {tgt_32}, 0
-	beq	    .LC_ASAN_EX_{addr}
+	lsr	{r1}, {lexp}, 3
+	ldrsb	{r2}, [{rbase}, {r1}]
+	cbz	{r2}, .LC_ASAN_EX_{addr}
+	and	{r1}, {lexp}, 7
+	cmp	{r1}, {r2}
+	b.lt	.LC_ASAN_EX_{addr}
 """
 
-
 MEM_LOAD_2 = """
-	mov	    {clob1}, {lexp}
-	lsr	    {clob2}, {clob1}, 3
-	mov	    {tgt}, 68719476736
-	add	    {tgt}, {clob2}, {tgt}
-	ldrsb   {tgt_32}, [{tgt}]
-	cmp	    {tgt_32}, 0
-	cset    {clob2_32}, ne
-	and	    {clob2_32}, {clob2_32}, 255
-	and	    {clob3}, {clob1}, 7
-	sxtb    {clob3_32}, {clob3_32}
-	add     {clob3_32}, {clob3_32}, 1
-	sxtb    {clob3_32}, {clob3_32}
-	cmp	    {clob3_32}, {tgt_32}
-	cset    {tgt_32}, ge
-	and	    {tgt_32}, {tgt_32}, 255
-	and	    {tgt_32}, {clob2_32}, {tgt_32}
-	and	    {tgt_32}, {tgt_32}, 255
-	cmp	    {tgt_32}, 0
-	beq	    .LC_ASAN_EX_{addr}
+	lsr	{r1}, {lexp}, 3
+	ldrsb	{r2}, [{rbase}, {r1}]
+	cbz	{r2}, .LC_ASAN_EX_{addr}
+	and	{r1}, {lexp}, 7
+	add	{r1}, {r1}, 1
+	cmp	{r1}, {r2}
+	b.lt	.LC_ASAN_EX_{addr}
 """
 
 MEM_LOAD_4 = """
-	mov	    {clob1}, {lexp}
-	lsr	    {clob2}, {clob1}, 3
-	mov	    {tgt}, 68719476736
-	add	    {tgt}, {clob2}, {tgt}
-	ldrsb   {tgt_32}, [{tgt}]
-	cmp	    {tgt_32}, 0
-	cset    {clob2_32}, ne
-	and	    {clob2_32}, {clob2_32}, 255
-	and	    {clob3}, {clob1}, 7
-	sxtb    {clob3_32}, {clob3_32}
-	add     {clob3_32}, {clob3_32}, 3
-	sxtb    {clob3_32}, {clob3_32}
-	cmp	    {clob3_32}, {tgt_32}
-	cset    {tgt_32}, ge
-	and	    {tgt_32}, {tgt_32}, 255
-	and	    {tgt_32}, {clob2_32}, {tgt_32}
-	and	    {tgt_32}, {tgt_32}, 255
-	cmp	    {tgt_32}, 0
-	beq	    .LC_ASAN_EX_{addr}
+	lsr	{r1}, {lexp}, 3
+	ldrsb	{r2}, [{rbase}, {r1}]
+	cbz	{r2}, .LC_ASAN_EX_{addr}
+	and	{r1}, {lexp}, 7
+	add	{r1}, {r1}, 3
+	cmp	{r1}, {r2}
+	b.lt	.LC_ASAN_EX_{addr}
 """
 
 MEM_LOAD_8 = """
-	mov     {clob1}, {lexp}
-	lsr     {clob2}, {clob1}, 3
-	mov     {tgt}, 68719476736
-	add     {tgt}, {clob2}, {tgt}
-	ldrsb   {tgt_32}, [{tgt}]
-	cmp	    {tgt_32}, 0
-	beq	    .LC_ASAN_EX_{addr}
+	lsr		{r1}, {lexp}, 3
+	ldrsb		{r2_32}, [{rbase}, {r1}]
+	cbz		{r2_32}, .LC_ASAN_EX_{addr}
 """
 
 MEM_LOAD_16 = """
-	mov	    {clob1}, {lexp}
-	lsr	    {clob2}, {clob1}, 3
-	mov	    {tgt}, 68719476736
-	add	    {tgt}, {clob2}, {tgt}
-	ldrsh   {tgt_32}, [{tgt}]
-	cmp	    {tgt_32}, 0
-	beq	    .LC_ASAN_EX_{addr}
+	lsr		{r1}, {lexp}, 3
+	ldrsh		{r2_32}, [{rbase}, {r1}]
+	cbz		{r2_32}, .LC_ASAN_EX_{addr}
 """
 
 
@@ -126,13 +60,13 @@ MEM_EXIT_LABEL = ".LC_ASAN_EX_{addr}:"
 
 
 ASAN_REPORT = """
-	mov      x0, {clob1}
+	mov      x0, {lexp}
 	bl       __asan_report_{acctype}{acsz}_noabort
 """
 
 LEXP_SHIFT = """
 	lsl	{To}, {shift_reg}, {amnt}
-	add {Res}, {Res}, {From}
+	add {Res}, {From}, {To} {sxtw}
 """
 
 LEXP_ADD = "\tadd {To}, {From}, {amnt}"
@@ -145,8 +79,10 @@ LEXP_MOVZ = "\tmovz {To}, {amnt}"
 LEAF_STACK_ADJUST = "\tsub sp, sp, 256"
 LEAF_STACK_UNADJUST = "\tadd sp, sp, 256"
 
-STACK_REG_SAVE = "\tstr {0}, [sp, -8]!",  #pre-increment
-STACK_REG_LOAD = "\tldr {0}, [sp], 8",    #post-increment
+# Even if for a single register, we still need to keep the sp
+# aligned to 16 bytes
+STACK_REG_SAVE = "\tstr {0}, [sp, -16]!",  #pre-increment 
+STACK_REG_LOAD = "\tldr {0}, [sp], 16",    #post-increment
 
 STACK_PAIR_REG_SAVE = "\tstp {0}, {1}, [sp, -16]!",  #pre-increment
 STACK_PAIR_REG_LOAD = "\tldp {0}, {1}, [sp], 16",    #post-increment
@@ -230,4 +166,23 @@ STACK_PAIR_REG_LOAD = "\tldp {0}, {1}, [sp], 16",    #post-increment
     # "\tleaq -16(%rsp), %rsp",
     # "\tpopq {reg}",
     # "\tpopq %r8",
+# ]
+
+# MODULE_INIT = [
+    # "    .align    16, 0x90",
+    # "# BB#0:",
+    # "    pushq    %rax",
+    # ".Ltmp11:",
+    # "    callq    {}@PLT".format(ASAN_LIB_INIT),
+    # "    popq    %rax",
+    # "    retq",
+# ]
+
+# MODULE_DEINIT = [
+    # "    .align    16, 0x90",
+    # "# BB#0:",
+    # "    pushq    %rax",
+    # ".Ltmp12:",
+    # "    popq    %rax",
+    # "    retq",
 # ]
