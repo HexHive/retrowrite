@@ -54,7 +54,7 @@ might be outdated.
 
 |                              | retrowrite-x64     | retrowrite-aarch64 |
 |------------------------------|--------------------|--------------------|
-| stripped binaries            | :x:                | :white_check_mark: |
+| stripped binaries            | :x: (WIP           | :white_check_mark: |
 | Non-PIE binaries             | :x:                | :white_check_mark: |
 | Non-standard compilers       | :x:                | :white_check_mark: |
 | Zero overhead                | :white_check_mark: | :white_check_mark: |
