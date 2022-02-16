@@ -61,6 +61,8 @@ might be outdated.
 | Kernel modules support       | :white_check_mark: | :x:                |
 | AFL-coverage instrumentation | :white_check_mark: | :white_check_mark: |
 | ASan instrumentation         | :white_check_mark: | :white_check_mark: |
+| C++ support                  | :x: (WIP)          | :x: (WIP)          |
+
 
 #### Command line options
 
