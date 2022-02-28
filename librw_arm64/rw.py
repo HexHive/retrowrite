@@ -68,14 +68,14 @@ class Rewriter():
         ".dynsym",
         ".dynstr",
         ".dynamic",
-        ".eh_frame_hdr",
-        ".eh_frame",
         ".rela.plt",
         ".rela.dyn",
         ".gnu_version",
         ".gnu.version",
         ".gnu_version_r",
         ".gnu.version_r",
+        ".eh_frame_hdr",
+        ".eh_frame",
     ]
 
     # thread-local storage sections. Need special handling.
@@ -296,7 +296,7 @@ class Rewriter():
 
 
         if not self.container.loader.is_pie():
-            FAKE_ELF_BASE = 0x1000000
+            FAKE_ELF_BASE = 0x2000000
             for sec in self.container.datasections.values():
                 if sec.name in TRAITOR_SECS:
                     if "interp" in sec.name: continue

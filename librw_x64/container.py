@@ -256,8 +256,6 @@ class Function():
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))
 
-        results.append(".LCE%x:" % (self.cache[-1].address + self.cache[-1].sz))
-
         # Add .cfi_endproc directive
         results.append("\t.cfi_endproc")
 

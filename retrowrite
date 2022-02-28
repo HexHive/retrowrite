@@ -204,12 +204,14 @@ if __name__ == "__main__":
         exit(1)
 
     loader = Loader(args.bin)
-    if loader.is_pie() == False and args.ignore_no_pie == False:
+
+    # x64 supports only PIE binaries with symbols (for now)
+    if arch == "x64" and loader.is_pie() == False and args.ignore_no_pie == False:
         print("***** RetroWrite requires a position-independent executable. *****")
         print("It looks like %s is not position independent" % args.bin)
         print("If you really want to continue, because you think retrowrite has made a mistake, pass --ignore-no-pie.")
         sys.exit(1)
-    if loader.is_stripped() == True and args.ignore_stripped == False and arch == "x64":
+    if arch == "x64" and loader.is_stripped() == True and args.ignore_stripped == False:
         print("The x64 version of RetroWrite requires a non-stripped executable.")
         print("It looks like %s is stripped" % args.bin)
         print("If you really want to continue, because you think retrowrite has made a mistake, pass --ignore-stripped.")
@@ -217,15 +219,19 @@ if __name__ == "__main__":
 
 
     slist = loader.slist_from_symtab()
-    if args.kernel:
-        loader.load_data_sections(slist, krw.is_data_section)
-    else:
-        # loader.load_sections(slist, lambda x: x != ".text")
-        loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
-        # loader.load_data_sections(slist, lambda x: slist[x]['base'] > 0 and x not in ['.text','.plt','.init'] and ".note" not in x)
 
     flist = loader.flist_from_symtab()
     loader.load_functions(flist)
+
+    # this if is due to small architectural implementation differences. Hopefully in the future it will be unified.
+    if arch == "x64":
+        loader.identify_imports()
+        if args.kernel:
+            loader.load_data_sections(slist, krw.is_data_section)
+        else:
+            loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
+    else:
+        loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
 
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)
