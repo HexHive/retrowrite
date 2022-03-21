@@ -5,7 +5,8 @@ ASAN_DEINIT_FN = "asan.module_dtor"
 
 # TODO: If you're using Debian, this becomes __assan_init
 # TODO: Switch these modifiers automatically
-ASAN_LIB_INIT = "__asan_init_v4"
+# ASAN_LIB_INIT = "__asan_init_v4"
+ASAN_LIB_INIT = "__asan_init" # for debian
 
 ASAN_MEM_EXIT = ".LC_ASAN_EX"
 ASAN_MEM_ENTER = ".LC_ASAN_ENTER"
