@@ -124,7 +124,7 @@ def assemble(filename, outfile):
 
 
 if __name__ == "__main__":
-    argp = argparse.ArgumentParser(description='Retrofitting compiler passes though binary rewriting.')
+    argp = argparse.ArgumentParser(description='')
 
     argp.add_argument("bin", type=str, help="Input binary to load")
     argp.add_argument("outfile", type=str, help="Symbolized ASM output")
@@ -159,17 +159,6 @@ if __name__ == "__main__":
 
     args = argp.parse_args()
 
-<<<<<<< HEAD
-    if args.kernel:
-        from librw.krw import Rewriter
-        from librw import krw
-        from librw.analysis.kregister import RegisterAnalysis
-        from librw.analysis.kstackframe import StackFrameAnalysis
-        from rwtools.kasan.instrument import Instrument
-        from rwtools.kasan.asantool import KcovInstrument
-        from librw.kloader import Loader
-        from librw.analysis import kregister
-=======
     if args.assemble:
         assemble(args.bin, args.outfile)
         exit(0)
@@ -209,7 +198,6 @@ if __name__ == "__main__":
             from rwtools_x64.asan.instrument import Instrument
             from librw_x64.loader import Loader
             from librw_x64.analysis import register
->>>>>>> hexhive-devel/master
     else:
         print(f"Architecture {arch} not supported!")
         exit(1)
