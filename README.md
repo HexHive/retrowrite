@@ -282,6 +282,8 @@ The MIT License
 
 Copyright (c) 2019 HexHive Group,
 Sushant Dinesh <sushant.dinesh94@gmail.com>,
+Luca Di Bartolomeo <lucadb96@gmail.com>,
+Antony Vennard <antony@vennard.ch>,
 Matteo Rizzo <matteorizzo.personal@gmail.com>,
 Mathias Payer <mathias.payer@nebelwelt.net>
 
