@@ -121,7 +121,7 @@ def assemble(filename, outfile):
     print("Assembling...")
     asmline = f"gcc {filename}  {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
     print(asmline)
-    os.system(asmline) # TODO: check exit code
+    subprocess.check_output(asmline, shell=True) # TODO: check exit code
     print("Done!")
 
 
