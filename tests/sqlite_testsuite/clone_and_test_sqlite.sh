@@ -1,8 +1,12 @@
 #!/bin/bash
 
 # download sqlite3 source code, and run sqlite testing suite on its rewritten binaries.
+# must be run as user with sudo access
 
 set -ex
+
+sudo apt update
+sudo apt install tcl make build-essential sudo
 
 function clone_sqlite() {
 	url="https://www.sqlite.org/2022/sqlite-src-3380200.zip"
@@ -18,17 +22,17 @@ source_folder=$(find . -maxdepth 1 -type d | grep sqlite-src || true)
 source_folder=$(find . -maxdepth 1 -type d | grep sqlite-src || true)
 
 
+cd "$source_folder"
 
-cd $source_folder
-
-apt install tcl
 ./configure
+make clean
 make test -j 7 # generate binaries used by sqlite3 testing
 
-for f in dbhash sqldiff sqlite3_analyzer sqlite3_analyzer sessionfuzz; do 
+for f in sqlite3 dbhash testfixture sqldiff sqlite3_analyzer sqlite3_analyzer sessionfuzz; do 
 	[[ ! -f "${f}_original" ]] && cp ${f} ${f}_original
 	../../../retrowrite ${f}_original ${f}.s 
 	../../../retrowrite -a ${f}.s ${f}; 
 done
+
 
 make test -j 7 # finally, run testsuite with rewritten binaries
