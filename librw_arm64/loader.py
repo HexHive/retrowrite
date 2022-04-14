@@ -21,6 +21,7 @@ class Loader():
         self.elffile = ELFFile(self.fd)
         self.container = Container()
         self.dependencies = self.parse_elf_dependencies()
+        self.load_symbols()
         print(self.elffile['e_type'])
 
     def is_stripped(self):
@@ -40,6 +41,22 @@ class Loader():
         base_address = next(seg for seg in self.elffile.iter_segments() 
                 if seg['p_type'] == "PT_LOAD")['p_vaddr']
         return self.elffile['e_type'] == 'ET_DYN' and base_address == 0
+
+    def load_symbols(self):
+        symbol_tables = [
+            sec for sec in self.elffile.iter_sections()
+            if isinstance(sec, SymbolTableSection)
+        ]
+        for section in symbol_tables:
+            if not isinstance(section, SymbolTableSection):
+                continue
+            if section['sh_entsize'] == 0:
+                continue
+            for symbol in section.iter_symbols():
+                if not len(symbol.name):
+                    continue
+                self.container.symbols += [symbol]
+
 
     def load_functions(self, fnlist):
         debug(f"Loading functions...")
@@ -193,29 +210,16 @@ class Loader():
         return relocs
 
     def flist_from_symtab(self):
-        symbol_tables = [
-            sec for sec in self.elffile.iter_sections()
-            if isinstance(sec, SymbolTableSection)
-        ]
-
         function_list = dict()
-
-        for section in symbol_tables:
-            if not isinstance(section, SymbolTableSection):
-                continue
-
-            if section['sh_entsize'] == 0:
-                continue
-
-            for symbol in section.iter_symbols():
-                if (symbol['st_info']['type'] == 'STT_FUNC'
-                        and symbol['st_shndx'] != 'SHN_UNDEF'):
-                    function_list[symbol['st_value']] = {
-                        'name': symbol.name,
-                        'sz': symbol['st_size'],
-                        'visibility': symbol['st_other']['visibility'],
-                        'bind': symbol['st_info']['bind'],
-                    }
+        for symbol in self.container.symbols:
+            if (symbol['st_info']['type'] == 'STT_FUNC'
+                    and symbol['st_shndx'] != 'SHN_UNDEF'):
+                function_list[symbol['st_value']] = {
+                    'name': symbol.name,
+                    'sz': symbol['st_size'],
+                    'visibility': symbol['st_other']['visibility'],
+                    'bind': symbol['st_info']['bind'],
+                }
 
         return function_list
 
@@ -237,37 +241,24 @@ class Loader():
         self.container.add_globals(glist)
 
     def global_data_list_from_symtab(self):
-        symbol_tables = [
-            sec for sec in self.elffile.iter_sections()
-            if isinstance(sec, SymbolTableSection)
-        ]
-
         global_list = defaultdict(list)
-
-        for section in symbol_tables:
-            if not isinstance(section, SymbolTableSection):
+        for symbol in self.container.symbols:
+            # XXX: HACK
+            if "@@GLIBC" in symbol.name:
+                continue
+            if symbol['st_other']['visibility'] == "STV_HIDDEN":
+                continue
+            if symbol['st_size'] == 0:
                 continue
 
-            if section['sh_entsize'] == 0:
-                continue
-
-            for symbol in section.iter_symbols():
-                # XXX: HACK
-                if "@@GLIBC" in symbol.name:
-                    continue
-                if symbol['st_other']['visibility'] == "STV_HIDDEN":
-                    continue
-                if symbol['st_size'] == 0:
-                    continue
-
-                if (symbol['st_info']['type'] == 'STT_OBJECT'
-                        and symbol['st_shndx'] != 'SHN_UNDEF'):
-                    global_list[symbol['st_value']].append({
-                        'name':
-                        "{}_{:x}".format(symbol.name, symbol['st_value']),
-                        'sz':
-                        symbol['st_size'],
-                    })
+            if (symbol['st_info']['type'] == 'STT_OBJECT'
+                    and symbol['st_shndx'] != 'SHN_UNDEF'):
+                global_list[symbol['st_value']].append({
+                    'name':
+                    "{}_{:x}".format(symbol.name, symbol['st_value']),
+                    'sz':
+                    symbol['st_size'],
+                })
 
         return global_list
 

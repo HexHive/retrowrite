@@ -25,6 +25,14 @@ TRAITOR_SECS = {
     ".data.rel.ro",
 }
 
+# this section will absolutely be brutalized by the linker, destroyed and erased
+# so we just do a little "renaming" side hustle
+XXX_TRAITOR_SECS = {
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".gcc_except_table",
+}
+
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
@@ -67,6 +75,7 @@ class Container():
         self.relocations = defaultdict(list)
         self.loader = None
         self.ignore_function_addrs = list()
+        self.symbols = list()
         self.text_section = None
         # PLT information
         self.plt_base = None
@@ -94,14 +103,15 @@ class Container():
         self.globals = globals
         done = set()
 
-        for location, gobjs in globals.items():
-            found = None
+        def find_section(addr):
             for sec, section in self.datasections.items():
-                if section.base <= location < section.base + section.sz:
-                    found = sec
-                    break
+                if section.base <= addr < section.base + section.sz:
+                    return sec
+            return None
 
-            if not found:
+        for location, gobjs in globals.items():
+            found = find_section(location)
+            if not found: 
                 continue
 
             for gobj in gobjs:
@@ -110,6 +120,14 @@ class Container():
                 self.datasections[found].add_global(location, gobj['name'],
                                                 gobj['sz'])
                 done.add(gobj['name'])
+
+        for symbol in self.symbols:
+            location = symbol.entry['st_value']
+            found = find_section(location)
+            if not found: 
+                continue
+
+            self.datasections[found].add_symbol(location, symbol)
 
     def is_target_gotplt(self, target):
         assert self.gotplt_base and self.gotplt_sz
@@ -724,6 +742,7 @@ class Section():
         self.functions = list()  # list of addrs of functions that are in this section
         self.align = min(16, align)
         self.named_globals = defaultdict(list)
+        self.symbols = defaultdict(list)
         self.flags = f", \"{flags}\"" if len(flags) else ""
 
     def load(self):
@@ -743,6 +762,9 @@ class Section():
             'label': label,
             'sz': sz,
         })
+
+    def add_symbol(self, location, symbol):
+        self.symbols[location].append(symbol)
 
     def read_at(self, address, sz, signed=False):
         cacheoff = address - self.base
@@ -814,6 +836,8 @@ class Section():
             progbits = "@progbits" if self.name != ".bss" else "@nobits"
             secperms = perms[self.name] if self.name in perms else "aw"
             newsecname = f".fake{self.name}, \"{secperms}\", {progbits}"
+        elif self.name in XXX_TRAITOR_SECS:
+            newsecname = f".o{self.name[2:]}, \"a\", @progbits"
         else:
             newsecname = f"{self.name} {self.flags}"
 
@@ -850,6 +874,11 @@ class Section():
 
                     results.append(symdef)
                     results.append(lblstr)
+
+            if location in self.symbols:
+                for symbol in self.symbols[location]:
+                    if not "$" in symbol.name:
+                        results.append("{}:".format(symbol.name))
 
             results.append(".LC%x:" % (location))
             location += cell.sz

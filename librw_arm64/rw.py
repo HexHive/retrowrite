@@ -12,7 +12,7 @@ from elftools.elf.enums import ENUM_RELOC_TYPE_AARCH64
 
 from librw_arm64.util.logging import *
 from librw_arm64.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg, memory_replace, get_access_size_arm
-from librw_arm64.container import InstrumentedInstruction, Jumptable, TRAITOR_SECS
+from librw_arm64.container import InstrumentedInstruction, Jumptable, TRAITOR_SECS, XXX_TRAITOR_SECS
 from librw_arm64.emulation import Path, Expr
 
 # this needs to be not more than 128 MB (2^ 27)
@@ -74,8 +74,9 @@ class Rewriter():
         ".gnu.version",
         ".gnu_version_r",
         ".gnu.version_r",
-        ".eh_frame_hdr",
-        ".eh_frame",
+        # ".eh_frame_hdr",
+        # ".eh_frame",
+        # ".gcc_except_table",
     ]
 
     # thread-local storage sections. Need special handling.
@@ -249,7 +250,6 @@ class Rewriter():
                 function = self.container.functions[faddr]
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
-                print(function.name)
                 skip = function.start - last_addr - 4
                 if detect_and_symbolize_switch_tables:
                     # if we symbolize jump tables, we know that the targets that will
@@ -269,13 +269,10 @@ class Rewriter():
 
 
         # add weak symbols
-        from elftools.elf.sections import SymbolTableSection
-        for section in self.container.loader.elffile.iter_sections():
-            if isinstance(section, SymbolTableSection):
-                for symbol in section.iter_symbols():
-                    if "@@" in symbol.name: continue
-                    if symbol['st_info']['bind'] == "STB_WEAK":
-                        results.append(".weak " + symbol.name)
+        for symbol in self.container.symbols:
+            if "@@" in symbol.name: continue
+            if symbol['st_info']['bind'] == "STB_WEAK":
+                results.append(".weak " + symbol.name)
 
         global FAKE_ELF_BASE
         if not self.container.loader.is_pie():
@@ -291,6 +288,8 @@ class Rewriter():
             if sec.name in TRAITOR_SECS:
                 if "interp" in sec.name: continue
                 force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
+            if sec.name in XXX_TRAITOR_SECS:
+                force_section_addr(".o"+sec.name[2:], sec.base)
         for sec in self.container.codesections.values():
             force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
 
