@@ -103,9 +103,7 @@ def assemble(filename, outfile):
     lflags = []
     for d in deps:
         if "ld-linux" in d: continue
-        dep = "-l" + d.split(".")[0].split("lib")[1]
-        while dep[-1] == '.' or dep[-1].isdigit(): # remove numbers at end of library name 
-            dep = dep[:-1]  # e.g. tcl8.6 => tcl
+        dep = "-l:" + d.strip()
         lflags += [dep]
     lflags = " ".join(lflags)
 

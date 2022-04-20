@@ -1406,9 +1406,6 @@ class Symbolizer():
                 # We should check that it points to a CIE and that the personality function 
                 # is gxx_personality_v0. If not, it could be e.g. Rust. Not checked 
                 # what they use.
-                print(entry.__dict__)
-                print()
-                print(entry.cie.__dict__)
                 #print("Function Address: %s" % hex(initial_location))
                 lsda_table = None
                 #print("lsda pointer", entry.lsda_pointer)

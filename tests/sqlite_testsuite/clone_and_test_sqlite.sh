@@ -5,8 +5,10 @@
 
 set -ex
 
+export DEBIAN_FRONTEND=noninteractive
+
 sudo apt update
-sudo apt install tcl make build-essential sudo
+sudo apt install tcl make build-essential sudo -y
 
 function clone_sqlite() {
 	url="https://www.sqlite.org/2022/sqlite-src-3380200.zip"
