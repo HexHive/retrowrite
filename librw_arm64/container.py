@@ -25,14 +25,6 @@ TRAITOR_SECS = {
     ".data.rel.ro",
 }
 
-# this section will absolutely be brutalized by the linker, destroyed and erased
-# so we just do a little "renaming" side hustle
-XXX_TRAITOR_SECS = {
-    ".eh_frame_hdr",
-    ".eh_frame",
-    ".gcc_except_table",
-}
-
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
@@ -84,6 +76,10 @@ class Container():
         self.gotplt_base = None
         self.gotplt_sz = None
         self.gotplt_entries = list()
+
+        # Dwarf/C++ exception information
+        self.dwarf_info = dict()
+        self.personality = None
 
     def add_function(self, function):
         if function.name in self.function_names:
@@ -259,6 +255,9 @@ class Function():
         self.switches = list()
         self.switches_to_fix = list()
         self.addr_to_idx = dict()
+        self.except_table = None
+        self.except_table_loc = None
+        self.cfi_map = None
 
         # Populated during symbolization.
         # Invalidated by any instrumentation.
@@ -611,7 +610,15 @@ class Function():
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
 
-        for instruction in self.cache:
+        # Add .cfi_startproc directive
+        results.append("\t.cfi_startproc")
+        # Add GCC except table, lsda information
+        if self.except_table:
+            results.append("\t.cfi_personality 156, DW.ref.__gxx_personality_v0")
+            results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.except_table_loc))
+
+
+        for index, instruction in enumerate(self.cache):
             if isinstance(instruction, InstrumentedInstruction):
                 if not self.instrumented:
                     print("[x] Old style instrumentation detected:", self.name)
@@ -632,8 +639,19 @@ class Function():
             results.append(
                 "\t%s %s" % (instruction.mnemonic, instruction.op_str))
 
+            if self.cfi_map:
+                for cfi in self.cfi_map[index]:
+                    results.append(cfi)
+
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))
+
+        # Add .cfi_endproc directive
+        results.append("\t.cfi_endproc")
+
+        if self.except_table:
+            results.append(self.except_table)
+            results.append("\t.text")
 
         results.append(".size %s,.-%s" % (self.name, self.name))
 
@@ -836,8 +854,6 @@ class Section():
             progbits = "@progbits" if self.name != ".bss" else "@nobits"
             secperms = perms[self.name] if self.name in perms else "aw"
             newsecname = f".fake{self.name}, \"{secperms}\", {progbits}"
-        elif self.name in XXX_TRAITOR_SECS:
-            newsecname = f".o{self.name[2:]}, \"a\", @progbits"
         else:
             newsecname = f"{self.name} {self.flags}"
 

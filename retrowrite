@@ -83,7 +83,7 @@ def asank(rw, loader, args):
 def assemble(filename, outfile):
     size = os.stat(filename).st_size
     f = open(filename, 'r')
-    f.seek(size - 1024) # we store metadata only at the end
+    f.seek(size - 4096) # we store metadata only at the end
                         # no need to read the whole file
     deps, secs = [], {}
     last_lines = f.readlines()
@@ -119,9 +119,30 @@ def assemble(filename, outfile):
     pie = "-no-pie" if any("NOPIE" in x for x in last_lines) else "-pie"
 
     print("Assembling...")
-    asmline = f"gcc {filename}  {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
+    asmline = f"g++ {filename}  {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
     print(asmline)
-    subprocess.check_output(asmline, shell=True) # TODO: check exit code
+    subprocess.check_output(asmline, shell=True) 
+
+    # f = open(f"{outfile}", "rb")
+    # ff = bytearray(f.read())
+    # f.close()
+    # f = open(f"{outfile}", "wb")
+    # change_sec_name = {
+            # b".oh_frame\x00" : b".eh_frame\x00",
+            # b".oh_frame_hdr\x00" : b".eh_frame_hdr\x00",
+            # b".occ_except_table\x00" : b".gcc_except_table\x00",
+    # }
+    # print(list(change_sec_name.keys()))
+    # names_offsets = list(map(lambda x: ff.find(x), list(change_sec_name.keys())))
+    # print(names_offsets)
+    # if all([abs(names_offsets[i+1] - names_offsets[i]) < 100 for i in range(len(names_offsets)-1)]):
+        # ff[names_offsets[0]+1] = ord("e")
+        # ff[names_offsets[1]+1] = ord("e")
+        # ff[names_offsets[2]+1] = ord("g")
+
+    # f.write(ff)
+    # f.close()
+
     print("Done!")
 
 
