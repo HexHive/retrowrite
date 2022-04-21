@@ -82,9 +82,9 @@ class Rewriter():
         ".gnu.version",
         ".gnu_version_r",
         ".gnu.version_r",
-        ".eh_frame_hdr",
-        ".eh_frame",
-        ".gcc_except_table",
+        # ".eh_frame_hdr",
+        # ".eh_frame",
+        # ".gcc_except_table",
     ]
 
     # thread-local storage sections. Need special handling.
@@ -124,7 +124,7 @@ class Rewriter():
         symb = Symbolizer()
         symb.symbolize_data_sections(self.container, None)
         symb.symbolize_text_section(self.container, None)
-        symb.recover_ehframe(self.container, None)
+        # symb.recover_ehframe(self.container, None)
 
     def dump(self):
         # we fix stuff that gets broken by too much instrumentation added,
