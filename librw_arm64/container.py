@@ -25,6 +25,15 @@ TRAITOR_SECS = {
     ".data.rel.ro",
 }
 
+# this section will absolutely be brutalized by the linker, destroyed and erased
+# so we just do a little "renaming" side hustle
+CXX_TRAITOR_SECS = {
+    ".eh_frame_hdr",
+    ".eh_frame",
+    ".gcc_except_table",
+}
+
+
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
@@ -854,6 +863,8 @@ class Section():
             progbits = "@progbits" if self.name != ".bss" else "@nobits"
             secperms = perms[self.name] if self.name in perms else "aw"
             newsecname = f".fake{self.name}, \"{secperms}\", {progbits}"
+        if self.name in CXX_TRAITOR_SECS:
+            newsecname = f".o{self.name[2:]}, \"a\", @progbits"
         else:
             newsecname = f"{self.name} {self.flags}"
 

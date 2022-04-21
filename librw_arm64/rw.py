@@ -20,7 +20,7 @@ from elftools.construct import Struct
 
 from librw_arm64.util.logging import *
 from librw_arm64.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg, memory_replace, get_access_size_arm
-from librw_arm64.container import InstrumentedInstruction, Jumptable, TRAITOR_SECS
+from librw_arm64.container import InstrumentedInstruction, Jumptable, TRAITOR_SECS, CXX_TRAITOR_SECS
 from librw_arm64.emulation import Path, Expr
 
 # this needs to be not more than 128 MB (2^ 27)
@@ -297,6 +297,8 @@ class Rewriter():
             if sec.name in TRAITOR_SECS:
                 if "interp" in sec.name: continue
                 force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
+            if sec.name in CXX_TRAITOR_SECS:
+                force_section_addr(".o"+sec.name[2:], sec.base)
         for sec in self.container.codesections.values():
             force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
 
