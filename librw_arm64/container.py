@@ -761,6 +761,7 @@ class Section():
         self.align = min(16, align)
         self.named_globals = defaultdict(list)
         self.symbols = defaultdict(list)
+        self.symbol_names = set()
         self.flags = f", \"{flags}\"" if len(flags) else ""
 
     def load(self):
@@ -782,7 +783,10 @@ class Section():
         })
 
     def add_symbol(self, location, symbol):
-        self.symbols[location].append(symbol)
+        if symbol.name in self.symbol_names: return
+        self.symbol_names.add(symbol.name)
+        self.symbols[location] += [symbol]
+
 
     def read_at(self, address, sz, signed=False):
         cacheoff = address - self.base
