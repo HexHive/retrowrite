@@ -13,10 +13,15 @@
 set -eux
 set -o pipefail
 
+# install the LATEST git (ubuntu's version is too old)
+echo y | sudo add-apt-repository ppa:git-core/ppa  # (obviously, needs to press enter...)
+sudo apt update
+sudo apt install git
+
 COMMIT_MSG=$(git log -1 --pretty=%B | tr '/. :' '____')
 COMMIT_SHA=$(git rev-parse --short HEAD)
 WORKDIR=${COMMIT_SHA}_${COMMIT_MSG}
-export BENCHDIR=$(find / -name "cpu2017_runner" -type d -maxdepth 4 2>/dev/null | head -n 1)  # needed by run_test.py # this is peak research code
+export BENCHDIR=$(find / -name "cpu2017_runner" -type d -maxdepth 4 2>/dev/null | head -n 1)  # needed by run_test.py
 
 
 [[ $(echo $COMMIT_MSG | grep -ic "Experiment") -eq 0 ]] && exit 0  # if "Experiment" is not in the commit message, quit
@@ -83,6 +88,9 @@ if [[ -f ~/.telegram_uid && -f ~/.telegram_botkey ]]; then
 	TEXT="Heres your plot, you lazy asshole%0aCommit: ${COMMIT_SHA}%0aMsg: $COMMIT_MSG"
 	curl -s --max-time $TIMEOUT -d "chat_id=$USERID&disable_web_page_preview=1&text=$TEXT" $URL/sendMessage > /dev/null
 	curl -s --max-time $TIMEOUT -F document=@"plot_image-1.jpg" "$URL/sendDocument?chat_id=$USERID" > /dev/null
+else
+	echo -e "\x1b[33mIf you want the plot sent to you on telegram, create a bot, create a chat with yourelf,"
+	echo -e "then store your chat id in ~/.telegram_uid and your bot key in ~/.telegram_botkey\x1b[0m"
 fi
 																		   
 # save folder with logs and data to home
