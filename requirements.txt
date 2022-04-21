@@ -1,4 +1,4 @@
-archinfo
+archinfo==9.1.11752 # at least until https://github.com/angr/archinfo/issues/112 is fixed
 pyelftools
-capstone
+capstone>=4.0.2
 intervaltree

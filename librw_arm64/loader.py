@@ -31,8 +31,8 @@ class Loader():
             print('No symbol table available, this file is probably stripped!')
             return True
 
-        sym = symtab.get_symbol_by_name("main")[0]
-        if not sym:
+        sym = symtab.get_symbol_by_name("main")
+        if not sym or not sym[0]:
             print('Symbol {} not found')
             return True
         return False
