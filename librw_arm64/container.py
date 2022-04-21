@@ -784,7 +784,7 @@ class Section():
         })
 
     def add_symbol(self, location, symbol):
-        # if symbol.name in symbol_names: return
+        if symbol.name in symbol_names: return
         symbol_names.add(symbol.name)
         self.symbols[location] += [symbol]
 
