@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 5
 
       - name: SPEC CPU Benchmark
-        run: bash retrowrite_ci/runner.sh
+        run: bash integration/runner.sh
 
       # upload results to github in case they get lost
       #- name: Upload results
