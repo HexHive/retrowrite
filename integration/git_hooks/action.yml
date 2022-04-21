@@ -1,0 +1,32 @@
+# copy into .github/workflows/action.yml
+
+name: CI
+
+on:
+  [push]
+  #push:
+    #branches: [ master ]
+  #pull_request:
+    #branches: [ master ]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    timeout-minutes: 360000 #(100 hours)
+
+    steps:
+
+      # this needs the latest git!! (version 2.28)
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 5
+
+      - name: SPEC CPU Benchmark
+        run: bash retrowrite_ci/runner.sh
+
+      # upload results to github in case they get lost
+      #- name: Upload results
+        #uses: actions/upload-artifact@v2
+        #with:
+          #name: result
+          #path: ~/result

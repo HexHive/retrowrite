@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# Move into .git/hooks/commit-msg for it to work
+# Remember: .git/hooks file are not tracked!
+
+if [[ $(grep -c "^Experiment" $1) -eq 0 ]]; then
+	echo -e "\e[31;1mWarning!"
+	echo -e "\e[31mYour commit will not be run by the CI"
+	echo -e "It needs to contain 'Experiment' in the beginning of the message."
+	echo -e "\e[0m"
+
+else 
+	[[ ! -f integration/runner.sh ]] && echo "integration/runner.sh not found! Abort." && exit 1
+	echo 
+	echo -e "\e[31mCurrent runner.sh configuration:"
+	echo -ne "\e[31;1m" 
+	grep "rewrite_all" integration/runner.sh 
+	echo -e "\e[0m"
+
+	echo -e "\e[31mCurrent run_test.py configuration:"
+	echo -ne "\e[31;1m" 
+	grep -v "#" integration/run_test.py | grep -o "runcpu.*\"" 
+	echo -e "\e[0m"
+
+	# Allows us to read user input below, assigns stdin to keyboard
+	exec < /dev/tty
+
+	read -p "> Is it correct? (y/n): " -n 1 -r
+	echo    
+	[[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
+
+	echo 
+	echo -e "\e[31mPerfect, now run '\e[34mgit push\e[31m' to run the benchmark!\e[0m"
+	echo 
+fi

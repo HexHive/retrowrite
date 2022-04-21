@@ -1,0 +1,555 @@
+##############################################################################
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+#                                                                            #
+# 'reportable' flag not set during run                                       #
+# 554.roms_r (base) did not have enough runs!                                #
+# 510.parest_r (base) did not have enough runs!                              #
+# 538.imagick_r (base) did not have enough runs!                             #
+# 508.namd_r (base) did not have enough runs!                                #
+# 527.cam4_r (base) did not have enough runs!                                #
+# 507.cactuBSSN_r (base) did not have enough runs!                           #
+# 521.wrf_r (base) did not have enough runs!                                 #
+# 511.povray_r (base) did not have enough runs!                              #
+# 549.fotonik3d_r (base) did not have enough runs!                           #
+# 503.bwaves_r (base) did not have enough runs!                              #
+# 526.blender_r (base) did not have enough runs!                             #
+# 519.lbm_r (base) did not have enough runs!                                 #
+# 544.nab_r (base) did not have enough runs!                                 #
+# Unknown flags were used! See                                               #
+#      https://www.spec.org/cpu2017/Docs/runcpu.html#flagsurl                #
+# for information about how to get rid of this error.                        #
+#                                                                            #
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+##############################################################################
+                          SPEC(R) CPU2017 Floating Point Rate Result
+                                       My Corporation 
+
+         CPU2017 License: nnn (Your SPEC license number)          Test date: Aug-2020
+         Test sponsor: My Corporation                 Hardware availability:         
+         Tested by:    My Corporation                 Software availability:         
+
+                       Estimated                       Estimated
+                Base     Base       Base        Peak     Peak       Peak
+Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate 
+-------------- ------  ---------  ---------    ------  ---------  ---------   
+503.bwaves_r                                NR                                 
+507.cactuBSSN_r                              NR                                 
+508.namd_r                                  NR                                 
+510.parest_r                                NR                                 
+511.povray_r                                NR                                 
+aaaaaaaar           1       1498      0.704  *                                 
+519.lbm_r           1       2163      0.704  *                                 
+521.wrf_r                                   NR                                 
+526.blender_r                               NR                                 
+527.cam4_r                                  NR                                 
+538.imagick_r       1       2870      0.866  *                                 
+544.nab_r           1       1792      0.939  *                                 
+549.fotonik3d_r                              NR                                 
+554.roms_r                                  NR                                 
+==============================================================================
+503.bwaves_r                                NR                                 
+507.cactuBSSN_r                              NR                                 
+508.namd_r                                  NR                                 
+510.parest_r                                NR                                 
+511.povray_r                                NR                                 
+519.lbm_r           1       2163      0.487  *                                 
+521.wrf_r                                   NR                                 
+526.blender_r                               NR                                 
+527.cam4_r                                  NR                                 
+538.imagick_r       1       2870      0.866  *                                 
+544.nab_r           1       1792      0.939  *                                 
+549.fotonik3d_r                              NR                                 
+554.roms_r                                  NR                                 
+ Est. SPECrate2017_fp_base            0.830
+ Est. SPECrate2017_fp_peak                                          Not Run
+
+
+                                           HARDWARE
+                                           --------
+            CPU Name: could not determine
+            Max MHz.:  
+             Nominal:  
+             Enabled:  cores, could not determine chips,  threads/core
+           Orderable:  
+            Cache L1:  
+                  L2:  
+                  L3:  
+               Other:  
+              Memory: 3.703 GB fixme: If using DDR3, format is:
+                      'N GB (M x N GB nRxn PCn-nnnnnR-n, ECC)'
+             Storage: 15 GB  add more disk info here
+               Other:  
+
+
+                                           SOFTWARE
+                                           --------
+                  OS: Ubuntu 18.04.4 LTS
+                      5.3.0-1030-raspi2
+            Compiler: C/C++/Fortran: Version 6.2.0 of GCC, the
+                      GNU Compiler Collection
+            Parallel: No
+            Firmware:  
+         File System: ext4
+        System State: Run level 5 (add definition here)
+       Base Pointers: 64-bit
+       Peak Pointers: Not Applicable
+               Other:  
+
+
+                                        General Notes
+                                        -------------
+    Environment variables set by runcpu before the start of the run:
+    LD_LIBRARY_PATH = "/usr/lib64/:/usr/lib/:/lib64"
+    
+
+                                        Platform Notes
+                                        --------------
+     Sysinfo program /home/luca/cpu2017/bin/sysinfo
+     Rev: r5797 of 2017-06-14 96c45e4568ad54c135fd618bcc091c0f
+     running on Io-the-second Thu Aug 27 22:52:18 2020
+    
+     SUT (System Under Test) info as seen by some common utilities.
+     For more information on this section, see
+        https://www.spec.org/cpu2017/Docs/config.html#sysinfo
+    
+     From /proc/cpuinfo
+     *
+     * Did not identify cpu model.  If you would
+     * like to write your own sysinfo program, see
+     * www.spec.org/cpu2017/config.html#sysinfo
+     *
+     *
+     * 0 "physical id" tags found.  Perhaps this is an older system,
+     * or a virtualized system.  Not attempting to guess how to
+     * count chips/cores for this system.
+     *
+           4 "processors"
+        cores, siblings (Caution: counting these is hw and system dependent. The following
+        excerpts from /proc/cpuinfo might not be reliable.  Use with caution.)
+    
+     From lscpu:
+          Architecture:        aarch64
+          Byte Order:          Little Endian
+          CPU(s):              4
+          On-line CPU(s) list: 0-3
+          Thread(s) per core:  1
+          Core(s) per socket:  4
+          Socket(s):           1
+          Vendor ID:           ARM
+          Model:               3
+          Model name:          Cortex-A72
+          Stepping:            r0p3
+          CPU max MHz:         1500.0000
+          CPU min MHz:         600.0000
+          BogoMIPS:            108.00
+          Flags:               fp asimd evtstrm crc32 cpuid
+        WARNING: the 'lscpu' utility claims that 1 "Socket(s)" were seen, which does not match
+        the could not determine "physyical id"s seen in /proc/cpuinfo.  The tester should
+        verify the count independently.
+    
+     From numactl --hardware  WARNING: a numactl 'node' might or might not correspond to a
+     physical chip.
+    
+     From /proc/meminfo
+        MemTotal:        3882412 kB
+    
+     /usr/bin/lsb_release -d
+        Ubuntu 18.04.4 LTS
+    
+     From /etc/*release* /etc/*version*
+        debian_version: buster/sid
+        ec2_version: Ubuntu 18.04.4 LTS (Bionic Beaver)
+        os-release:
+           NAME="Ubuntu"
+           VERSION="18.04.4 LTS (Bionic Beaver)"
+           ID=ubuntu
+           ID_LIKE=debian
+           PRETTY_NAME="Ubuntu 18.04.4 LTS"
+           VERSION_ID="18.04"
+           HOME_URL="https://www.ubuntu.com/"
+           SUPPORT_URL="https://help.ubuntu.com/"
+    
+     uname -a:
+        Linux Io-the-second 5.3.0-1030-raspi2 #32~18.04.2-Ubuntu SMP Fri Jul 24 09:24:50 UTC
+        2020 aarch64 aarch64 aarch64 GNU/Linux
+    
+     run-level 5 Aug 27 09:36
+    
+     SPEC is set to: /home/luca/cpu2017
+        Filesystem     Type  Size  Used Avail Use% Mounted on
+        /dev/mmcblk0p2 ext4   15G   11G  3.0G  79% /
+    
+     Additional information from dmidecode follows.  WARNING: Use caution when you interpret
+     this section. The 'dmidecode' program reads system data which is "intended to allow
+     hardware to be accurately determined", but the intent may not be met, as there are
+     frequent changes to hardware, firmware, and the "DMTF SMBIOS" standard.
+    
+     (End of data from sysinfo program)
+
+                                    Compiler Version Notes
+                                    ----------------------
+    ==============================================================================
+     CC  519.lbm_r(base) 538.imagick_r(base) 544.nab_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+
+                                      Base Unknown Flags
+                                      ------------------
+     519.lbm_r: "-fsanitize=address" (in OPTIMIZE)
+
+ 538.imagick_r: "-fsanitize=address" (in OPTIMIZE)
+
+     544.nab_r: "-fsanitize=address" (in OPTIMIZE)
+
+
+                                   Base Compiler Invocation
+                                   ------------------------
+C benchmarks: 
+     gcc
+
+
+                                    Base Portability Flags
+                                    ----------------------
+     519.lbm_r: -DSPEC_LP64
+ 538.imagick_r: -DSPEC_LP64
+     544.nab_r: -DSPEC_LP64
+
+
+                                   Base Optimization Flags
+                                   -----------------------
+C benchmarks: 
+     -mabi=lp64 -std=c99 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
+
+
+  SPEC is a registered trademark of the Standard Performance Evaluation
+    Corporation.  All other brand and product names appearing in this
+    result are trademarks or registered trademarks of their respective
+    holders.
+##############################################################################
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+#                                                                            #
+# 'reportable' flag not set during run                                       #
+# 554.roms_r (base) did not have enough runs!                                #
+# 510.parest_r (base) did not have enough runs!                              #
+# 538.imagick_r (base) did not have enough runs!                             #
+# 508.namd_r (base) did not have enough runs!                                #
+# 527.cam4_r (base) did not have enough runs!                                #
+# 507.cactuBSSN_r (base) did not have enough runs!                           #
+# 521.wrf_r (base) did not have enough runs!                                 #
+# 511.povray_r (base) did not have enough runs!                              #
+# 549.fotonik3d_r (base) did not have enough runs!                           #
+# 503.bwaves_r (base) did not have enough runs!                              #
+# 526.blender_r (base) did not have enough runs!                             #
+# 519.lbm_r (base) did not have enough runs!                                 #
+# 544.nab_r (base) did not have enough runs!                                 #
+# Unknown flags were used! See                                               #
+#      https://www.spec.org/cpu2017/Docs/runcpu.html#flagsurl                #
+# for information about how to get rid of this error.                        #
+#                                                                            #
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+##############################################################################
+----------------------------------------------------------------------------------------------
+For questions about this result, please contact the tester.
+For other inquiries, please contact info@spec.org.
+Copyright 2017-2020 Standard Performance Evaluation Corporation
+Tested with SPEC CPU2017 v1.0.1 on 2020-08-27 22:52:15+0000.
+Report generated on 2020-08-28 00:35:20 by CPU2017 ASCII formatter v5178.
+##############################################################################
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+#                                                                            #
+# 'reportable' flag not set during run                                       #
+# 505.mcf_r (base) did not have enough runs!                                 #
+# 502.gcc_r (base) did not have enough runs!                                 #
+# 557.xz_r (base) did not have enough runs!                                  #
+# 541.leela_r (base) did not have enough runs!                               #
+# 525.x264_r (base) did not have enough runs!                                #
+# 531.deepsjeng_r (base) did not have enough runs!                           #
+# 523.xalancbmk_r (base) did not have enough runs!                           #
+# 548.exchange2_r (base) did not have enough runs!                           #
+# 520.omnetpp_r (base) did not have enough runs!                             #
+# 500.perlbench_r (base) did not have enough runs!                           #
+# 502.gcc_r (base) had invalid runs!                                         #
+# Run of 502.gcc_r (base) was not valid; status is CE                        #
+# Unknown flags were used! See                                               #
+#      https://www.spec.org/cpu2017/Docs/runcpu.html#flagsurl                #
+# for information about how to get rid of this error.                        #
+# Error 502.gcc_r: Error with make!                                          #
+#                                                                            #
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+##############################################################################
+                             SPEC(R) CPU2017 Integer Rate Result
+                                       My Corporation 
+
+         CPU2017 License: nnn (Your SPEC license number)          Test date: Aug-2020
+         Test sponsor: My Corporation                 Hardware availability:         
+         Tested by:    My Corporation                 Software availability:         
+
+                       Estimated                       Estimated
+                Base     Base       Base        Peak     Peak       Peak
+Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate 
+-------------- ------  ---------  ---------    ------  ---------  ---------   
+500.perlbench_r      1       3675      0.433  *                                 
+502.gcc_r           1         --            CE                                 
+505.mcf_r           1       2792      0.579  *                                 
+520.omnetpp_r                               NR                                 
+523.xalancbmk_r                              NR                                 
+525.x264_r                                  NR                                 
+531.deepsjeng_r                              NR                                 
+541.leela_r                                 NR                                 
+548.exchange2_r                              NR                                 
+557.xz_r            1       2054      0.526  *                                 
+==============================================================================
+500.perlbench_r      1       3675      0.433  *                                 
+502.gcc_r                                   NR                                 
+505.mcf_r           1       2792      0.579  *                                 
+520.omnetpp_r                               NR                                 
+523.xalancbmk_r                              NR                                 
+525.x264_r                                  NR                                 
+531.deepsjeng_r                              NR                                 
+541.leela_r                                 NR                                 
+548.exchange2_r                              NR                                 
+557.xz_r            1       2054      0.526  *                                 
+ Est. SPECrate2017_int_base           0.509
+ Est. SPECrate2017_int_peak                                         Not Run
+
+
+                                           HARDWARE
+                                           --------
+            CPU Name: could not determine
+            Max MHz.:  
+             Nominal:  
+             Enabled:  cores, could not determine chips,  threads/core
+           Orderable:  
+            Cache L1:  
+                  L2:  
+                  L3:  
+               Other:  
+              Memory: 3.703 GB fixme: If using DDR3, format is:
+                      'N GB (M x N GB nRxn PCn-nnnnnR-n, ECC)'
+             Storage: 15 GB  add more disk info here
+               Other:  
+
+
+                                           SOFTWARE
+                                           --------
+                  OS: Ubuntu 18.04.4 LTS
+                      5.3.0-1030-raspi2
+            Compiler: C/C++/Fortran: Version 6.2.0 of GCC, the
+                      GNU Compiler Collection
+            Parallel: No
+            Firmware:  
+         File System: ext4
+        System State: Run level 5 (add definition here)
+       Base Pointers: 64-bit
+       Peak Pointers: Not Applicable
+               Other:  
+
+
+                                        General Notes
+                                        -------------
+    Environment variables set by runcpu before the start of the run:
+    LD_LIBRARY_PATH = "/usr/lib64/:/usr/lib/:/lib64"
+    
+
+                                        Platform Notes
+                                        --------------
+     Sysinfo program /home/luca/cpu2017/bin/sysinfo
+     Rev: r5797 of 2017-06-14 96c45e4568ad54c135fd618bcc091c0f
+     running on Io-the-second Thu Aug 27 20:06:50 2020
+    
+     SUT (System Under Test) info as seen by some common utilities.
+     For more information on this section, see
+        https://www.spec.org/cpu2017/Docs/config.html#sysinfo
+    
+     From /proc/cpuinfo
+     *
+     * Did not identify cpu model.  If you would
+     * like to write your own sysinfo program, see
+     * www.spec.org/cpu2017/config.html#sysinfo
+     *
+     *
+     * 0 "physical id" tags found.  Perhaps this is an older system,
+     * or a virtualized system.  Not attempting to guess how to
+     * count chips/cores for this system.
+     *
+           4 "processors"
+        cores, siblings (Caution: counting these is hw and system dependent. The following
+        excerpts from /proc/cpuinfo might not be reliable.  Use with caution.)
+    
+     From lscpu:
+          Architecture:        aarch64
+          Byte Order:          Little Endian
+          CPU(s):              4
+          On-line CPU(s) list: 0-3
+          Thread(s) per core:  1
+          Core(s) per socket:  4
+          Socket(s):           1
+          Vendor ID:           ARM
+          Model:               3
+          Model name:          Cortex-A72
+          Stepping:            r0p3
+          CPU max MHz:         1500.0000
+          CPU min MHz:         600.0000
+          BogoMIPS:            108.00
+          Flags:               fp asimd evtstrm crc32 cpuid
+        WARNING: the 'lscpu' utility claims that 1 "Socket(s)" were seen, which does not match
+        the could not determine "physyical id"s seen in /proc/cpuinfo.  The tester should
+        verify the count independently.
+    
+     From numactl --hardware  WARNING: a numactl 'node' might or might not correspond to a
+     physical chip.
+    
+     From /proc/meminfo
+        MemTotal:        3882412 kB
+    
+     /usr/bin/lsb_release -d
+        Ubuntu 18.04.4 LTS
+    
+     From /etc/*release* /etc/*version*
+        debian_version: buster/sid
+        ec2_version: Ubuntu 18.04.4 LTS (Bionic Beaver)
+        os-release:
+           NAME="Ubuntu"
+           VERSION="18.04.4 LTS (Bionic Beaver)"
+           ID=ubuntu
+           ID_LIKE=debian
+           PRETTY_NAME="Ubuntu 18.04.4 LTS"
+           VERSION_ID="18.04"
+           HOME_URL="https://www.ubuntu.com/"
+           SUPPORT_URL="https://help.ubuntu.com/"
+    
+     uname -a:
+        Linux Io-the-second 5.3.0-1030-raspi2 #32~18.04.2-Ubuntu SMP Fri Jul 24 09:24:50 UTC
+        2020 aarch64 aarch64 aarch64 GNU/Linux
+    
+     run-level 5 Aug 27 09:36
+    
+     SPEC is set to: /home/luca/cpu2017
+        Filesystem     Type  Size  Used Avail Use% Mounted on
+        /dev/mmcblk0p2 ext4   15G   11G  2.8G  80% /
+    
+     Additional information from dmidecode follows.  WARNING: Use caution when you interpret
+     this section. The 'dmidecode' program reads system data which is "intended to allow
+     hardware to be accurately determined", but the intent may not be met, as there are
+     frequent changes to hardware, firmware, and the "DMTF SMBIOS" standard.
+    
+     (End of data from sysinfo program)
+
+                                    Compiler Version Notes
+                                    ----------------------
+    ==============================================================================
+     CC  500.perlbench_r(base) 505.mcf_r(base) 557.xz_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+
+                                      Base Unknown Flags
+                                      ------------------
+ 500.perlbench_r: "-fsanitize=address" (in OPTIMIZE)
+
+       505.mcf_r: "-fsanitize=address" (in OPTIMIZE)
+
+        557.xz_r: "-fsanitize=address" (in OPTIMIZE)
+
+
+                                   Base Compiler Invocation
+                                   ------------------------
+C benchmarks (except as noted below): 
+     gcc
+
+
+                                    Base Portability Flags
+                                    ----------------------
+ 500.perlbench_r: -DSPEC_LINUX_AARCH64 -DSPEC_LP64
+       505.mcf_r: -DSPEC_LP64
+        557.xz_r: -DSPEC_LP64
+
+
+                                   Base Optimization Flags
+                                   -----------------------
+C benchmarks:
+
+ 500.perlbench_r: -mabi=lp64 -std=c99 -z muldefs -g -march=native
+                  -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3
+                  -fgnu89-inline -fno-strict-aliasing
+
+       505.mcf_r: Same as 500.perlbench_r
+
+        557.xz_r: Same as 500.perlbench_r
+
+
+  SPEC is a registered trademark of the Standard Performance Evaluation
+    Corporation.  All other brand and product names appearing in this
+    result are trademarks or registered trademarks of their respective
+    holders.
+##############################################################################
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+#                                                                            #
+# 'reportable' flag not set during run                                       #
+# 505.mcf_r (base) did not have enough runs!                                 #
+# 502.gcc_r (base) did not have enough runs!                                 #
+# 557.xz_r (base) did not have enough runs!                                  #
+# 541.leela_r (base) did not have enough runs!                               #
+# 525.x264_r (base) did not have enough runs!                                #
+# 531.deepsjeng_r (base) did not have enough runs!                           #
+# 523.xalancbmk_r (base) did not have enough runs!                           #
+# 548.exchange2_r (base) did not have enough runs!                           #
+# 520.omnetpp_r (base) did not have enough runs!                             #
+# 500.perlbench_r (base) did not have enough runs!                           #
+# 502.gcc_r (base) had invalid runs!                                         #
+# Run of 502.gcc_r (base) was not valid; status is CE                        #
+# Unknown flags were used! See                                               #
+#      https://www.spec.org/cpu2017/Docs/runcpu.html#flagsurl                #
+# for information about how to get rid of this error.                        #
+# Error 502.gcc_r: Error with make!                                          #
+#                                                                            #
+#   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
+##############################################################################
+----------------------------------------------------------------------------------------------
+For questions about this result, please contact the tester.
+For other inquiries, please contact info@spec.org.
+Copyright 2017-2020 Standard Performance Evaluation Corporation
+Tested with SPEC CPU2017 v1.0.1 on 2020-08-27 20:06:48+0000.
+Report generated on 2020-08-27 22:52:14 by CPU2017 ASCII formatter v5178.
