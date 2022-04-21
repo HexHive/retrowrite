@@ -142,11 +142,13 @@ class Rewriter():
             info(f"Fixed a total of {total_jumps_fixed} short jumps")
 
 
-        if self.container.loader.is_stripped() and len(self.container.functions) == 1:
-            text_section = self.container.loader.elffile.get_section_by_name(".text")
-            text_fun = self.container.functions[text_section["sh_addr"]]
-            start = self.container.loader.elffile.header["e_entry"]
-            text_fun.cache[(start - text_fun.start) // 4].instrument_before(InstrumentedInstruction(".globl _start\n_start:"))
+        # print(len(self.container.functions))
+        # if self.container.loader.is_stripped() and len(self.container.codesections['.text'].functions) == 1:
+        # text_section = self.container.loader.elffile.get_section_by_name(".text")
+        # text_fun = self.container.functions[text_section["sh_addr"]]
+        start = self.container.loader.elffile.header["e_entry"]
+        text_fun = self.container.function_of_address(start)
+        text_fun.cache[(start - text_fun.start) // 4].instrument_before(InstrumentedInstruction(".globl _start\n_start:"))
 
         fd = open(self.outfile, 'w')
         for sec, section in sorted(

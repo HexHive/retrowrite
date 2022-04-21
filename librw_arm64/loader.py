@@ -66,7 +66,7 @@ class Loader():
                 if type(entry) == FDE:
                     initial_location = entry.header.initial_location
                     size = entry.header.address_range
-                    print(initial_location)
+                    print(hex(initial_location), hex(size))
                     funcs += [(initial_location, size)]
             return funcs
         except:
@@ -92,21 +92,39 @@ class Loader():
         # is it stripped? 
         else:
             ehfuncs = self.extract_functions_eh_frame()
+            ehfuncs = sorted(ehfuncs)
             if len(ehfuncs):
-                print("wow")
-                # for faddr, size in ehfuncs:
-                    # self.container.section_of_address(faddr).functions += [faddr]
-                    # section_offset = faddr - base
-                    # bytes = data[section_offset:section_offset + size]
+                for e, item in enumerate(ehfuncs):
+                    faddr, size = item
+                    sec = self.container.section_of_address(faddr)
+                    sec.functions += [faddr]
+                    section_offset = faddr - base
+                    bytes = data[section_offset:section_offset + size]
 
-                    # fixed_name = f"func_{hex(faddr)}"
-                    # bind = "STB_GLOBAL" #main and _init should always be global
-                    # function = Function(fixed_name, faddr, size, bytes, bind)
-                    # self.container.add_function(function)
+                    fixed_name = f"func_{hex(faddr)}"
+                    bind = "STB_GLOBAL" #main and _init should always be global
+                    function = Function(fixed_name, faddr, size, bytes, bind)
+                    self.container.add_function(function)
 
-            else: # no functions detected, just assume there is a single big one to make everything work 
-                for sec in self.container.codesections:
-                    # if sec in [".plt"]: continue # plt needs to be regenerated, do not treat it as function
+                    if e+1 < len(ehfuncs): next_addr = ehfuncs[e+1][0]
+                    else: next_addr = sec.base + sec.sz
+
+                    if faddr + size != next_addr:
+                        new_addr = faddr + size
+                        new_size = next_addr - new_addr
+                        new_section_offset = new_addr - base
+                        print("FILLER", hex(new_addr), new_size)
+                        new_bytes = data[new_section_offset:new_section_offset + new_size]
+                        new_function = Function(f"filler_{hex(next_addr)}", new_addr, new_size, new_bytes, bind)
+                        self.container.add_function(new_function)
+                        self.container.section_of_address(new_addr).functions += [new_addr]
+
+
+
+            # else: # no functions detected, just assume there is a single big one to make everything work 
+            for sec in self.container.codesections:
+                # if sec in [".plt"]: continue # plt needs to be regenerated, do not treat it as function
+                if len(self.container.codesections[sec].functions) == 0:
                     section = self.elffile.get_section_by_name(sec)
                     base = section["sh_addr"]
                     data = section.data()
