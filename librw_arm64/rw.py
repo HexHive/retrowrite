@@ -148,82 +148,21 @@ class Rewriter():
             start = self.container.loader.elffile.header["e_entry"]
             text_fun.cache[(start - text_fun.start) // 4].instrument_before(InstrumentedInstruction(".globl _start\n_start:"))
 
-        results = list()
+        fd = open(self.outfile, 'w')
         for sec, section in sorted(
                 self.container.datasections.items(), key=lambda x: x[1].base):
             if not section.name in Rewriter.TLS_SECTIONS:
-                results.append("%s" % (section))
+                fd.write("%s" % (section) + "\n")
             else:
-                results.append(f".section {section.name}, \"aT\", @nobits")
+                fd.write(f".section {section.name}, \"aT\", @nobits" + "\n")
                 for i in range(section.sz // 8):
-                    results.append(".quad 0")
+                    fd.write(".quad 0" + "\n")
                 for i in range(section.sz % 8):
-                    results.append(".byte 0")
-
-
-
-
-        # hash map stuff
-
-        # for faddr, fn in sorted(self.container.functions.items()):
-            # for idx, instruction in enumerate(fn.cache):
-                # if "br" in str(instruction.mnemonic) and idx > 0 and \
-                    # "ldp x29, x30" in str(fn.cache[idx-1]):
-                    # # if loading back sp and return address just before indirect branch, 
-                    # # we can safely assume this is tail call optimization
-                    # # and we can treat it as a call
-                    # instruction.mnemonic = "b"
-                    # instruction.op_str = "the_great_hash_" + instruction.op_str
-                # if "blr" in str(instruction.mnemonic):
-                    # instruction.mnemonic = "bl"
-                    # instruction.op_str = "the_great_hash_" + instruction.op_str
-
-        # results.append(".section hash_map, \"ax\", @progbits")
-        # results.append(".align 12")
-        # for faddr, fn in sorted(self.container.functions.items()):
-            # if faddr - self.container.codesections['.text'].base < 0: continue
-            # results.append(".quad 0x%x" % (faddr))
-            # results.append(".quad .LC%x" % faddr)
-        # results.append(".quad 0xffffffffffffffff") # mark end of hash map
-        # STACK_PAIR_REG_SAVE = "\tstp {0}, {1}, [sp, -16]!",  #pre-increment
-        # STACK_PAIR_REG_LOAD = "\tldp {0}, {1}, [sp], 16",    #post-increment
-        # for reg in range(30):
-            # x1 = "x1"
-            # x2 = "x2"
-            # if reg < 3:
-                # x1 = "x7"
-                # x2 = "x8"
-            # reg = "x"+str(reg)
-            # results.append(f"the_great_hash_{reg}:")
-            # results.append(f"""
-                # stp {x1}, {x2}, [sp, -16]!
-                # adrp {x1}, .fake.elf_header // we don't need the lower 12 bits as we know this will be page aligned
-                # sub {reg}, {reg}, {x1} // this could be even more improved by storing already-precalculated offsets in the map
-                # adrp {x1}, hash_map   // same for the hashmap. it is going to be page aligned
-
-                # loop_{reg}:
-                # ldr {x2}, [{x1}]
-                # tbnz {x2}, 30, not_found_{reg} // check if negative (hashmap finished)
-                # add {x1}, {x1}, 16
-                # cmp {reg}, {x2}
-                # b.ne loop_{reg}
-
-                # found_{reg}:
-                # ldr {reg}, [{x1}, -8] // grab corresponding value
-                # b out_{reg}
-
-                # not_found_{reg}:  // in case we did not find it, it's an import. just jump there.
-                # adrp {x1}, .fake.elf_header
-                # add {reg}, {reg}, {x1}
-
-                # out_{reg}:
-                # ldp {x1}, {x2}, [sp], 16
-                # br {reg}
-            # """)
+                    fd.write(".byte 0" + "\n")
 
 
         for section in self.container.codesections.values():
-            results.append(f".section {section.name}")
+            fd.write(f".section {section.name}" + "\n")
             if section.name == ".plt": continue
             # results.append(f".align {section.align}") # removed to better fit sections
             data = section.bytes
@@ -231,29 +170,29 @@ class Rewriter():
             for faddr in sorted(section.functions):
                 function = self.container.functions[faddr]
                 for addr in range(last_addr, faddr): # fill in space between functions.
-                    results.append(".LC%x: // filler between functions" % (addr))
-                    results.append(f"\t .byte {hex(data[addr - base])}")
+                    fd.write(".LC%x: // filler between functions" % (addr) + "\n")
+                    fd.write(f"\t .byte {hex(data[addr - base])}" + "\n")
                 last_addr = faddr + function.sz
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
-                results.append("%s" % (function))
+                fd.write("%s" % (function) + "\n")
 
 
         # fake sections for landing pad
         for section in self.container.codesections.values():
-            results.append(f".section .fake{section.name}, \"ax\", @progbits")
+            fd.write(f".section .fake{section.name}, \"ax\", @progbits" + "\n")
             # results.append(".align 12") # removed to better fit sections
-            results.append(f".fake{section.name}_start:")
+            fd.write(f".fake{section.name}_start:" + "\n")
             last_addr = section.base - 4
             if len(section.functions) == 1: # stripped binary maybe
                 if section.name == ".plt":
                     for i in range(0, section.sz, 4):
                         # the plt is autogenerated, so we don't have a label there
                         # we just use the .plt section symbol
-                        results.append("b .plt+%d " % (i)) 
+                        fd.write("b .plt+%d " % (i) + "\n")
                 else:
                     for i in range(0, section.sz, 4):
-                        results.append("b .LC%x " % (section.base + i))
+                        fd.write("b .LC%x " % (section.base + i) + "\n")
                 continue
             for faddr in sorted(section.functions):
                 function = self.container.functions[faddr]
@@ -264,24 +203,24 @@ class Rewriter():
                     # if we symbolize jump tables, we know that the targets that will
                     # land in the landing pad will only be indirect calls. So it does
                     # not make sense to have every possible instruction in the landing pad.
-                    if skip > 0: results.append(".skip 0x%x" % (skip))
+                    if skip > 0: fd.write(".skip 0x%x" % (skip) + "\n")
                 else:
                     # if we don't detect jumptables, every single instruction inside .text
                     # is a valid landing pad target. So we fill it with jumps
                     for i in range(0, skip, 4):
-                        results.append("b .LC%x " % (last_addr + (i+4)))
+                        fd.write("b .LC%x " % (last_addr + (i+4)) + "\n")
                 last_addr = function.start
-                results.append("b .LC%x // %s" % (function.start, function.name))
+                fd.write("b .LC%x // %s" % (function.start, function.name) + "\n")
 
         # we need one fake section just to represent the copy of the base address of the binary
-        results.append(f".section .fake.elf_header, \"a\", @progbits") 
+        fd.write(f".section .fake.elf_header, \"a\", @progbits" + "\n")
 
 
         # add weak symbols
         for symbol in self.container.symbols:
             if "@@" in symbol.name: continue
             if symbol['st_info']['bind'] == "STB_WEAK":
-                results.append(".weak " + symbol.name)
+                fd.write(".weak " + symbol.name + "\n")
 
         global FAKE_ELF_BASE
         if not self.container.loader.is_pie():
@@ -289,16 +228,18 @@ class Rewriter():
 
         # here we insert the list of the original addresses of the sections
         # so that we keep them the same during linking and reproduce the virtual layout
-        results.append(f"// SECTION: .fake.elf_header - {hex(FAKE_ELF_BASE)}")
-        def force_section_addr(name, base):
-            results.append(f"// SECTION: {name} - {hex(base)}")
+        fd.write(f"// SECTION: .fake.elf_header - {hex(FAKE_ELF_BASE)}" + "\n")
+        def force_section_addr(name, base, fd):
+            fd.write(f"// SECTION: {name} - {hex(base)}" + "\n")
 
         for sec in self.container.datasections.values():
             if sec.name in TRAITOR_SECS:
                 if "interp" in sec.name: continue
-                force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
+                force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base, fd)
+            # if sec.name in XXX_TRAITOR_SECS:
+                # force_section_addr(".o"+sec.name[2:], sec.base, fd)
         for sec in self.container.codesections.values():
-            force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base)
+            force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base, fd)
 
 
         if not self.container.loader.is_pie():
@@ -306,28 +247,26 @@ class Rewriter():
             for sec in self.container.datasections.values():
                 if sec.name in TRAITOR_SECS:
                     if "interp" in sec.name: continue
-                    force_section_addr(sec.name, FAKE_ELF_BASE + sec.base)
+                    force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
             for sec in self.container.codesections.values():
                 if "text" in sec.name:
-                    force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base)
+                    force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base, fd)
                 if ".plt" in sec.name:
-                    force_section_addr(sec.name, int(1.1*FAKE_ELF_BASE) + sec.base)
+                    force_section_addr(sec.name, int(1.1*FAKE_ELF_BASE) + sec.base, fd)
                 else:
-                    force_section_addr(sec.name, FAKE_ELF_BASE + sec.base)
-            results.append(f"// SECTION: .dynamic - {hex(2*FAKE_ELF_BASE)}")
-            results.append(f"// SECTION: .rela.plt - {hex(int(1.5*FAKE_ELF_BASE))}")
-            results.append(f"// NOPIE")
+                    force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
+            fd.write(f"// SECTION: .dynamic - {hex(2*FAKE_ELF_BASE)}" + "\n")
+            fd.write(f"// SECTION: .rela.plt - {hex(int(1.5*FAKE_ELF_BASE))}" + "\n")
+            fd.write(f"// NOPIE" + "\n")
 
 
 
         # here we insert the list of dependencies of the elf,
         # that the linker will need to know about through lflags
         for dep in self.container.loader.dependencies:
-            results.append(f"// DEPENDENCY: {dep}")
+            fd.write(f"// DEPENDENCY: {dep}" + "\n")
 
-        with open(self.outfile, 'w') as outfd:
-            outfd.write("\n".join(results + ['']))
-
+        fd.close()
 
         if Rewriter.total_globals > 0:
             info(f"Saved {Rewriter.literal_saves} out of {Rewriter.total_globals} global accesses ({Rewriter.literal_saves / Rewriter.total_globals * 100}% )")
