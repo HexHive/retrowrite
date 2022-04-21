@@ -25,6 +25,8 @@ TRAITOR_SECS = {
     ".data.rel.ro",
 }
 
+symbol_names = set() # global set of symbol names to avoid duplicates
+
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
@@ -614,7 +616,7 @@ class Function():
         results.append("\t.cfi_startproc")
         # Add GCC except table, lsda information
         if self.except_table:
-            results.append("\t.cfi_personality 156, DW.ref.__gxx_personality_v0")
+            results.append("\t.cfi_personality 0, __gxx_personality_v0")
             results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.except_table_loc))
 
 
@@ -761,7 +763,6 @@ class Section():
         self.align = min(16, align)
         self.named_globals = defaultdict(list)
         self.symbols = defaultdict(list)
-        self.symbol_names = set()
         self.flags = f", \"{flags}\"" if len(flags) else ""
 
     def load(self):
@@ -783,8 +784,8 @@ class Section():
         })
 
     def add_symbol(self, location, symbol):
-        if symbol.name in self.symbol_names: return
-        self.symbol_names.add(symbol.name)
+        if symbol.name in symbol_names: return
+        symbol_names.add(symbol.name)
         self.symbols[location] += [symbol]
 
 

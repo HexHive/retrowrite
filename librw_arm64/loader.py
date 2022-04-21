@@ -7,6 +7,7 @@ from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
 from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
+from elftools.dwarf.callframe import FDE
 
 from .container import Container, Function, Section, disasm_bytes
 from .rw import Rewriter
@@ -57,6 +58,19 @@ class Loader():
                     continue
                 self.container.symbols += [symbol]
 
+    def extract_functions_eh_frame(self):
+        funcs = []
+        try:
+            ehframe_entries = self.elffile.get_dwarf_info().EH_CFI_entries()
+            for entry in ehframe_entries:
+                if type(entry) == FDE:
+                    initial_location = entry.header.initial_location
+                    size = entry.header.address_range
+                    print(initial_location)
+                    funcs += [(initial_location, size)]
+            return funcs
+        except:
+            return []
 
     def load_functions(self, fnlist):
         debug(f"Loading functions...")
@@ -77,14 +91,28 @@ class Loader():
 
         # is it stripped? 
         else:
-            for sec in self.container.codesections:
-                # if sec in [".plt"]: continue # plt needs to be regenerated, do not treat it as function
-                section = self.elffile.get_section_by_name(sec)
-                base = section["sh_addr"]
-                data = section.data()
-                function = Function(f"all_{sec}", base, len(data), data, "STB_GLOBAL")
-                self.container.codesections[sec].functions += [base]
-                self.container.add_function(function)
+            ehfuncs = self.extract_functions_eh_frame()
+            if len(ehfuncs):
+                print("wow")
+                # for faddr, size in ehfuncs:
+                    # self.container.section_of_address(faddr).functions += [faddr]
+                    # section_offset = faddr - base
+                    # bytes = data[section_offset:section_offset + size]
+
+                    # fixed_name = f"func_{hex(faddr)}"
+                    # bind = "STB_GLOBAL" #main and _init should always be global
+                    # function = Function(fixed_name, faddr, size, bytes, bind)
+                    # self.container.add_function(function)
+
+            else: # no functions detected, just assume there is a single big one to make everything work 
+                for sec in self.container.codesections:
+                    # if sec in [".plt"]: continue # plt needs to be regenerated, do not treat it as function
+                    section = self.elffile.get_section_by_name(sec)
+                    base = section["sh_addr"]
+                    data = section.data()
+                    function = Function(f"all_{sec}", base, len(data), data, "STB_GLOBAL")
+                    self.container.codesections[sec].functions += [base]
+                    self.container.add_function(function)
 
 
         # entrypoint = self.elffile.header.e_entry

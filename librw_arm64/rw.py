@@ -122,9 +122,9 @@ class Rewriter():
 
     def symbolize(self):
         symb = Symbolizer()
+        symb.recover_eh_frame(self.container, None)
         symb.symbolize_data_sections(self.container, None)
         symb.symbolize_text_section(self.container, None)
-        symb.recover_ehframe(self.container, None)
 
     def dump(self):
         # we fix stuff that gets broken by too much instrumentation added,
@@ -142,7 +142,7 @@ class Rewriter():
             info(f"Fixed a total of {total_jumps_fixed} short jumps")
 
 
-        if self.container.loader.is_stripped():
+        if self.container.loader.is_stripped() and len(self.container.functions) == 1:
             text_section = self.container.loader.elffile.get_section_by_name(".text")
             text_fun = self.container.functions[text_section["sh_addr"]]
             start = self.container.loader.elffile.header["e_entry"]
@@ -1315,7 +1315,8 @@ class Symbolizer():
                 print("[x] Couldn't find valid section {:x}".format(
                     rel['offset']))
 
-    def recover_ehframe(self, container, context=None):
+
+    def recover_eh_frame(self, container, context=None):
         # BEGIN __init__
         dwarf_map = dict()
 
