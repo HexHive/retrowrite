@@ -244,15 +244,17 @@ if __name__ == "__main__":
     # this if is due to small architectural implementation differences. Hopefully in the future it will be unified.
     if arch == "x64":
         loader.identify_imports()
+        flist = loader.flist_from_symtab() # before loading data sections
+        loader.load_functions(flist)
         if args.kernel:
             loader.load_data_sections(slist, krw.is_data_section)
         else:
             loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
     else:
         loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
+        flist = loader.flist_from_symtab() # after loading all sections
+        loader.load_functions(flist)
 
-    flist = loader.flist_from_symtab()
-    loader.load_functions(flist)
 
     reloc_list = loader.reloc_list_from_symtab()
     loader.load_relocations(reloc_list)
