@@ -13,12 +13,10 @@
 set -eux
 set -o pipefail
 
-export DEBIAN_FRONTEND=noninteractive 
-
 # install the LATEST git (ubuntu's version is too old)
 echo y | sudo add-apt-repository ppa:git-core/ppa  # (obviously, needs to press enter...)
 sudo apt update
-sudo apt install git
+echo y | sudo apt install git 
 
 COMMIT_MSG=$(git log -1 --pretty=%B | tr '/. :' '____')
 COMMIT_SHA=$(git rev-parse --short HEAD)
