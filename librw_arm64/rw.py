@@ -251,17 +251,15 @@ class Rewriter():
                     if "interp" in sec.name: continue
                     force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
             for sec in self.container.codesections.values():
-                if "text" in sec.name:
+                if ".text" in sec.name:
                     force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base, fd)
-                if ".plt" in sec.name:
-                    force_section_addr(sec.name, int(1.1*FAKE_ELF_BASE) + sec.base, fd)
+                elif ".plt" in sec.name:
+                    force_section_addr(sec.name, int(1.1*FAKE_ELF_BASE) & 0xffffffffffffff00 + sec.base, fd)
                 else:
                     force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
             fd.write(f"// SECTION: .dynamic - {hex(2*FAKE_ELF_BASE)}" + "\n")
             fd.write(f"// SECTION: .rela.plt - {hex(int(1.5*FAKE_ELF_BASE))}" + "\n")
             fd.write(f"// NOPIE" + "\n")
-
-
 
         # here we insert the list of dependencies of the elf,
         # that the linker will need to know about through lflags
@@ -1248,6 +1246,10 @@ class Symbolizer():
             name = rel['name']
             if rel['addend']: name += " + " + str(rel['addend'])
             section.replace(rel['offset'], 8, name)
+        elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_COPY"]:
+            if rel['name'] in Rewriter.GCC_RELOCATIONS: return
+            critical(section.name + " " +  hex(rel['offset']) + " " + rel['name'])
+            section.replace(rel['offset'], 8, rel['name'])
 
         else:
             print(rel)

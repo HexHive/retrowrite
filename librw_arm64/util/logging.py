@@ -8,13 +8,13 @@ GREEN="\x1b[32m"
 CRITICAL="\x1b[41m"
 
 
-def debug(s, end="\n"):
+def debug(*s, end="\n"):
     if DEBUG_LOG:
-        print(f"[{BLUE}DEBUG{CLEAR}] {s}", end=end)
+        print(f"[{BLUE}DEBUG{CLEAR}] {' '.join(s)}", end=end)
         sys.stdout.flush()
 
-def info(s, end="\n"):
-    print(f"[{GREEN}INFO{CLEAR}] {s}", end=end)
+def info(*s, end="\n"):
+    print(f"[{GREEN}INFO{CLEAR}] {' '.join(s)}", end=end)
 
-def critical(s, end="\n"):
-    print(f"[{CRITICAL}CRITICAL{CLEAR}] {s}", end=end)
+def critical(*s, end="\n"):
+    print(f"[{CRITICAL}CRITICAL{CLEAR}] {' '.join(s)}", end=end)

@@ -856,7 +856,11 @@ class Section():
 
         newsecname = ""
         if self.name in TRAITOR_SECS:
-            progbits = "@progbits" if self.name != ".bss" else "@nobits"
+            # progbits = "@progbits" if self.name != ".bss" else "@nobits"
+            progbits = "@progbits"  # XXX: should be the line before
+                                    # but I can't somehow encode R_AARCH_COPY relocations that store
+                                    # stuff like stdout and stderr in the bss
+                                    # so my .fake.bss will be @progbits instead of @nobits for now
             secperms = perms[self.name] if self.name in perms else "aw"
             newsecname = f".fake{self.name}, \"{secperms}\", {progbits}"
         else:
@@ -907,8 +911,6 @@ class Section():
             for before in cell.before:
                 results.append("\t%s" % (before))
 
-            if self.name == '.bss':
-                cell.value = 0
             results.append("\t%s" % (cell))
 
             for after in cell.after:
