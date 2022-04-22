@@ -254,7 +254,7 @@ class Rewriter():
                 if ".text" in sec.name:
                     force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base, fd)
                 elif ".plt" in sec.name:
-                    force_section_addr(sec.name, int(1.1*FAKE_ELF_BASE) & 0xffffffffffffff00 + sec.base, fd)
+                    force_section_addr(sec.name, (int(1.1*FAKE_ELF_BASE) & 0xffffffffffffff00) + sec.base, fd)
                 else:
                     force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
             fd.write(f"// SECTION: .dynamic - {hex(2*FAKE_ELF_BASE)}" + "\n")
