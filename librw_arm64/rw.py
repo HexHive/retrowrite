@@ -148,7 +148,7 @@ class Rewriter():
         # text_fun = self.container.functions[text_section["sh_addr"]]
         start = self.container.loader.elffile.header["e_entry"]
         text_fun = self.container.function_of_address(start)
-        text_fun.cache[(start - text_fun.start) // 4].instrument_before(InstrumentedInstruction(".globl _start\n_start:"))
+        text_fun.cache[(start - text_fun.start) // 4].before.insert(0, InstrumentedInstruction(".globl _start\n_start:"))
 
         fd = open(self.outfile, 'w')
         for sec, section in sorted(
@@ -1248,8 +1248,28 @@ class Symbolizer():
             section.replace(rel['offset'], 8, name)
         elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_COPY"]:
             if rel['name'] in Rewriter.GCC_RELOCATIONS: return
-            critical(section.name + " " +  hex(rel['offset']) + " " + rel['name'])
             section.replace(rel['offset'], 8, rel['name'])
+
+            # We cannot generate R_AARCH64_COPY relocation just by assembler directives
+            # the most similar would be .comm but it does not work for some reason? 
+            # so by using .quad <symbol> we have a pointer to a pointer that we need to 
+            # dereference once. So we instrument _init to do that for us
+            # basically we fix relocations manually. the final solution. 
+            entry = container.loader.elffile.header["e_entry"]
+            start_fun = container.function_of_address(entry)
+            data_sec = container.section_of_address(rel['offset'])
+            symbol_list = data_sec.symbols[rel['offset']]
+            for x in symbol_list:
+                if x.name == rel['name']:
+                    symbol_list.remove(x)
+            start_fun.cache[(entry - start_fun.start) // 4].instrument_before(InstrumentedInstruction('''
+// dereference %s to adjust R_AARCH64_COPY relocation
+adrp x7, .LC%x
+add x7, x7, :lo12:.LC%x
+ldr x6, [x7]
+ldr x6, [x6]
+str x6, [x7]
+            ''' % (rel['name'], rel['offset'], rel['offset'])))
 
         else:
             print(rel)
