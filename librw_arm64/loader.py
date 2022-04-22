@@ -106,14 +106,19 @@ class Loader():
                     function = Function(fixed_name, faddr, size, bytes, bind)
                     self.container.add_function(function)
 
-                    if e+1 < len(ehfuncs): next_addr = ehfuncs[e+1][0]
-                    else: next_addr = sec.base + sec.sz
+                    if e+1 < len(ehfuncs): 
+                        next_addr = ehfuncs[e+1][0]
+                        if next_addr > sec.base + sec.sz: # next function is in another section?
+                            continue
+                    else:
+                        next_addr = sec.base + sec.sz # go until the end of the current section
+
 
                     if faddr + size != next_addr:
                         new_addr = faddr + size
                         new_size = next_addr - new_addr
                         new_section_offset = new_addr - base
-                        print("FILLER", hex(new_addr), new_size)
+                        debug("adding filler function at addr ", hex(new_addr), "with size", new_size)
                         new_bytes = data[new_section_offset:new_section_offset + new_size]
                         new_function = Function(f"filler_{hex(next_addr)}", new_addr, new_size, new_bytes, bind)
                         self.container.add_function(new_function)
