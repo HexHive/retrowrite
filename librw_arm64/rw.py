@@ -103,7 +103,7 @@ class Rewriter():
     # DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     # DATASECTIONS = [".got", ".fini_array",  ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     # DATASECTIONS = [".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
-    DATASECTIONS = [".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array", ".fini_array", ".got.plt"]
+    DATASECTIONS = [".tm_clone_table", ".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array", ".fini_array", ".got.plt"]
     CODESECTIONS = [".text", ".init", ".fini", ".plt"]
 
     def __init__(self, container, outfile):
@@ -249,7 +249,7 @@ class Rewriter():
             for sec in self.container.datasections.values():
                 if sec.name in TRAITOR_SECS:
                     if "interp" in sec.name: continue
-                    force_section_addr(sec.name, FAKE_ELF_BASE + sec.base, fd)
+                    force_section_addr(sec.name, (3*FAKE_ELF_BASE + 2*sec.base) & 0xffffffffffffff00, fd)
             for sec in self.container.codesections.values():
                 if ".text" in sec.name:
                     force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base, fd)

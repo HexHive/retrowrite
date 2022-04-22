@@ -129,6 +129,9 @@ def plot_diff(outf):
     for x in range(1, len(df.columns.values)):
         df.iloc[numrows, x] = sum([df.iloc[i, x] for i in range(numrows)])
 
+    if sasan not in df.columns:
+        print("Source Asan not found")
+        exit(0)
     print("Overhead on source ASAN")
     for i in range(len(df.iloc[:])):
         for x in range(2, len(df.columns.values)):

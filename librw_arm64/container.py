@@ -154,6 +154,7 @@ class Container():
 
 
             newsec = self.section_of_address(function.start)
+            print(hex(function.start), function.name)
             # newsec.functions += [function.start]
             base = newsec.base
             data = newsec.bytes
