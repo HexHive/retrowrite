@@ -320,6 +320,8 @@ class Loader():
         # https://refspecs.linuxbase.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/dynamicsection.html
         deps = []
         dynamic = self.elffile.get_section_by_name(".dynamic")
+        if not dynamic: return []
+
         for tag in dynamic.iter_tags("DT_NEEDED"):
             info("Found dependency {}".format(tag.needed))
             deps += [tag.needed]

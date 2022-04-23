@@ -53,7 +53,7 @@ bash rewrite_all.sh something      # put rewritten files in folder bins_rw
 
 # prepare spec cpu benchmark
 export ASAN_OPTIONS=detect_leaks=0  # do not print ASAN leak report
-BINARIES=$(find bins -executable -type f)
+BINARIES=$(find bins_rw -executable -type f)
 python3 run_test.py $BINARIES | tee runcpu_cmd # place those binaries in the spec cpu2017 folder
 
 # run benchmark

@@ -83,7 +83,7 @@ def asank(rw, loader, args):
 def assemble(filename, outfile):
     size = os.stat(filename).st_size
     f = open(filename, 'r')
-    f.seek(size - 4096) # we store metadata only at the end
+    f.seek(max(0, size - 4096)) # we store metadata only at the end
                         # no need to read the whole file
     deps, secs = [], {}
     last_lines = f.readlines()

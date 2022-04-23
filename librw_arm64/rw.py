@@ -1300,7 +1300,10 @@ str x6, [x7]
         cfi_map = defaultdict(lambda: defaultdict(list))
         # END __init__
 
-        ehframe_entries = container.loader.elffile.get_dwarf_info().EH_CFI_entries()
+        dw_info = container.loader.elffile.get_dwarf_info()
+        if dw_info.eh_frame_sec == None: return 
+        ehframe_entries = dw_info.EH_CFI_entries()
+
 
         lsda_encoding = None
         code_alignment_factor = 1
