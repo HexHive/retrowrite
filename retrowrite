@@ -111,7 +111,7 @@ def assemble(filename, outfile):
     for sec, addr in secs.items():
         wlflags += ["--section-start="+sec+"="+addr]
     wlflags = "-Wl," + ",".join(wlflags)
-    wlflags += " -march=armv8.1-a+crc+sha+aes"
+    wlflags += " -march=armv8.1-a+crc+crypto+sve"
     # wlflags += ",--no-check-sections"
 
     pie = "-no-pie" if any("NOPIE" in x for x in last_lines) else "-pie"
@@ -223,6 +223,8 @@ if __name__ == "__main__":
     else:
         print(f"Architecture {arch} not supported!")
         exit(1)
+
+    if args.module: Rewriter.detailed_disasm = True
 
     loader = Loader(args.bin)
 

@@ -23,7 +23,6 @@ class Loader():
         self.container = Container()
         self.dependencies = self.parse_elf_dependencies()
         self.load_symbols()
-        print(self.elffile['e_type'])
 
     def is_stripped(self):
         # Get the symbol table entry for the respective symbol
@@ -56,6 +55,7 @@ class Loader():
             for symbol in section.iter_symbols():
                 if not len(symbol.name):
                     continue
+                symbol.name = self.sanitize_symbol_name(symbol.name)
                 self.container.symbols += [symbol]
 
     def extract_functions_eh_frame(self):
@@ -66,11 +66,16 @@ class Loader():
                 if type(entry) == FDE:
                     initial_location = entry.header.initial_location
                     size = entry.header.address_range
-                    print(hex(initial_location), hex(size))
                     funcs += [(initial_location, size)]
             return funcs
         except:
             return []
+
+    def sanitize_symbol_name(self, name):
+        for x in "\'\",-{}; []/*@()":
+            name = name.replace(x, "_")
+        return name
+
 
     def load_functions(self, fnlist):
         debug(f"Loading functions...")
@@ -79,12 +84,15 @@ class Loader():
         base = text_section['sh_addr']
         if not self.is_stripped(): # fnlist is not empty
             for faddr, fvalue in fnlist.items():
-                self.container.section_of_address(faddr).functions += [faddr]
+                sec = self.container.section_of_address(faddr)
+                if not sec: continue
+                sec.functions += [faddr]
 
                 section_offset = faddr - base
                 bytes = data[section_offset:section_offset + fvalue["sz"]]
 
-                fixed_name = fvalue["name"].replace("@", "_")
+                # replace banned chars
+                fixed_name = self.sanitize_symbol_name(fvalue['name'])
                 bind = fvalue["bind"] if fixed_name not in ["main", "_init"] else "STB_GLOBAL" #main and _init should always be global
                 function = Function(fixed_name, faddr, fvalue["sz"], bytes, bind)
                 self.container.add_function(function)
@@ -99,7 +107,7 @@ class Loader():
                     sec = self.container.section_of_address(faddr)
                     sec.functions += [faddr]
                     section_offset = faddr - base
-                    bytes = data[section_offset:section_offset + size]
+                    bytes = sec.bytes[section_offset:section_offset + size]
 
                     fixed_name = f"func_{hex(faddr)}"
                     bind = "STB_GLOBAL" #main and _init should always be global
@@ -119,10 +127,21 @@ class Loader():
                         new_size = next_addr - new_addr
                         new_section_offset = new_addr - base
                         debug("adding filler function at addr ", hex(new_addr), "with size", new_size)
-                        new_bytes = data[new_section_offset:new_section_offset + new_size]
-                        new_function = Function(f"filler_{hex(next_addr)}", new_addr, new_size, new_bytes, bind)
+                        new_bytes = sec.bytes[new_section_offset:new_section_offset + new_size]
+                        new_function = Function(f"filler_{hex(new_addr)}", new_addr, new_size, new_bytes, bind)
                         self.container.add_function(new_function)
                         self.container.section_of_address(new_addr).functions += [new_addr]
+
+                for sec in self.container.codesections.values():
+                    if len(sec.functions):
+                        first_func_start = sorted(sec.functions)[0]
+                        if sec.base < first_func_start:
+                            newsize = first_func_start - sec.base
+                            debug("adding filler function at addr ", hex(sec.base), "with size", first_func_start)
+                            new_bytes = sec.bytes[:newsize]
+                            new_function = Function(f"filler_{hex(sec.base)}", sec.base, newsize, new_bytes, "STB_GLOBAL")
+                            self.container.add_function(new_function)
+                            sec.functions += [sec.base]
 
 
 
@@ -148,7 +167,7 @@ class Loader():
         # A data section should be present in memory (SHF_ALLOC), and its size should
         # be greater than 0. 
         return (
-            sval['sz'] > 0 and
+            # sval['sz'] > 0 and # removed cause .gosymtab can have size 0
             (sval['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and (
                 (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) == 0 or sname not in Rewriter.CODESECTIONS
             ) 
@@ -184,7 +203,7 @@ class Loader():
                     [0x0 for _ in range(0, sval['sz'] - len(more))])
 
             bytes = more
-            print("Adding section: ", sec, hex(sval["base"]), "with size", hex(sval['sz']),
+            debug("Adding section: ", sec, hex(sval["base"]), "with size", hex(sval['sz']),
                   "with align ", sval['align'])
             sec = sec.replace("-","_")
             ds = Section(sec, sval["base"], sval["sz"], bytes,

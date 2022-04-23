@@ -25,14 +25,23 @@ TRAITOR_SECS = {
     ".data.rel.ro",
 }
 
+NO_FLAGS_SECS = [
+    ".hash",
+    ".rela",
+    ".gnu.hash",
+    ".note.ABI_tag",
+    ".note.gnu.build_id",
+    ".note.go.build_id",
+    ]
+
 symbol_names = set() # global set of symbol names to avoid duplicates
 
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
-    # XXX needed for ASAN
+    # XXX needed for ASAN and probably other instrumentation passes
     # but consumes 50% more memory and speed (the python retrowrite process)
-    # md.detail = True  
+    md.detail = librw_arm64.rw.Rewriter.detailed_disasm
     result = []
     for ins in range(0, len(bytes), 4):
         disasm = list(md.disasm(bytes[ins:ins+4], addr+ins))
@@ -42,7 +51,7 @@ def disasm_bytes(bytes, addr):
             # the instruction is invalid, so we craft a fake "nop" (to make the rest of the code work)
             # and we just overwrite it as data with a comment
             fake_ins = InstructionWrapper(list(md.disasm(b"\x1f\x20\x03\xd5", addr+ins))[0]) # bytes for nop
-            fake_ins.mnemonic = ".quad 0x%x // invalid instruction" % int.from_bytes(bytes[ins:ins+4], byteorder="little") # are we sure about 'little'? 
+            fake_ins.mnemonic = ".word 0x%x // invalid instruction" % int.from_bytes(bytes[ins:ins+4], byteorder="little") # are we sure about 'little'? 
             result += [fake_ins]
     return result
 
@@ -604,7 +613,7 @@ class Function():
 
 
     def __str__(self):
-        assert self.cache, "Function not disassembled!"
+        assert self.cache, f"Function {self.name} not disassembled!"
 
         results = []
         # Put all function names and define them.
@@ -766,7 +775,9 @@ class Section():
         self.align = min(16, align)
         self.named_globals = defaultdict(list)
         self.symbols = defaultdict(list)
-        self.flags = f", \"{flags}\"" if len(flags) else ""
+        self.flags = f", \"{flags}\"" if len(flags) else ', "aw", @progbits'
+        if name in list(TRAITOR_SECS)+NO_FLAGS_SECS: # linker will complain if you put flags in those 
+            self.flags = ""
 
     def load(self):
         assert not self.cache
