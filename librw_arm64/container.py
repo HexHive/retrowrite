@@ -30,7 +30,9 @@ symbol_names = set() # global set of symbol names to avoid duplicates
 def disasm_bytes(bytes, addr):
     md = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
     md.syntax = CS_OPT_SYNTAX_ATT
-    md.detail = True
+    # XXX needed for ASAN
+    # but consumes 50% more memory and speed (the python retrowrite process)
+    # md.detail = True  
     result = []
     for ins in range(0, len(bytes), 4):
         disasm = list(md.disasm(bytes[ins:ins+4], addr+ins))
@@ -171,8 +173,8 @@ class Container():
                 # special case for _start, there is no ret, as it ends on the call to abort
                 if function.name == "_start":
                     decoded = disasm_bytes(bytes[-4:], function.start + c)[0]
-                    target = decoded.operands[-1].imm
                     if decoded.mnemonic == "bl":
+                        target = int(decoded.op_str.split('#')[-1], 16)  # bl #0xdeadcafe
                         if target in self.plt  and self.plt[target] == "abort":
                             break
                 # special case, only 2 instructions for those functions
@@ -358,7 +360,7 @@ class Function():
         for instruction in self.cache:
             if instruction.mnemonic in ["tbz", "tbnz"]:
                 start = instruction.address
-                target = instruction.cs.operands[-1].imm
+                target = int(instruction.cs.op_str.split('#')[-1], 16)  # tbz x0, #0x1f, #0xdeadcafe
                 next_instruction = start + INSTR_SIZE
                 instrs = self.count_instructions(start, target)
                 if instrs > 2**12: #32kB = 2^15 bytes = (2^15 / 4) instrs
@@ -370,7 +372,7 @@ class Function():
                         ".LC%x" % target, ".tbz_%x_true" % start)
             if instruction.cs.mnemonic.startswith("b.") or instruction.cs.mnemonic in ["cbz", "cbnz"]:
                 start = instruction.address
-                target = instruction.cs.operands[-1].imm
+                target = int(instruction.cs.op_str.split('#')[-1], 16)  # cbz x0, #0xdeadcafe
                 next_instruction = start + INSTR_SIZE
                 instrs = self.count_instructions(start, target)
                 # if instruction.address == 0x53e684:

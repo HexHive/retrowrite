@@ -231,7 +231,7 @@ class Rewriter():
         # here we insert the list of the original addresses of the sections
         # so that we keep them the same during linking and reproduce the virtual layout
         fd.write(f"// SECTION: .fake.elf_header - {hex(FAKE_ELF_BASE)}" + "\n")
-        def force_section_addr(name, base, fd):
+        def force_section_addr(name, base, fd, padding=0):
             fd.write(f"// SECTION: {name} - {hex(base)}" + "\n")
 
         for sec in self.container.datasections.values():
@@ -246,10 +246,10 @@ class Rewriter():
 
         if not self.container.loader.is_pie():
             FAKE_ELF_BASE = 0x2000000
-            for sec in self.container.datasections.values():
+            for e, sec in enumerate(self.container.datasections.values()):
                 if sec.name in TRAITOR_SECS:
                     if "interp" in sec.name: continue
-                    force_section_addr(sec.name, (3*FAKE_ELF_BASE + 2*sec.base) & 0xffffffffffffff00, fd)
+                    force_section_addr(sec.name, (FAKE_ELF_BASE + sec.base + 0x10000*e) & 0xffffffffffffff00, fd)
             for sec in self.container.codesections.values():
                 if ".text" in sec.name:
                     force_section_addr(sec.name, 2*FAKE_ELF_BASE + sec.base, fd)
@@ -358,8 +358,9 @@ class Symbolizer():
                 function.addr_to_idx[instruction.address] = inst_idx
 
             for inst_idx, instruction in enumerate(function.cache):
-                is_jmp = CS_GRP_JUMP in instruction.cs.groups
                 is_call = instruction.cs.mnemonic in ["bl", "blr"]
+                is_jmp = instruction.cs.mnemonic in ['tbz', 'tbnz', 'cbz', 'cbnz', 'b'] \
+                        or instruction.mnemonic.startswith("b.")
 
                 if not (is_jmp or is_call):
                     # https://idasuckless.github.io/the-brk-is-a-lie.html
@@ -392,10 +393,11 @@ class Symbolizer():
                         function.nexts[inst_idx].append("undef")
 
                 target = 0
-                if instruction.cs.operands[-1].type == CS_OP_IMM: # b 0xf20
-                    target = instruction.cs.operands[-1].imm
-                elif instruction.cs.operands[-1].type == CS_OP_REG: # br x0
+                if instruction.cs.mnemonic in ["br", "blr"]: # br x0
                     function.possible_switches += [instruction.address]
+                else: 
+                    target = int(instruction.cs.op_str.split('#')[-1], 16) # b #0xf20
+
                 if target:
                     # Check if the target is in a code section.
                     # we exclude .plt as it means it's a call to an imported function
@@ -709,7 +711,7 @@ class Symbolizer():
             secname = f".fake{secname}"
         else:
             base = container.datasections[secname].base
-        reg_name = instruction.reg_writes()[0]
+        reg_name = instruction.op_str.split(",")[0]
 
 
         # old
@@ -784,8 +786,9 @@ class Symbolizer():
 
         Rewriter.total_globals += 1
 
-        orig_off = inst.cs.operands[1].imm
-        orig_reg = inst.reg_writes()[0]
+        orig_off = int(inst.cs.op_str.split("#")[-1], 16)
+        orig_reg = inst.cs.op_str.split(',')[0]
+
 
         possible_sections = []
         for name,s in list(container.datasections.items()) + list(container.codesections.items()):
@@ -1165,67 +1168,15 @@ class Symbolizer():
                         # will be calculated against the landing pad, not the instrumented .text
                         # and there's no need to symbolize those offsets.
                         self._adjust_global_access(container, function, edx, inst)
-                        orig_off = inst.cs.operands[1].imm
-                        orig_reg = inst.reg_writes()[0]
+                        orig_off = int(inst.cs.op_str.split("#")[-1], 16)
+                        orig_reg = inst.cs.op_str.split(',')[0]
                         inst.instrument_after(InstrumentedInstruction(f"add {orig_reg}, {orig_reg}, {orig_off & 0xfff}"))
 
-
-
-                mem_access, _ = inst.get_mem_access_op()
-
-                if inst.mnemonic == "ldr" and not mem_access: # means it is something like 'ldr x0, #0xcafe'
-                    value = inst.cs.operands[1].imm
+                # if it is something like 'ldr x0, #0xcafe'
+                if inst.mnemonic == "ldr" and not "[" in inst.cs.op_str: 
+                    value = int(inst.cs.op_str.split("#")[-1], 16)
                     inst.op_str = inst.op_str.replace("#0x%x" % value, ".LC%x" % value)
 
-                if not mem_access:
-                    continue
-
-                # Now we have a memory access,
-                # check if it is rip relative.
-                base = mem_access.base
-                # XXX: ARM
-                if base == X86_REG_RIP:
-                    debug(f"INSTRUCTION CHANGED FROM {inst}  ", end="")
-                    value = mem_access.disp
-                    ripbase = inst.address + inst.sz
-                    target = ripbase + value
-
-                    is_an_import = False
-
-                    for relocation in container.relocations[".dyn"]:
-                        if relocation['st_value'] == target:
-                            is_an_import = relocation['name']
-                            sfx = ""
-                            break
-                        elif target in container.plt:
-                            is_an_import = container.plt[target]
-                            sfx = "@PLT"
-                            break
-                        elif relocation['offset'] == target:
-                            is_an_import = relocation['name']
-                            sfx = "@GOTPCREL"
-                            break
-
-                    if is_an_import:
-                        print(is_an_import)
-                        inst.op_str = inst.op_str.replace(
-                            hex(value), "%s%s" % (is_an_import, sfx))
-                    else:
-                        # Check if target is contained within a known region
-                        in_region = self._is_target_in_region(
-                            container, target)
-                        if in_region:
-                            inst.op_str = inst.op_str.replace(
-                                hex(value), ".LC%x" % (target))
-                        else:
-                            target, adjust = self._adjust_target(
-                                container, target)
-                            inst.op_str = inst.op_str.replace(
-                                hex(value), "%d+.LC%x" % (adjust, target))
-                            print("[*] Adjusted: %x -- %d+.LC%x" %
-                                  (inst.address, adjust, target))
-
-                    debug(f"TO:   {inst}")
 
     def _handle_relocation(self, container, section, rel):
         reloc_type = rel['type']
