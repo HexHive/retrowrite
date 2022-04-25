@@ -117,6 +117,7 @@ class Rewriter():
         for sec, section in self.container.datasections.items():
             section.load()
 
+        info("Disassembling...")
         for _, function in self.container.functions.items():
             if function.name in Rewriter.GCC_FUNCTIONS:
                 container.ignore_function_addrs += [function.start]
@@ -124,6 +125,7 @@ class Rewriter():
             function.disasm()
 
     def symbolize(self):
+        info("Symbolizing...")
         symb = Symbolizer()
         symb.recover_eh_frame(self.container, None)
         symb.symbolize_data_sections(self.container, None)
@@ -268,6 +270,7 @@ class Rewriter():
             fd.write(f"// SECTION: .rela.plt - {hex(int(1.5*FAKE_ELF_BASE))}" + "\n")
             fd.write(f"// SECTION: .eh_frame - {hex(int(0.8*FAKE_ELF_BASE))}" + "\n") 
             fd.write(f"// SECTION: .gnu.hash - {hex(int(0.7*FAKE_ELF_BASE))}" + "\n")
+            fd.write(f"// SECTION: .note.gnu.build-id - {hex(int(0.6*FAKE_ELF_BASE))}" + "\n")
             fd.write(f"// NOPIE" + "\n")
 
         # here we insert the list of dependencies of the elf,
@@ -419,23 +422,22 @@ class Symbolizer():
                         if any(exit in name for exit in ["abort", "exit"]): #XXX: fix this ugly hack
                             function.nexts[inst_idx] = []
                     else:
-                        critical(hex(target))
                         critical(instruction)
                         critical("target outside code section. Aborting.")
-                        exit(1)
-                        gotent = container.is_target_gotplt(target)
-                        if gotent:
-                            found = False
-                            for relocation in container.relocations[".dyn"]:
-                                if gotent == relocation['offset']:
-                                    instruction.op_str = "{}@PLT".format(
-                                        relocation['name'])
-                                    found = True
-                                    break
-                            if not found:
-                                print("[x] Missed GOT entry!")
-                        else:
-                            print("[x] Missed call target: %x" % (target))
+                        continue
+                        # gotent = container.is_target_gotplt(target)
+                        # if gotent:
+                            # found = False
+                            # for relocation in container.relocations[".dyn"]:
+                                # if gotent == relocation['offset']:
+                                    # instruction.op_str = "{}@PLT".format(
+                                        # relocation['name'])
+                                    # found = True
+                                    # break
+                            # if not found:
+                                # print("[x] Missed GOT entry!")
+                        # else:
+                            # print("[x] Missed call target: %x" % (target))
 
                     if is_jmp:
                         if target in function.addr_to_idx:
@@ -902,7 +904,7 @@ class Symbolizer():
 
         if len(possible_sections) == 0:
             critical(f"No possible section found for {inst}. Aborting")
-            exit(1)
+            return
 
         # self._adjust_adrp_section_pointer(container, possible_sections[0], orig_off, inst)
         # return
@@ -1282,6 +1284,8 @@ str x6, [x7]
 
         dw_info = container.loader.elffile.get_dwarf_info()
         if dw_info.eh_frame_sec == None: return 
+
+        info("Recovering .eh_frame information")
         ehframe_entries = dw_info.EH_CFI_entries()
 
 

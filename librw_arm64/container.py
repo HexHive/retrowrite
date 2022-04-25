@@ -16,6 +16,7 @@ INSTR_SIZE = 4
 # for this reason, we just use a renamed version of them (.fake.got etc)
 TRAITOR_SECS = {
     ".got",
+    ".got.plt",
     ".bss",
     ".data",
     ".rodata",
@@ -33,6 +34,12 @@ NO_FLAGS_SECS = [
     ".note.gnu.build_id",
     ".note.go.build_id",
     ]
+
+# Sections that might be merged by the linker, and might disrupt
+# layout replication. We change their name.
+CHANGE_NAME_SECS = [
+    ".data.rel.ro.local"
+]
 
 symbol_names = set() # global set of symbol names to avoid duplicates
 

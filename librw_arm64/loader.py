@@ -9,7 +9,7 @@ from elftools.elf.relocation import RelocationSection
 from elftools.elf.constants import SH_FLAGS
 from elftools.dwarf.callframe import FDE
 
-from .container import Container, Function, Section, disasm_bytes
+from .container import Container, Function, Section, disasm_bytes, CHANGE_NAME_SECS
 from .rw import Rewriter
 
 from librw_arm64.util.logging import *
@@ -190,13 +190,6 @@ class Loader():
             section = self.elffile.get_section_by_name(sec)
             data = section.data()
             more = bytearray()
-            # if sec == ".init_array":
-                # if len(data) > 8:
-                    # data = data[8:]
-                # else:
-                    # data = b''
-                # more.extend(data)
-            # else:
             more.extend(data)
             if len(more) < sval['sz']:
                 more.extend(
@@ -206,6 +199,8 @@ class Loader():
             debug("Adding section: ", sec, hex(sval["base"]), "with size", hex(sval['sz']),
                   "with align ", sval['align'])
             sec = sec.replace("-","_")
+            if sec in CHANGE_NAME_SECS:
+                sec = "a"+sec
             ds = Section(sec, sval["base"], sval["sz"], bytes,
                              (sval['align']))
 

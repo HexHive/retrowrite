@@ -10,11 +10,11 @@ CRITICAL="\x1b[41m"
 
 def debug(*s, end="\n"):
     if DEBUG_LOG:
-        print(f"[{BLUE}DEBUG{CLEAR}] {' '.join(s)}", end=end)
+        print(f"[{BLUE}DEBUG{CLEAR}]", end=end, *s)
         sys.stdout.flush()
 
 def info(*s, end="\n"):
-    print(f"[{GREEN}INFO{CLEAR}] {' '.join(s)}", end=end)
+    print(f"[{GREEN}INFO{CLEAR}]", end=end, *s)
 
 def critical(*s, end="\n"):
-    print(f"[{CRITICAL}CRITICAL{CLEAR}] {' '.join(s)}", end=end)
+    print(f"[{CRITICAL}CRITICAL{CLEAR}]", end=end, *s)
