@@ -142,6 +142,8 @@ class Container():
             found = find_section(location)
             if not found: 
                 continue
+            if symbol.name in self.function_names:
+                continue
 
             self.datasections[found].add_symbol(location, symbol)
 
