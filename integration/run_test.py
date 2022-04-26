@@ -37,6 +37,7 @@ tests = {
 "namd_r"       : "508.namd_r",
 "povray_r"     : "511.povray_r",
 "wrf_r"        : "521.wrf_r",
+"diffwrf_521"  : "521.wrf_r",
 "cam4_r"       : "527.cam4_r",
 "fotonik3d_r"  : "549.fotonik3d_r",
 "roms_r"       : "554.roms_r",
