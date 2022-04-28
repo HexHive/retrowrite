@@ -34,6 +34,11 @@ FAKE_ELF_BASE = 0x4000000
 # guaranteed to find everything, and might lead to crashes in rare edge cases.
 detect_and_symbolize_switch_tables = False
 
+# if False, use call emulation to support C++ exceptions and other 
+# stack unwinding mechanisms. (e.g. we change a call to a push+jmp)
+# if True, we try to parse and detect LSDA tables. It works quite well
+# but might lead to failures in rewriting in rare edge cases
+detect_and_symbolize_lsda_tables = False
 
 class Rewriter():
     detailed_disasm = False
@@ -1567,7 +1572,7 @@ class LSDATable():
                 raise Exception("what")
 
         self.typetable_encoding = self.elf.read(1)[0] 
-        critical("TT" + hex(self.typetable_encoding))
+        critical("TT encoding " + hex(self.typetable_encoding) + " of function " + hex(self.fstart))
         # NOW TODO : the encoding is the right one + 1, which is weird
 
         if self.typetable_encoding != DW_EH_encoding_flags['DW_EH_PE_omit']:
@@ -1617,7 +1622,7 @@ class LSDATable():
 
     def _parse_lsda_entries(self):
         start_cs_offset = self.elf.tell()
-        critical("TT start_cs_offset " + hex(start_cs_offset))
+        debug("TT start_cs_offset " + hex(start_cs_offset))
         action_count = 0
 
         while self.elf.tell() - start_cs_offset < self.header["call_site_table_len"]:
@@ -1656,7 +1661,9 @@ class LSDATable():
             if action['act_filter'] < 0:
                 critical("Negative filter, consult https://www.airs.com/blog/archives/464")
                 exit(1)
-            num_types = max(num_types, action['act_filter'])
+
+            if action['act_filter'] != 0x7f:
+                num_types = max(num_types, action['act_filter'])
             self.actions.append(action)
 
         if not self.typetable_offset_present: return
@@ -1665,9 +1672,10 @@ class LSDATable():
 
         sizes = {2: 2, 3: 4, 4: 8} # hword, word, xword
         lenght_of_type_row = sizes[self.typetable_encoding & 7]
-        critical("TT length_of_type_row " + hex(lenght_of_type_row))
-        critical("TT ttendloc  " + hex(ttendloc))
-        critical("TT seeking at  " + hex(ttendloc - len(self.actions) * lenght_of_type_row))
+        debug("TT length_of_type_row " + hex(lenght_of_type_row))
+        debug("TT ttendloc  " + hex(ttendloc))
+        debug("TT num_types  " + str(num_types))
+        debug("TT seeking at  " + hex(ttendloc - num_types * lenght_of_type_row))
         self.elf.seek(ttendloc - num_types * lenght_of_type_row)
 
         for i in range(num_types):

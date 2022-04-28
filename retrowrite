@@ -224,7 +224,7 @@ if __name__ == "__main__":
         print(f"Architecture {arch} not supported!")
         exit(1)
 
-    if args.module: Rewriter.detailed_disasm = True
+    if args.module and args.module != "thefix": Rewriter.detailed_disasm = True
 
     loader = Loader(args.bin)
 
@@ -283,7 +283,7 @@ if __name__ == "__main__":
         else:
             asan(rw, loader, args)
             rw.dump()
-    elif args.module:
+    elif args.module and args.module != "thefix":
         try:
             module = importlib.import_module(rwtools_path + args.module + ".instrument")
             instrument = getattr(module, "Instrument")

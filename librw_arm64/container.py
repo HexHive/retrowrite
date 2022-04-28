@@ -24,6 +24,7 @@ TRAITOR_SECS = {
     ".fini_array",
     ".interp",
     ".data.rel.ro",
+    ".noptrdata",
 }
 
 NO_FLAGS_SECS = [
@@ -48,6 +49,7 @@ def disasm_bytes(bytes, addr):
     md.syntax = CS_OPT_SYNTAX_ATT
     # XXX needed for ASAN and probably other instrumentation passes
     # but consumes 50% more memory and speed (the python retrowrite process)
+    # md.detail = librw_arm64.rw.Rewriter.detailed_disasm
     md.detail = librw_arm64.rw.Rewriter.detailed_disasm
     result = []
     for ins in range(0, len(bytes), 4):
