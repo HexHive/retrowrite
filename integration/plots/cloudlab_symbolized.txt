@@ -2,26 +2,26 @@
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 #                                                                            #
 # 'reportable' flag not set during run                                       #
+# 519.lbm_r (base) did not have enough runs!                                 #
 # 554.roms_r (base) did not have enough runs!                                #
-# 510.parest_r (base) did not have enough runs!                              #
-# 503.bwaves_r (base) did not have enough runs!                              #
-# 521.wrf_r (base) did not have enough runs!                                 #
-# 508.namd_r (base) did not have enough runs!                                #
+# 511.povray_r (base) did not have enough runs!                              #
 # 544.nab_r (base) did not have enough runs!                                 #
 # 549.fotonik3d_r (base) did not have enough runs!                           #
-# 507.cactuBSSN_r (base) did not have enough runs!                           #
-# 526.blender_r (base) did not have enough runs!                             #
-# 511.povray_r (base) did not have enough runs!                              #
-# 519.lbm_r (base) did not have enough runs!                                 #
+# 508.namd_r (base) did not have enough runs!                                #
+# 510.parest_r (base) did not have enough runs!                              #
 # 538.imagick_r (base) did not have enough runs!                             #
 # 527.cam4_r (base) did not have enough runs!                                #
+# 507.cactuBSSN_r (base) did not have enough runs!                           #
+# 526.blender_r (base) did not have enough runs!                             #
+# 521.wrf_r (base) did not have enough runs!                                 #
+# 503.bwaves_r (base) did not have enough runs!                              #
 #                                                                            #
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 ##############################################################################
                           SPEC(R) CPU2017 Floating Point Rate Result
                                        My Corporation 
 
-         CPU2017 License: nnn (Your SPEC license number)          Test date: Nov-2020
+         CPU2017 License: nnn (Your SPEC license number)          Test date: Apr-2022
          Test sponsor: My Corporation                 Hardware availability:         
          Tested by:    My Corporation                 Software availability:         
 
@@ -29,34 +29,34 @@
                 Base     Base       Base        Peak     Peak       Peak
 Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate 
 -------------- ------  ---------  ---------    ------  ---------  ---------   
-503.bwaves_r                                NR                                 
-507.cactuBSSN_r                              NR                                 
-508.namd_r                                  NR                                 
-510.parest_r                                NR                                 
-511.povray_r                                NR                                 
-519.lbm_r           1       1197      0.881  *                                 
-521.wrf_r                                   NR                                 
-526.blender_r                               NR                                 
-527.cam4_r                                  NR                                 
-538.imagick_r       1       1663      1.50   *                                 
-544.nab_r           1       1475      1.14   *                                 
-549.fotonik3d_r                              NR                                 
-554.roms_r                                  NR                                 
+503.bwaves_r        1       3095      3.24   *                                 
+507.cactuBSSN_r      1       1140      1.11   *                                 
+508.namd_r          1        700      1.36   *                                 
+510.parest_r        1       1993      1.31   *                                 
+511.povray_r        1       1746      1.34   *                                 
+519.lbm_r           1       1200      0.878  *                                 
+521.wrf_r           1       2588      0.865  *                                 
+526.blender_r       1       1162      1.31   *                                  
+527.cam4_r          1       1711      1.02   *                                 
+538.imagick_r       1       1656      1.50   *                                 
+544.nab_r           1       1470      1.14   *                                 
+549.fotonik3d_r      1       2550      1.53   *                                 
+554.roms_r          1       1919      0.828  *                                 
 ==============================================================================
-503.bwaves_r                                NR                                 
-507.cactuBSSN_r                              NR                                 
-508.namd_r                                  NR                                 
-510.parest_r                                NR                                 
-511.povray_r                                NR                                 
-519.lbm_r           1       1197      0.881  *                                 
-521.wrf_r                                   NR                                 
-526.blender_r                               NR                                 
-527.cam4_r                                  NR                                 
-538.imagick_r       1       1663      1.50   *                                 
-544.nab_r           1       1475      1.14   *                                 
-549.fotonik3d_r                              NR                                 
-554.roms_r                                  NR                                 
- Est. SPECrate2017_fp_base            1.15 
+503.bwaves_r        1       3095      3.24   *                                 
+507.cactuBSSN_r      1       1140      1.11   *                                 
+508.namd_r          1        700      1.36   *                                 
+510.parest_r        1       1993      1.31   *                                 
+511.povray_r        1       1746      1.34   *                                 
+519.lbm_r           1       1200      0.878  *                                 
+521.wrf_r           1       2588      0.865  *                                 
+526.blender_r       1       1162      1.31   *                                  
+527.cam4_r          1       1711      1.02   *                                 
+538.imagick_r       1       1656      1.50   *                                 
+544.nab_r           1       1470      1.14   *                                 
+549.fotonik3d_r      1       2550      1.53   *                                 
+554.roms_r          1       1919      0.828  *                                 
+ Est. SPECrate2017_fp_base            1.24 
  Est. SPECrate2017_fp_peak                                          Not Run
 
 
@@ -73,14 +73,14 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                Other:  
               Memory: 62.918 GB fixme: If using DDR3, format is:
                       'N GB (M x N GB nRxn PCn-nnnnnR-n, ECC)'
-             Storage: 16 GB  add more disk info here
+             Storage: 110 GB  add more disk info here
                Other:  
 
 
                                            SOFTWARE
                                            --------
-                  OS: Ubuntu 18.04.1 LTS
-                      4.15.0-121-generic
+                  OS: Ubuntu 18.04.5 LTS
+                      4.15.0-176-generic
             Compiler: C/C++/Fortran: Version 6.2.0 of GCC, the
                       GNU Compiler Collection
             Parallel: No
@@ -102,8 +102,7 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                                         --------------
      Sysinfo program /data/cpu2017_runner/bin/sysinfo
      Rev: r5797 of 2017-06-14 96c45e4568ad54c135fd618bcc091c0f
-     running on node-0.retrowrite-test4.cloudsuite3-pg0.utah.cloudlab.us Tue Nov 17 06:28:21
-     2020
+     running on node-0.cloudlab2.cloudsuite3-pg0.utah.cloudlab.us Wed Apr 27 15:56:28 2022
     
      SUT (System Under Test) info as seen by some common utilities.
      For more information on this section, see
@@ -148,34 +147,34 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
      physical chip.
     
      From /proc/meminfo
-        MemTotal:       65974576 kB
+        MemTotal:       65974512 kB
         HugePages_Total:       0
         Hugepagesize:       2048 kB
     
      /usr/bin/lsb_release -d
-        Ubuntu 18.04.1 LTS
+        Ubuntu 18.04.5 LTS
     
      From /etc/*release* /etc/*version*
         debian_version: buster/sid
         os-release:
            NAME="Ubuntu"
-           VERSION="18.04.1 LTS (Bionic Beaver)"
+           VERSION="18.04.5 LTS (Bionic Beaver)"
            ID=ubuntu
            ID_LIKE=debian
-           PRETTY_NAME="Ubuntu 18.04.1 LTS"
+           PRETTY_NAME="Ubuntu 18.04.5 LTS"
            VERSION_ID="18.04"
            HOME_URL="https://www.ubuntu.com/"
            SUPPORT_URL="https://help.ubuntu.com/"
     
      uname -a:
-        Linux node-0.retrowrite-test4.cloudsuite3-pg0.utah.cloudlab.us 4.15.0-121-generic
-        #123-Ubuntu SMP Mon Oct 5 16:19:23 UTC 2020 aarch64 aarch64 aarch64 GNU/Linux
+        Linux node-0.cloudlab2.cloudsuite3-pg0.utah.cloudlab.us 4.15.0-176-generic #185-Ubuntu
+        SMP Tue Mar 29 17:45:23 UTC 2022 aarch64 aarch64 aarch64 GNU/Linux
     
-     run-level 5 Nov 16 10:36
+     run-level 5 Apr 25 18:15
     
      SPEC is set to: /data/cpu2017_runner
         Filesystem     Type  Size  Used Avail Use% Mounted on
-        /dev/sda1      ext4   16G   10G  4.9G  67% /
+        /dev/sda1      ext4  110G   29G   77G  27% /
     
      Additional information from dmidecode follows.  WARNING: Use caution when you interpret
      this section. The 'dmidecode' program reads system data which is "intended to allow
@@ -187,7 +186,145 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                                     Compiler Version Notes
                                     ----------------------
     ==============================================================================
-     CC  519.lbm_r(base) 538.imagick_r(base) 544.nab_r(base)
+     CXXC 508.namd_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=g++
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     CC  511.povray_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=g++
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     FC  507.cactuBSSN_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=g++
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    Using built-in specs.
+    COLLECT_GCC=gfortran
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     CC  519.lbm_r(base) 538.imagick_r(base)
 
     ------------------------------------------------------------------------------
     Using built-in specs.
@@ -211,18 +348,180 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
     Thread model: posix
     gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
     ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     CC  544.nab_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/9/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu
+      9.4.0-1ubuntu1~20.04.1'
+      --with-bugurl=file:///usr/share/doc/gcc-9/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,gm2 --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-9
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu
+      --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --with-target-system-zlib=auto
+      --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419
+      --disable-werror --enable-checking=release --build=aarch64-linux-gnu
+      --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     FC  503.bwaves_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gfortran
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     CC  521.wrf_r(base) 527.cam4_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gfortran
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    Using built-in specs.
+    COLLECT_GCC=gcc
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
+      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-7
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
+      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --enable-multiarch
+      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
+      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
+      --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     FC  549.fotonik3d_r(base) 554.roms_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gfortran
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/9/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu
+      9.4.0-1ubuntu1~20.04.1'
+      --with-bugurl=file:///usr/share/doc/gcc-9/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,gm2 --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-9
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu
+      --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --with-target-system-zlib=auto
+      --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419
+      --disable-werror --enable-checking=release --build=aarch64-linux-gnu
+      --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1) 
+    ------------------------------------------------------------------------------
+
+                                   Base Runtime Environment
+                                   ------------------------
+C++ benchmarks:
+
+      508.namd_r: No flags used
+
+Benchmarks using both C and C++:
+
+    511.povray_r: No flags used
+
 
                                    Base Compiler Invocation
                                    ------------------------
 C benchmarks: 
      gcc
 
+C++ benchmarks:
+
+      508.namd_r: g++
+
+Fortran benchmarks: 
+     gfortran
+
+Benchmarks using both Fortran and C: 
+     gfortran gcc
+
+Benchmarks using both C and C++:
+
+    511.povray_r: g++ gcc
+
+Benchmarks using Fortran, C, and C++: 
+     g++ gcc gfortran
+
 
                                     Base Portability Flags
                                     ----------------------
-     519.lbm_r: -DSPEC_LP64
- 538.imagick_r: -DSPEC_LP64
-     544.nab_r: -DSPEC_LP64
+    503.bwaves_r: -DSPEC_LP64
+ 507.cactuBSSN_r: -DSPEC_LP64
+      508.namd_r: -DSPEC_LP64
+    511.povray_r: -DSPEC_LP64
+       519.lbm_r: -DSPEC_LP64
+       521.wrf_r: -DSPEC_CASE_FLAG -fconvert=big-endian -DSPEC_LP64
+      527.cam4_r: -DSPEC_CASE_FLAG -DSPEC_LP64
+   538.imagick_r: -DSPEC_LP64
+       544.nab_r: -DSPEC_LP64
+ 549.fotonik3d_r: -DSPEC_LP64
+      554.roms_r: -DSPEC_LP64
 
 
                                    Base Optimization Flags
@@ -230,6 +529,39 @@ C benchmarks:
 C benchmarks: 
      -mabi=lp64 -std=c99 -g -march=native -fno-unsafe-math-optimizations
      -fno-tree-loop-vectorize -O3
+
+C++ benchmarks:
+
+      508.namd_r: -mabi=lp64 -g -march=native -fno-unsafe-math-optimizations
+                  -fno-tree-loop-vectorize -O3
+
+Fortran benchmarks: 
+     -mabi=lp64 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
+
+Benchmarks using both Fortran and C: 
+     -mabi=lp64 -std=c99 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
+
+Benchmarks using both C and C++:
+
+    511.povray_r: -mabi=lp64 -std=c99 -g -march=native
+                  -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3
+
+Benchmarks using Fortran, C, and C++: 
+     -mabi=lp64 -std=c99 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
+
+
+                                       Base Other Flags
+                                       ----------------
+C++ benchmarks:
+
+      508.namd_r: No flags used
+
+Benchmarks using both C and C++:
+
+    511.povray_r: No flags used
 
 
   SPEC is a registered trademark of the Standard Performance Evaluation
@@ -240,49 +572,49 @@ C benchmarks:
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 #                                                                            #
 # 'reportable' flag not set during run                                       #
+# 519.lbm_r (base) did not have enough runs!                                 #
 # 554.roms_r (base) did not have enough runs!                                #
-# 510.parest_r (base) did not have enough runs!                              #
-# 503.bwaves_r (base) did not have enough runs!                              #
-# 521.wrf_r (base) did not have enough runs!                                 #
-# 508.namd_r (base) did not have enough runs!                                #
+# 511.povray_r (base) did not have enough runs!                              #
 # 544.nab_r (base) did not have enough runs!                                 #
 # 549.fotonik3d_r (base) did not have enough runs!                           #
-# 507.cactuBSSN_r (base) did not have enough runs!                           #
-# 526.blender_r (base) did not have enough runs!                             #
-# 511.povray_r (base) did not have enough runs!                              #
-# 519.lbm_r (base) did not have enough runs!                                 #
+# 508.namd_r (base) did not have enough runs!                                #
+# 510.parest_r (base) did not have enough runs!                              #
 # 538.imagick_r (base) did not have enough runs!                             #
 # 527.cam4_r (base) did not have enough runs!                                #
+# 507.cactuBSSN_r (base) did not have enough runs!                           #
+# 526.blender_r (base) did not have enough runs!                             #
+# 521.wrf_r (base) did not have enough runs!                                 #
+# 503.bwaves_r (base) did not have enough runs!                              #
 #                                                                            #
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 ##############################################################################
 ----------------------------------------------------------------------------------------------
 For questions about this result, please contact the tester.
 For other inquiries, please contact info@spec.org.
-Copyright 2017-2020 Standard Performance Evaluation Corporation
-Tested with SPEC CPU2017 v1.0.1 on 2020-11-17 06:28:19-0700.
-Report generated on 2020-11-17 07:40:54 by CPU2017 ASCII formatter v5178.
+Copyright 2017-2022 Standard Performance Evaluation Corporation
+Tested with SPEC CPU2017 v1.0.1 on 2022-04-27 15:56:26-0600.
+Report generated on 2022-04-27 21:27:21 by CPU2017 ASCII formatter v5178.
 ##############################################################################
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 #                                                                            #
 # 'reportable' flag not set during run                                       #
 # 500.perlbench_r (base) did not have enough runs!                           #
-# 502.gcc_r (base) did not have enough runs!                                 #
-# 525.x264_r (base) did not have enough runs!                                #
-# 523.xalancbmk_r (base) did not have enough runs!                           #
-# 548.exchange2_r (base) did not have enough runs!                           #
-# 557.xz_r (base) did not have enough runs!                                  #
 # 531.deepsjeng_r (base) did not have enough runs!                           #
 # 520.omnetpp_r (base) did not have enough runs!                             #
 # 505.mcf_r (base) did not have enough runs!                                 #
 # 541.leela_r (base) did not have enough runs!                               #
+# 502.gcc_r (base) did not have enough runs!                                 #
+# 525.x264_r (base) did not have enough runs!                                #
+# 548.exchange2_r (base) did not have enough runs!                           #
+# 523.xalancbmk_r (base) did not have enough runs!                           #
+# 557.xz_r (base) did not have enough runs!                                  #
 #                                                                            #
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 ##############################################################################
                              SPEC(R) CPU2017 Integer Rate Result
                                        My Corporation 
 
-         CPU2017 License: nnn (Your SPEC license number)          Test date: Nov-2020
+         CPU2017 License: nnn (Your SPEC license number)          Test date: Apr-2022
          Test sponsor: My Corporation                 Hardware availability:         
          Tested by:    My Corporation                 Software availability:         
 
@@ -290,28 +622,28 @@ Report generated on 2020-11-17 07:40:54 by CPU2017 ASCII formatter v5178.
                 Base     Base       Base        Peak     Peak       Peak
 Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate 
 -------------- ------  ---------  ---------    ------  ---------  ---------   
-500.perlbench_r      1       1416       1.12  *                                 
-502.gcc_r                                   NR                                 
-505.mcf_r           1       1500       1.08  *                                 
-520.omnetpp_r                               NR                                 
-523.xalancbmk_r                              NR                                 
-525.x264_r                                  NR                                 
-531.deepsjeng_r                              NR                                 
-541.leela_r                                 NR                                 
-548.exchange2_r                              NR                                 
-557.xz_r            1        920       1.17  *                                 
+500.perlbench_r      1       1457      1.09   *                                 
+502.gcc_r           1       1066      1.33   *                                 
+505.mcf_r           1       1498      1.08   *                                 
+520.omnetpp_r       1       1689      0.777  *                                 
+523.xalancbmk_r      1       1308      0.808  *                                 
+525.x264_r          1       1088      1.61   *                                 
+531.deepsjeng_r      1        795      1.44   *                                 
+541.leela_r         1       1093      1.52   *                                 
+548.exchange2_r      1        815      3.22   *                                 
+557.xz_r            1        919      1.18   *                                 
 ==============================================================================
-500.perlbench_r      1       1416       1.12  *                                 
-502.gcc_r                                   NR                                 
-505.mcf_r           1       1500       1.08  *                                 
-520.omnetpp_r                               NR                                 
-523.xalancbmk_r                              NR                                 
-525.x264_r                                  NR                                 
-531.deepsjeng_r                              NR                                 
-541.leela_r                                 NR                                 
-548.exchange2_r                              NR                                 
-557.xz_r            1        920       1.17  *                                 
- Est. SPECrate2017_int_base            1.12
+500.perlbench_r      1       1457      1.09   *                                 
+502.gcc_r           1       1066      1.33   *                                 
+505.mcf_r           1       1498      1.08   *                                 
+520.omnetpp_r       1       1689      0.777  *                                 
+523.xalancbmk_r      1       1308      0.808  *                                 
+525.x264_r          1       1088      1.61   *                                 
+531.deepsjeng_r      1        795      1.44   *                                 
+541.leela_r         1       1093      1.52   *                                 
+548.exchange2_r      1        815      3.22   *                                 
+557.xz_r            1        919      1.18   *                                 
+ Est. SPECrate2017_int_base           1.29 
  Est. SPECrate2017_int_peak                                         Not Run
 
 
@@ -328,14 +660,14 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                Other:  
               Memory: 62.918 GB fixme: If using DDR3, format is:
                       'N GB (M x N GB nRxn PCn-nnnnnR-n, ECC)'
-             Storage: 16 GB  add more disk info here
+             Storage: 110 GB  add more disk info here
                Other:  
 
 
                                            SOFTWARE
                                            --------
-                  OS: Ubuntu 18.04.1 LTS
-                      4.15.0-121-generic
+                  OS: Ubuntu 18.04.5 LTS
+                      4.15.0-176-generic
             Compiler: C/C++/Fortran: Version 6.2.0 of GCC, the
                       GNU Compiler Collection
             Parallel: No
@@ -357,8 +689,7 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                                         --------------
      Sysinfo program /data/cpu2017_runner/bin/sysinfo
      Rev: r5797 of 2017-06-14 96c45e4568ad54c135fd618bcc091c0f
-     running on node-0.retrowrite-test4.cloudsuite3-pg0.utah.cloudlab.us Tue Nov 17 07:40:57
-     2020
+     running on node-0.cloudlab2.cloudsuite3-pg0.utah.cloudlab.us Wed Apr 27 21:27:24 2022
     
      SUT (System Under Test) info as seen by some common utilities.
      For more information on this section, see
@@ -403,34 +734,34 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
      physical chip.
     
      From /proc/meminfo
-        MemTotal:       65974576 kB
+        MemTotal:       65974512 kB
         HugePages_Total:       0
         Hugepagesize:       2048 kB
     
      /usr/bin/lsb_release -d
-        Ubuntu 18.04.1 LTS
+        Ubuntu 18.04.5 LTS
     
      From /etc/*release* /etc/*version*
         debian_version: buster/sid
         os-release:
            NAME="Ubuntu"
-           VERSION="18.04.1 LTS (Bionic Beaver)"
+           VERSION="18.04.5 LTS (Bionic Beaver)"
            ID=ubuntu
            ID_LIKE=debian
-           PRETTY_NAME="Ubuntu 18.04.1 LTS"
+           PRETTY_NAME="Ubuntu 18.04.5 LTS"
            VERSION_ID="18.04"
            HOME_URL="https://www.ubuntu.com/"
            SUPPORT_URL="https://help.ubuntu.com/"
     
      uname -a:
-        Linux node-0.retrowrite-test4.cloudsuite3-pg0.utah.cloudlab.us 4.15.0-121-generic
-        #123-Ubuntu SMP Mon Oct 5 16:19:23 UTC 2020 aarch64 aarch64 aarch64 GNU/Linux
+        Linux node-0.cloudlab2.cloudsuite3-pg0.utah.cloudlab.us 4.15.0-176-generic #185-Ubuntu
+        SMP Tue Mar 29 17:45:23 UTC 2022 aarch64 aarch64 aarch64 GNU/Linux
     
-     run-level 5 Nov 16 10:36
+     run-level 5 Apr 25 18:15
     
      SPEC is set to: /data/cpu2017_runner
         Filesystem     Type  Size  Used Avail Use% Mounted on
-        /dev/sda1      ext4   16G   10G  4.9G  68% /
+        /dev/sda1      ext4  110G   30G   77G  28% /
     
      Additional information from dmidecode follows.  WARNING: Use caution when you interpret
      this section. The 'dmidecode' program reads system data which is "intended to allow
@@ -442,55 +773,126 @@ Benchmarks     Copies  Run Time     Rate       Copies  Run Time     Rate
                                     Compiler Version Notes
                                     ----------------------
     ==============================================================================
-     CC  500.perlbench_r(base) 505.mcf_r(base) 557.xz_r(base)
-
+     CXXC 520.omnetpp_r(base) 523.xalancbmk_r(base) 531.deepsjeng_r(base)
+          541.leela_r(base)
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=g++
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/9/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu
+      9.4.0-1ubuntu1~20.04.1'
+      --with-bugurl=file:///usr/share/doc/gcc-9/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,gm2 --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-9
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu
+      --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --with-target-system-zlib=auto
+      --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419
+      --disable-werror --enable-checking=release --build=aarch64-linux-gnu
+      --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     CC  500.perlbench_r(base) 502.gcc_r(base) 505.mcf_r(base) 525.x264_r(base)
+          557.xz_r(base)
     ------------------------------------------------------------------------------
     Using built-in specs.
     COLLECT_GCC=gcc
-    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/7/lto-wrapper
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/9/lto-wrapper
     Target: aarch64-linux-gnu
-    Configured with: ../src/configure -v --with-pkgversion='Ubuntu/Linaro
-      7.5.0-3ubuntu1~18.04' --with-bugurl=file:///usr/share/doc/gcc-7/README.Bugs
-      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++ --prefix=/usr
-      --with-gcc-major-version-only --program-suffix=-7
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu
+      9.4.0-1ubuntu1~20.04.1'
+      --with-bugurl=file:///usr/share/doc/gcc-9/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,gm2 --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-9
       --program-prefix=aarch64-linux-gnu- --enable-shared
       --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
-      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap
-      --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu
+      --enable-libstdcxx-debug --enable-libstdcxx-time=yes
       --with-default-libstdcxx-abi=new --enable-gnu-unique-object
       --disable-libquadmath --disable-libquadmath-support --enable-plugin
-      --enable-default-pie --with-system-zlib --enable-multiarch
-      --enable-fix-cortex-a53-843419 --disable-werror --enable-checking=release
-      --build=aarch64-linux-gnu --host=aarch64-linux-gnu
-      --target=aarch64-linux-gnu
+      --enable-default-pie --with-system-zlib --with-target-system-zlib=auto
+      --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419
+      --disable-werror --enable-checking=release --build=aarch64-linux-gnu
+      --host=aarch64-linux-gnu --target=aarch64-linux-gnu
     Thread model: posix
-    gcc version 7.5.0 (Ubuntu/Linaro 7.5.0-3ubuntu1~18.04) 
+    gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1) 
+    ------------------------------------------------------------------------------
+    
+    ==============================================================================
+     FC  548.exchange2_r(base)
+
+    ------------------------------------------------------------------------------
+    Using built-in specs.
+    COLLECT_GCC=gfortran
+    COLLECT_LTO_WRAPPER=/usr/lib/gcc/aarch64-linux-gnu/9/lto-wrapper
+    Target: aarch64-linux-gnu
+    Configured with: ../src/configure -v --with-pkgversion='Ubuntu
+      9.4.0-1ubuntu1~20.04.1'
+      --with-bugurl=file:///usr/share/doc/gcc-9/README.Bugs
+      --enable-languages=c,ada,c++,go,d,fortran,objc,obj-c++,gm2 --prefix=/usr
+      --with-gcc-major-version-only --program-suffix=-9
+      --program-prefix=aarch64-linux-gnu- --enable-shared
+      --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext
+      --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-clocale=gnu
+      --enable-libstdcxx-debug --enable-libstdcxx-time=yes
+      --with-default-libstdcxx-abi=new --enable-gnu-unique-object
+      --disable-libquadmath --disable-libquadmath-support --enable-plugin
+      --enable-default-pie --with-system-zlib --with-target-system-zlib=auto
+      --enable-objc-gc=auto --enable-multiarch --enable-fix-cortex-a53-843419
+      --disable-werror --enable-checking=release --build=aarch64-linux-gnu
+      --host=aarch64-linux-gnu --target=aarch64-linux-gnu
+    Thread model: posix
+    gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1) 
     ------------------------------------------------------------------------------
 
                                    Base Compiler Invocation
                                    ------------------------
-C benchmarks (except as noted below): 
+C benchmarks: 
      gcc
+
+C++ benchmarks: 
+     g++
+
+Fortran benchmarks: 
+     gfortran
 
 
                                     Base Portability Flags
                                     ----------------------
  500.perlbench_r: -DSPEC_LINUX_AARCH64 -DSPEC_LP64
+       502.gcc_r: -DSPEC_LP64
        505.mcf_r: -DSPEC_LP64
+   520.omnetpp_r: -DSPEC_LP64
+ 523.xalancbmk_r: -DSPEC_LINUX -DSPEC_LP64
+      525.x264_r: -DSPEC_LP64
+ 531.deepsjeng_r: -DSPEC_LP64
+     541.leela_r: -DSPEC_LP64
+ 548.exchange2_r: -DSPEC_LP64
         557.xz_r: -DSPEC_LP64
 
 
                                    Base Optimization Flags
                                    -----------------------
-C benchmarks:
+C benchmarks: 
+     -mabi=lp64 -std=c99 -z muldefs -g -march=native
+     -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3
+     -fgnu89-inline -fno-strict-aliasing
 
- 500.perlbench_r: -mabi=lp64 -std=c99 -z muldefs -g -march=native
-                  -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3
-                  -fgnu89-inline -fno-strict-aliasing
+C++ benchmarks: 
+     -mabi=lp64 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
 
-       505.mcf_r: Same as 500.perlbench_r
-
-        557.xz_r: Same as 500.perlbench_r
+Fortran benchmarks: 
+     -mabi=lp64 -g -march=native -fno-unsafe-math-optimizations
+     -fno-tree-loop-vectorize -O3
 
 
   SPEC is a registered trademark of the Standard Performance Evaluation
@@ -502,21 +904,21 @@ C benchmarks:
 #                                                                            #
 # 'reportable' flag not set during run                                       #
 # 500.perlbench_r (base) did not have enough runs!                           #
-# 502.gcc_r (base) did not have enough runs!                                 #
-# 525.x264_r (base) did not have enough runs!                                #
-# 523.xalancbmk_r (base) did not have enough runs!                           #
-# 548.exchange2_r (base) did not have enough runs!                           #
-# 557.xz_r (base) did not have enough runs!                                  #
 # 531.deepsjeng_r (base) did not have enough runs!                           #
 # 520.omnetpp_r (base) did not have enough runs!                             #
 # 505.mcf_r (base) did not have enough runs!                                 #
 # 541.leela_r (base) did not have enough runs!                               #
+# 502.gcc_r (base) did not have enough runs!                                 #
+# 525.x264_r (base) did not have enough runs!                                #
+# 548.exchange2_r (base) did not have enough runs!                           #
+# 523.xalancbmk_r (base) did not have enough runs!                           #
+# 557.xz_r (base) did not have enough runs!                                  #
 #                                                                            #
 #   INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN -- INVALID RUN  #
 ##############################################################################
 ----------------------------------------------------------------------------------------------
 For questions about this result, please contact the tester.
 For other inquiries, please contact info@spec.org.
-Copyright 2017-2020 Standard Performance Evaluation Corporation
-Tested with SPEC CPU2017 v1.0.1 on 2020-11-17 07:40:55-0700.
-Report generated on 2020-11-17 08:45:18 by CPU2017 ASCII formatter v5178.
+Copyright 2017-2022 Standard Performance Evaluation Corporation
+Tested with SPEC CPU2017 v1.0.1 on 2022-04-27 21:27:22-0600.
+Report generated on 2022-04-28 00:46:26 by CPU2017 ASCII formatter v5178.
