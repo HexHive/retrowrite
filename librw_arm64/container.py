@@ -619,6 +619,20 @@ class Function():
                     # to_align += [addr]
             # return to_align
 
+    # this is needed to make the return address on the stack like the original one
+    # needed for Go and if C++ exception parsing fails
+    def emulate_calls(self):
+        for idx, instruction in enumerate(self.cache):
+            if "bl"  == instruction.mnemonic:
+                iinstr = f"\tadrp x30, (.fake.elf_header + {hex(instruction.address + 4)})"
+                iinstr += f"\n\tadd x30, x30, {hex((instruction.address+4) & 0xfff)}"
+                instruction.instrument_before(InstrumentedInstruction(iinstr, None, None))
+                instruction.mnemonic = "b"
+            if "blr"  in instruction.mnemonic:
+                iinstr = f"\tadrp x30, (.fake.elf_header + {hex(instruction.address + 4)})"
+                iinstr += f"\n\tadd x30, x30, {hex((instruction.address+4) & 0xfff)}"
+                instruction.instrument_before(InstrumentedInstruction(iinstr, None, None))
+                instruction.mnemonic = "br"
 
 
 

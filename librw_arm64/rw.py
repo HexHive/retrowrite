@@ -147,6 +147,8 @@ class Rewriter():
             total_jumps_fixed += function.fix_shortjumps()
             function.update_instruction_count()
             function.fix_jmptbl_size(self.container)
+            if self.container.loader.is_go_binary():
+                function.emulate_calls()
 
         if total_jumps_fixed:
             info(f"Fixed a total of {total_jumps_fixed} short jumps")
@@ -188,6 +190,9 @@ class Rewriter():
                 if function.name in Rewriter.GCC_FUNCTIONS:
                     continue
                 fd.write("%s" % (function) + "\n")
+            for addr in range(last_addr, section.base+section.sz): # fill in space between last function and section end
+                fd.write(".LC%x: // filler between functions" % (addr) + "\n")
+                fd.write(f"\t .byte {hex(data[addr - base])}" + "\n")
 
 
         # fake sections for landing pad
@@ -1189,9 +1194,23 @@ class Symbolizer():
                         inst.instrument_after(InstrumentedInstruction(f"add {orig_reg}, {orig_reg}, {orig_off & 0xfff}"))
 
                 # if it is something like 'ldr x0, #0xcafe'
-                if inst.mnemonic == "ldr" and not "[" in inst.cs.op_str: 
+                if inst.mnemonic in ["ldr","ldrsw"] and not "[" in inst.cs.op_str: 
                     value = int(inst.cs.op_str.split("#")[-1], 16)
                     inst.op_str = inst.op_str.replace("#0x%x" % value, ".LC%x" % value)
+                    sec = container.section_of_address(value)
+                    if sec.name == ".text":
+                        # this is a literal pool! there is a pointer in text we must change!
+                        fun = container.function_of_address(value)
+                        print(inst)
+                        if fun == None: continue
+                        oldins = fun.cache[(value - fun.start) // 4]
+                        oldvalue = struct.unpack("<Q", fun.bytes[value - fun.start:value - fun.start + 8])[0]
+                        if not sec.base < oldvalue  < sec.base + sec.sz: continue
+                        oldins.mnemonic = ".quad .LC%x" % oldvalue
+                        oldins.op_str = "// literal pool from .LC%x" % inst.address
+                        nextinst = fun.cache[(value - fun.start + 4) // 4]
+                        nextinst.mnemonic = ""
+                        nextinst.op_str = ""
 
 
     def _handle_relocation(self, container, section, rel):

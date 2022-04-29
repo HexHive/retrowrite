@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import argparse
+import struct
+import string
 from collections import defaultdict
 
 from elftools.elf.elffile import ELFFile
@@ -25,6 +26,9 @@ class Loader():
         self.load_symbols()
 
     def is_stripped(self):
+        if self.is_go_binary(): # we can recover functions from .gopclntab
+            return False
+
         # Get the symbol table entry for the respective symbol
         symtab = self.elffile.get_section_by_name('.symtab')
         if not symtab:
@@ -274,8 +278,82 @@ class Loader():
 
         return relocs
 
+    def is_go_binary(self):
+        return ".gopclntab" in self.container.datasections
+
+    def flist_from_gopclntab(self):
+        # https://rednaga.io/2016/09/21/reversing_go_binaries_like_a_pro/
+        function_list = dict()
+        gopclntab = self.elffile.get_section_by_name(".gopclntab")
+        godata = gopclntab.data()
+        funcnum = struct.unpack("<Q", godata[8:16])[0]
+        info(f"Detected {funcnum} functions")
+        for i in range(funcnum):
+            addrp = godata[16 + i*16: 16 + i*16 + 8]
+            name_ptrp = godata[16 + i*16 + 8: 16 + i*16 + 16]
+            addr = struct.unpack("<Q", addrp)[0]
+            name_ptr = struct.unpack("<Q", name_ptrp)[0]
+            name = ""
+            name_startp = godata[name_ptr+8:name_ptr+12]
+            name_start = struct.unpack("<I", name_startp)[0]
+            while 0xa <= godata[name_start] <= 0x7f:
+                name += chr(godata[name_start])
+                name_start += 1
+            function_list[addr] = {
+                'name': name,
+                'sz': 0x0,
+                'visibility': "",
+                'bind': "STB_GLOBAL",
+            }
+
+        # get function size
+        # we disasm until we find
+        # bl xxxx
+        # b <first inst of function>
+        text = self.elffile.get_section_by_name(".text")
+        textdata = text.data()
+        faddrs = sorted(list(function_list.keys()))
+
+        for e,addr in enumerate(faddrs):
+            rel_addr = addr - text['sh_addr'] # it's an absolute offset to transform to relative
+            cursor = rel_addr
+            max_insn = 20001
+            if e < len(faddrs) - 1:
+                max_insn = (faddrs[e+1] - addr) // 4
+            else:
+                max_insn = (text['sh_size'] - rel_addr)//4
+            for x in range(max_insn):
+                ins = struct.unpack("<I", textdata[cursor:cursor+4])[0]
+                next_ins = struct.unpack("<I", textdata[cursor+4:cursor+8])[0]
+                if (ins & 0b11111100000000000000000000000000 == 0x94000000) and\
+                (next_ins & 0b11111100000000000000000000000000 == 0x14000000):
+                    # it a branch instruction
+                    dist = 0x4000000 - (next_ins & 0b11111111111111111111111111) 
+                    if (cursor+4 - dist*4) == rel_addr:
+                        # gotcha! it's the start of the function!
+                        cursor += 8
+                        break
+                cursor += 4
+            else:
+                debug(f"Function {hex(addr)} size not found! Assuming it is {hex(cursor - rel_addr)} because then the next one starts")
+
+            function_list[addr]['sz'] = cursor - rel_addr
+
+        # add the first function, sometimes it is missing
+        if faddrs[0] > text['sh_addr']:
+            function_list[text['sh_addr']] = {
+            'name': "mystart",
+            'sz': faddrs[0] - text['sh_addr'],
+            'visibility': "",
+            'bind': "STB_GLOBAL", }
+
+        return function_list
+
     def flist_from_symtab(self):
         function_list = dict()
+        if self.is_go_binary():
+            info("Go binary detected")
+            function_list = self.flist_from_gopclntab()
         for symbol in self.container.symbols:
             if (symbol['st_info']['type'] == 'STT_FUNC'
                     and symbol['st_shndx'] != 'SHN_UNDEF'):

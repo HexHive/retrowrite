@@ -283,12 +283,13 @@ if __name__ == "__main__":
         else:
             asan(rw, loader, args)
             rw.dump()
-    elif args.module and args.module != "thefix":
+    elif args.module:
         try:
             module = importlib.import_module(rwtools_path + args.module + ".instrument")
             instrument = getattr(module, "Instrument")
 
-            analyze_registers(loader, args)
+            if args.module != "thefix":
+                analyze_registers(loader, args)
             instrumenter = instrument(rw)
             instrumenter.do_instrument()
             rw.dump()
