@@ -243,11 +243,11 @@ class Rewriter():
                             if addr in section.functions:
                                 fd.write(".cfi_startproc\n")
                             if addr in self.container.global_cfi_map:
-                                for cfi in self.container.global_cfi_map[addr].values():
-                                    fd.write("".join(list(map(lambda x: x + "\n", cfi))))
+                                fd.write("\n".join(self.container.global_cfi_map[addr]) + "\n")
+                        fd.write("b .LC%x " % (addr) + "\n")
+                        if Rewriter.emulate_calls:
                             if addr+4 in section.functions_ends:
                                 fd.write(".cfi_endproc\n")
-                        fd.write("b .LC%x " % (addr) + "\n")
                 continue
 
         # we need one fake section just to represent the copy of the base address of the binary
@@ -1225,19 +1225,16 @@ class Symbolizer():
                         debug(f"Detected read inside text from {inst}")
                         access_size = get_reg_size_arm(inst.op_str.split(",")[0])
                         oldins = fun.cache[(value - fun.start) // 4]
-                        if access_size == 8:
-                            oldvalue = struct.unpack("<Q", fun.bytes[value - fun.start:value - fun.start + access_size])[0]
-                            oldins.mnemonic = ".quad 0x%x" % oldvalue
+                        if access_size in [16,8,4]:
+                            mybytes = fun.bytes[value - fun.start:value - fun.start + access_size]
+                            oldins.mnemonic = "".join(["\t.byte 0x%x\n" % i for i in mybytes])
                             oldins.op_str = "// this is data, value read from .LC%x" % inst.address
-                            nextinst = fun.cache[(value - fun.start + 4) // 4]
-                            nextinst.mnemonic = ""
-                            nextinst.op_str = ""
-                        elif access_size == 4:
-                            oldvalue = struct.unpack("<I", fun.bytes[value - fun.start:value - fun.start + access_size])[0]
-                            oldins.mnemonic = ".word 0x%x" % oldvalue
-                            oldins.op_str = "// this is data, value read from .LC%x" % inst.address
+                            for i in range((access_size // 4) - 1):
+                                nextinst = fun.cache[(value - fun.start + 4 + i*4) // 4]
+                                nextinst.mnemonic = " // null because of previous data"
+                                nextinst.op_str = ""
                         else:
-                            critical("Access size {access_size} not yet implemented when loading data from text. aborting!")
+                            critical(f"Access size {access_size} from {inst} not yet implemented when loading data from text. aborting!")
                             exit(1)
 
 
@@ -1373,8 +1370,8 @@ str x6, [x7]
                         if lsda_encoding == None:
                             critical("LSDA encoding not found. Aborting")
                             exit(1)
-                        current[0].append("\t.cfi_personality 0, __gxx_personality_v0")
-                        current[0].append("\t.cfi_lsda 0x%x, .LC%x" % (lsda_encoding, entry.lsda_pointer))
+                        current[0].append(".cfi_personality 0, __gxx_personality_v0")
+                        current[0].append(".cfi_lsda 0x%x, .LC%x" % (lsda_encoding, entry.lsda_pointer))
                     else:
                         debug("LDSA Pointer: %x" % entry.lsda_pointer)
 
@@ -1449,7 +1446,9 @@ str x6, [x7]
 
         if Rewriter.emulate_calls:
             # add cfi instructions inside landing pad 
-            container.global_cfi_map.update(cfi_map)
+            for addr, loc in cfi_map.items():
+                for l, cfi in loc.items():
+                    container.global_cfi_map[addr + l*4 + 4] += cfi
         else:
             # add cfi instrucitons in the instrumented functions
             for addr, cfi_map in cfi_map.items():

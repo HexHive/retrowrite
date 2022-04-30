@@ -101,7 +101,7 @@ class Container():
         self.gotplt_entries = list()
 
         # Dwarf/C++ exception information
-        self.global_cfi_map = dict()
+        self.global_cfi_map = defaultdict(list)
         self.personality = None
 
     def add_function(self, function):
@@ -653,12 +653,13 @@ class Function():
         results.append(".type %s, @function" % (self.name))
         results.append("%s:" % (self.name))
 
-        # Add .cfi_startproc directive
-        results.append("\t.cfi_startproc")
-        # Add GCC except table, lsda information
-        if self.except_table:
-            results.append("\t.cfi_personality 0, __gxx_personality_v0")
-            results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.except_table_loc))
+        if not librw_arm64.rw.Rewriter.emulate_calls:
+            # Add .cfi_startproc directive
+            results.append("\t.cfi_startproc")
+            # Add GCC except table, lsda information
+            if self.except_table:
+                results.append("\t.cfi_personality 0, __gxx_personality_v0")
+                results.append("\t.cfi_lsda 0x1b,.LLSDA%x" % (self.except_table_loc))
 
 
         for index, instruction in enumerate(self.cache):
@@ -689,8 +690,9 @@ class Function():
             for iinstr in instruction.after:
                 results.append("{}".format(iinstr))
 
-        # Add .cfi_endproc directive
-        results.append("\t.cfi_endproc")
+        if not librw_arm64.rw.Rewriter.emulate_calls:
+            # Add .cfi_endproc directive
+            results.append("\t.cfi_endproc")
 
         if self.except_table:
             results.append(self.except_table)
