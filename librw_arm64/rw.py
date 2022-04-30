@@ -27,20 +27,31 @@ from librw_arm64.emulation import Path, Expr
 # right now it is 64 MB (2 ^ 26)
 FAKE_ELF_BASE = 0x4000000
 
-# if False, redirect every indirect branch to the landing pad,
-# with some minor additional overhead (recommended)
-# if True, some medium data flow analysis is conducted to detect
-# and symbolize jump tables. It works quite well but it is not 
-# guaranteed to find everything, and might lead to crashes in rare edge cases.
-detect_and_symbolize_switch_tables = False
 
-# if False, use call emulation to support C++ exceptions and other 
-# stack unwinding mechanisms. (e.g. we change a call to a push+jmp)
-# if True, we try to parse and detect LSDA tables. It works quite well
-# but might lead to failures in rewriting in rare edge cases
-detect_and_symbolize_lsda_tables = False
+
 
 class Rewriter():
+
+    # if False, redirect every indirect branch to the landing pad,
+    # with some minor additional overhead (recommended)
+    # if True, some medium data flow analysis is conducted to detect
+    # and symbolize jump tables. It works quite well but it is not 
+    # guaranteed to find everything, and might lead to crashes in rare edge cases.
+    detect_and_symbolize_switch_tables = False
+
+    # if False, use call emulation to support C++ exceptions and other 
+    # stack unwinding mechanisms. (e.g. we change a call to a push+jmp)
+    # if True, we try to parse and detect LSDA tables. It works quite well
+    # but might lead to failures in rewriting in rare edge cases
+    detect_and_symbolize_lsda_tables = False
+
+    # this option is to substitute a call with a push+jmp
+    # to make the return address appear on the landing pad
+    # for C++ exceptions and Go GC recovery
+    emulate_calls = False
+
+
+
     detailed_disasm = False
     GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
         # "_start",
@@ -92,8 +103,9 @@ class Rewriter():
         ".gnu.version_r",
         ".eh_frame_hdr",
         ".eh_frame",
-        ".gcc_except_table",
     ]
+    if not emulate_calls:
+        IGNORE_SECTIONS += [".gcc_except_table"]
 
     # thread-local storage sections. Need special handling.
     TLS_SECTIONS = [
@@ -147,7 +159,7 @@ class Rewriter():
             total_jumps_fixed += function.fix_shortjumps()
             function.update_instruction_count()
             function.fix_jmptbl_size(self.container)
-            if self.container.loader.is_go_binary():
+            if Rewriter.emulate_calls or self.container.loader.is_go_binary():
                 function.emulate_calls()
 
         if total_jumps_fixed:
@@ -195,7 +207,7 @@ class Rewriter():
                 fd.write(f"\t .byte {hex(data[addr - base])}" + "\n")
 
 
-        # fake sections for landing pad
+        # LANDING PAD
         for section in self.container.codesections.values():
             fd.write(f".section .fake{section.name}, \"ax\", @progbits" + "\n")
             # results.append(".align 12") # removed to better fit sections
@@ -205,13 +217,13 @@ class Rewriter():
 
             # the first option is based on heuristics (detection of jumptables)
             # partial landing pad (only on function starts)
-            if detect_and_symbolize_switch_tables and len(section.functions) > 1:
+            if Rewriter.detect_and_symbolize_switch_tables and len(section.functions) > 1:
                 for faddr in sorted(section.functions):
                     function = self.container.functions[faddr]
                     if function.name in Rewriter.GCC_FUNCTIONS:
                         continue
                     skip = function.start - last_addr - 4
-                    if detect_and_symbolize_switch_tables:
+                    if Rewriter.detect_and_symbolize_switch_tables:
                         # if we symbolize jump tables, we know that the targets that will
                         # land in the landing pad will only be indirect calls. So it does
                         # not make sense to have every possible instruction in the landing pad.
@@ -229,7 +241,15 @@ class Rewriter():
                 else:
                     print(section.name, hex(section.sz))
                     for i in range(0, section.sz, 4):
-                        fd.write("b .LC%x " % (section.base + i) + "\n")
+                        addr = section.base + i
+                        if addr in section.functions:
+                            fd.write(".cfi_startproc\n")
+                        if Rewriter.emulate_calls and addr in self.container.global_cfi_map:
+                                for cfi in self.container.global_cfi_map[addr].values():
+                                    fd.write("".join(list(map(lambda x: x + "\n", cfi))))
+                        if addr+4 in section.functions_ends:
+                            fd.write(".cfi_endproc\n")
+                        fd.write("b .LC%x " % (addr) + "\n")
                 continue
 
         # we need one fake section just to represent the copy of the base address of the binary
@@ -367,7 +387,7 @@ class Symbolizer():
         self.symbolize_cf_transfer(container, context)
         # Symbolize remaining memory accesses
 
-        if detect_and_symbolize_switch_tables:
+        if Rewriter.detect_and_symbolize_switch_tables:
             self.symbolize_switch_tables(container, context) # not needed anymore due to jmptable landing
         self.symbolize_mem_accesses(container, context)
 
@@ -1177,7 +1197,7 @@ class Symbolizer():
                     self._adjust_global_access(container, function, edx, inst)
 
                 if inst.mnemonic == "adr":
-                    if detect_and_symbolize_switch_tables:
+                    if Rewriter.detect_and_symbolize_switch_tables:
                         value = inst.cs.operands[1].imm
                         if value % 0x1000 == 0: # an adr to a page, probably same as adrp
                             self._adjust_global_access(container, function, edx, inst)
@@ -1201,13 +1221,12 @@ class Symbolizer():
                     if sec.name == ".text":
                         # this is a literal pool! there is a pointer in text we must change!
                         fun = container.function_of_address(value)
-                        print(inst)
                         if fun == None: continue
                         oldins = fun.cache[(value - fun.start) // 4]
                         oldvalue = struct.unpack("<Q", fun.bytes[value - fun.start:value - fun.start + 8])[0]
-                        if not sec.base < oldvalue  < sec.base + sec.sz: continue
-                        oldins.mnemonic = ".quad .LC%x" % oldvalue
-                        oldins.op_str = "// literal pool from .LC%x" % inst.address
+                        debug(f"Detected read inside text from {inst}")
+                        oldins.mnemonic = ".quad 0x%x" % oldvalue
+                        oldins.op_str = "// this is data, value read from .LC%x" % inst.address
                         nextinst = fun.cache[(value - fun.start + 4) // 4]
                         nextinst.mnemonic = ""
                         nextinst.op_str = ""
@@ -1332,41 +1351,46 @@ str x6, [x7]
                 # We should check that it points to a CIE and that the personality function 
                 # is gxx_personality_v0. If not, it could be e.g. Rust. Not checked 
                 # what they use.
-                #print("Function Address: %s" % hex(initial_location))
                 lsda_table = None
-                #print("lsda pointer", entry.lsda_pointer)
-                if entry.lsda_pointer:
-                    debug("LDSA Pointer: %x" % entry.lsda_pointer)
-
-                    lsda_pointer = entry.lsda_pointer
-                    modifier = entry.lsda_pointer & 0xF0
-                    # if modifier == DW_EH_encoding_flags['DW_EH_PE_pcrel']:
-                        # lsda_pointer -= 
-
-                    # XXX
-                    # XXX
-                    # XXX Deal with wrong lsda_pointer in non-PIE binaries
-                    # XXX
-                    # XXX
-
-                    lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location, container)
-                    dwarf_map[initial_location] = lsda_table.generate_header()
-                    dwarf_map[initial_location] += lsda_table.generate_table()
-
-                    func = container.functions[initial_location]
-                    # func.except_table_loc = entry.lsda_pointer
-                    func.except_table_loc = func.start
-
-                    # SHOULD LOOK LIKE THIS :
-                    # for entry in lsda_table.entries
-                    #     dwarf_map[...] = entry...
-
-
                 function = container.functions.get(initial_location)
                 if not function:
                     print("Could not find function at location %d, is this normal ?" % initial_location)
                     continue
                 current = cfi_map[function.start]
+
+                if entry.lsda_pointer:
+                    if Rewriter.emulate_calls:
+                        self.elf.seek(entry.lsda_pointer)
+                        encoding = self.elf.read(1)[0]
+                        current[0].append("\t.cfi_personality 0, __gxx_personality_v0")
+                        current[0].append("\t.cfi_lsda 0x%x,.LC%x" % (encoding, entry.lsda_pointer))
+                    else:
+                        debug("LDSA Pointer: %x" % entry.lsda_pointer)
+
+                        lsda_pointer = entry.lsda_pointer
+                        modifier = entry.lsda_pointer & 0xF0
+                        # if modifier == DW_EH_encoding_flags['DW_EH_PE_pcrel']:
+                            # lsda_pointer -= 
+
+                        # XXX
+                        # XXX
+                        # XXX Deal with wrong lsda_pointer in non-PIE binaries
+                        # XXX
+                        # XXX
+
+                        lsda_table = LSDATable(container.loader.elffile.stream, entry.lsda_pointer, initial_location, container)
+                        dwarf_map[initial_location] = lsda_table.generate_header()
+                        dwarf_map[initial_location] += lsda_table.generate_table()
+
+                        func = container.functions[initial_location]
+                        # func.except_table_loc = entry.lsda_pointer
+                        func.except_table_loc = func.start
+
+                        # SHOULD LOOK LIKE THIS :
+                        # for entry in lsda_table.entries
+                        #     dwarf_map[...] = entry...
+
+
 
                 location = -1
                 # For each DWARF instruction in the instruction list, what do we do?
@@ -1412,15 +1436,19 @@ str x6, [x7]
                 raise Exception("Unhandled type %s" % (type(entry)))
 
 
-        # Check if any cfi information needs to be added
-        for addr, cfi_map in cfi_map.items():
-            func = container.functions[addr]
-            func.cfi_map = cfi_map
+        if Rewriter.emulate_calls:
+            # add cfi instructions inside landing pad 
+            container.global_cfi_map.update(cfi_map)
+        else:
+            # add cfi instrucitons in the instrumented functions
+            for addr, cfi_map in cfi_map.items():
+                func = container.functions[addr]
+                func.cfi_map = cfi_map
+            # BEGIN rewrite_table
+            for addr, table in dwarf_map.items():
+                func = container.functions[addr]
+                func.except_table = table
 
-          # BEGIN rewrite_table
-        for addr, table in dwarf_map.items():
-            func = container.functions[addr]
-            func.except_table = table
 
         # Add definition for personality at the end
         personality='''

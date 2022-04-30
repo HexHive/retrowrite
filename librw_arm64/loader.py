@@ -91,6 +91,7 @@ class Loader():
                 sec = self.container.section_of_address(faddr)
                 if not sec: continue
                 sec.functions += [faddr]
+                sec.functions_ends += [faddr + fvalue["sz"]]
 
                 section_offset = faddr - base
                 bytes = data[section_offset:section_offset + fvalue["sz"]]
@@ -110,6 +111,7 @@ class Loader():
                     faddr, size = item
                     sec = self.container.section_of_address(faddr)
                     sec.functions += [faddr]
+                    sec.functions_ends += [faddr + size]
                     section_offset = faddr - base
                     bytes = sec.bytes[section_offset:section_offset + size]
 
@@ -293,7 +295,7 @@ class Loader():
             name_ptrp = godata[16 + i*16 + 8: 16 + i*16 + 16]
             addr = struct.unpack("<Q", addrp)[0]
             name_ptr = struct.unpack("<Q", name_ptrp)[0]
-            name = ""
+            name = "go."
             name_startp = godata[name_ptr+8:name_ptr+12]
             name_start = struct.unpack("<I", name_startp)[0]
             while 0xa <= godata[name_start] <= 0x7f:
@@ -341,6 +343,7 @@ class Loader():
 
         # add the first function, sometimes it is missing
         if faddrs[0] > text['sh_addr']:
+            print("ADDING from ", hex(text['sh_addr']), "to", hex(faddrs[0]))
             function_list[text['sh_addr']] = {
             'name': "mystart",
             'sz': faddrs[0] - text['sh_addr'],
@@ -351,9 +354,6 @@ class Loader():
 
     def flist_from_symtab(self):
         function_list = dict()
-        if self.is_go_binary():
-            info("Go binary detected")
-            function_list = self.flist_from_gopclntab()
         for symbol in self.container.symbols:
             if (symbol['st_info']['type'] == 'STT_FUNC'
                     and symbol['st_shndx'] != 'SHN_UNDEF'):
@@ -363,6 +363,26 @@ class Loader():
                     'visibility': symbol['st_other']['visibility'],
                     'bind': symbol['st_info']['bind'],
                 }
+        if self.is_go_binary():
+            info("Go binary detected")
+            keys = sorted(function_list.keys())
+            txtstart = self.elffile.get_section_by_name(".text")['sh_addr']
+            for e,a in enumerate(keys):
+                if e >= len(keys) - 1: continue
+                if a <= txtstart: continue
+                fend = a + function_list[a]['sz']
+                nextfstart = keys[e+1]
+                print(f"{hex(fend)} does not arrive to {hex(nextfstart)}")
+                if fend < nextfstart:
+                    function_list[fend] = {
+                        'name': "filler_%x" % fend,
+                        'sz': nextfstart - fend,
+                        'visibility': "",
+                        'bind': "STB_GLOBAL",
+                    }
+
+            for a,f in self.flist_from_gopclntab().items():
+                function_list[a] = f
 
         return function_list
 

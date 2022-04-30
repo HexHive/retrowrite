@@ -100,7 +100,7 @@ class Container():
         self.gotplt_entries = list()
 
         # Dwarf/C++ exception information
-        self.dwarf_info = dict()
+        self.global_cfi_map = dict()
         self.personality = None
 
     def add_function(self, function):
@@ -203,6 +203,9 @@ class Container():
 
             function.bytes = bytes
             function.sz = len(bytes)
+            newsec.functions_ends.remove(faddr)
+            newsec.functions_ends += [faddr + function.sz]
+            print(hex(faddr), hex(faddr + function.sz))
 
 
     def attach_loader(self, loader):
@@ -797,6 +800,7 @@ class Section():
         self.bytes = bytes
         self.relocations = list()
         self.functions = list()  # list of addrs of functions that are in this section
+        self.functions_ends = list()  
         self.align = min(16, align)
         self.named_globals = defaultdict(list)
         self.symbols = defaultdict(list)
