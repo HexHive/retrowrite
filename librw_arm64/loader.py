@@ -137,6 +137,7 @@ class Loader():
                         new_function = Function(f"filler_{hex(new_addr)}", new_addr, new_size, new_bytes, bind)
                         self.container.add_function(new_function)
                         self.container.section_of_address(new_addr).functions += [new_addr]
+                        self.container.section_of_address(new_addr).functions_ends += [new_addr + new_size]
 
                 for sec in self.container.codesections.values():
                     if len(sec.functions):
@@ -160,6 +161,7 @@ class Loader():
                     data = section.data()
                     function = Function(f"all_{sec}", base, len(data), data, "STB_GLOBAL")
                     self.container.codesections[sec].functions += [base]
+                    self.container.codesections[sec].functions_ends += [base + len(data)]
                     self.container.add_function(function)
 
 

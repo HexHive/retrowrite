@@ -19,7 +19,7 @@ from elftools.common.utils import struct_parse
 from elftools.construct import Struct
 
 from librw_arm64.util.logging import *
-from librw_arm64.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg, memory_replace, get_access_size_arm
+from librw_arm64.util.arm_util import _is_jump_conditional, is_reg_32bits, get_64bits_reg, memory_replace, get_access_size_arm, get_reg_size_arm
 from librw_arm64.container import InstrumentedInstruction, Jumptable, TRAITOR_SECS
 from librw_arm64.emulation import Path, Expr
 
@@ -1221,15 +1221,27 @@ class Symbolizer():
                     if sec.name == ".text":
                         # this is a literal pool! there is a pointer in text we must change!
                         fun = container.function_of_address(value)
+                        if fun.start == 0x5628:
+                            print(fun)
                         if fun == None: continue
-                        oldins = fun.cache[(value - fun.start) // 4]
-                        oldvalue = struct.unpack("<Q", fun.bytes[value - fun.start:value - fun.start + 8])[0]
                         debug(f"Detected read inside text from {inst}")
-                        oldins.mnemonic = ".quad 0x%x" % oldvalue
-                        oldins.op_str = "// this is data, value read from .LC%x" % inst.address
-                        nextinst = fun.cache[(value - fun.start + 4) // 4]
-                        nextinst.mnemonic = ""
-                        nextinst.op_str = ""
+                        access_size = get_reg_size_arm(inst.op_str.split(",")[0])
+                        oldins = fun.cache[(value - fun.start) // 4]
+                        if access_size == 8:
+                            oldvalue = struct.unpack("<Q", fun.bytes[value - fun.start:value - fun.start + access_size])[0]
+                            oldins.mnemonic = ".quad 0x%x" % oldvalue
+                            oldins.op_str = "// this is data, value read from .LC%x" % inst.address
+                            nextinst = fun.cache[(value - fun.start + 4) // 4]
+                            nextinst.mnemonic = ""
+                            nextinst.op_str = ""
+                        elif access_size == 4:
+                            oldvalue = struct.unpack("<I", fun.bytes[value - fun.start:value - fun.start + access_size])[0]
+                            oldins.mnemonic = ".word 0x%x" % oldvalue
+                            oldins.op_str = "// this is data, value read from .LC%x" % inst.address
+                        else:
+                            critical("Access size {access_size} not yet implemented when loading data from text. aborting!")
+                            exit(1)
+
 
 
     def _handle_relocation(self, container, section, rel):
