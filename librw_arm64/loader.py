@@ -149,6 +149,7 @@ class Loader():
                             new_function = Function(f"filler_{hex(sec.base)}", sec.base, newsize, new_bytes, "STB_GLOBAL")
                             self.container.add_function(new_function)
                             sec.functions += [sec.base]
+                            sec.functions_ends += [sec.base + newsize]
 
 
 

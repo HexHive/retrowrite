@@ -1370,13 +1370,11 @@ str x6, [x7]
 
                 if entry.lsda_pointer:
                     if Rewriter.emulate_calls:
-                        container.loader.elffile.stream.seek(entry.lsda_pointer)
-                        encoding = container.loader.elffile.stream.read(2)[1]
+                        if lsda_encoding == None:
+                            critical("LSDA encoding not found. Aborting")
+                            exit(1)
                         current[0].append("\t.cfi_personality 0, __gxx_personality_v0")
-                        if encoding == 0xff:
-                            current[0].append("\t.cfi_lsda 0xff")
-                        else:
-                            current[0].append("\t.cfi_lsda 0x%x, .LC%x" % (lsda_encoding & 0x7f, entry.lsda_pointer))
+                        current[0].append("\t.cfi_lsda 0x%x, .LC%x" % (lsda_encoding, entry.lsda_pointer))
                     else:
                         debug("LDSA Pointer: %x" % entry.lsda_pointer)
 
