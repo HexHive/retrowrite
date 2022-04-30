@@ -173,11 +173,14 @@ if __name__ == "__main__":
     argp.add_argument("--ignore-no-pie", dest="ignore_no_pie", action='store_true', help="Ignore position-independent-executable check (only needed for x64, use with caution)")
     argp.add_argument("--ignore-stripped", dest="ignore_stripped", action='store_true',
                       help="Ignore stripped executable check (only needed for x64, use with caution)")
+    argp.add_argument("--optimize-exceptions", dest="optimize_exceptions", action="store_true",
+          help="Parse and rewrite exception handler information. Will speed up the program, but use with care.")
     argp.add_argument("-v", "--verbose", action="store_true",
             help="Verbose output")
 
     argp.set_defaults(ignore_no_pie=False)
     argp.set_defaults(ignore_stripped=False)
+    argp.set_defaults(optimize_exceptions=False)
 
     args = argp.parse_args()
 
@@ -203,6 +206,8 @@ if __name__ == "__main__":
 
         if args.verbose:
             librw_arm64.util.logging.DEBUG_LOG = True
+        if args.optimize_exceptions:
+            Rewriter.emulate_calls = False
 
     elif arch == "x64":
         rwtools_path = rwtools_path + "_x64."
@@ -253,6 +258,10 @@ if __name__ == "__main__":
         else:
             loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
     else:
+
+        if not ".gcc_except_table" in slist:
+            Rewriter.emulate_calls = False
+
         loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
         flist = loader.flist_from_symtab() # after loading all sections
         loader.load_functions(flist)

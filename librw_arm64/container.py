@@ -25,6 +25,7 @@ TRAITOR_SECS = {
     ".interp",
     ".data.rel.ro",
     ".noptrdata",
+    ".gcc_except_table",
 }
 
 NO_FLAGS_SECS = [

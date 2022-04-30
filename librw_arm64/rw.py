@@ -48,8 +48,7 @@ class Rewriter():
     # this option is to substitute a call with a push+jmp
     # to make the return address appear on the landing pad
     # for C++ exceptions and Go GC recovery
-    emulate_calls = False
-
+    emulate_calls = True
 
 
     detailed_disasm = False
@@ -104,8 +103,6 @@ class Rewriter():
         ".eh_frame_hdr",
         ".eh_frame",
     ]
-    if not emulate_calls:
-        IGNORE_SECTIONS += [".gcc_except_table"]
 
     # thread-local storage sections. Need special handling.
     TLS_SECTIONS = [
@@ -242,13 +239,14 @@ class Rewriter():
                     print(section.name, hex(section.sz))
                     for i in range(0, section.sz, 4):
                         addr = section.base + i
-                        if addr in section.functions:
-                            fd.write(".cfi_startproc\n")
-                        if Rewriter.emulate_calls and addr in self.container.global_cfi_map:
+                        if Rewriter.emulate_calls:
+                            if addr in section.functions:
+                                fd.write(".cfi_startproc\n")
+                            if addr in self.container.global_cfi_map:
                                 for cfi in self.container.global_cfi_map[addr].values():
                                     fd.write("".join(list(map(lambda x: x + "\n", cfi))))
-                        if addr+4 in section.functions_ends:
-                            fd.write(".cfi_endproc\n")
+                            if addr+4 in section.functions_ends:
+                                fd.write(".cfi_endproc\n")
                         fd.write("b .LC%x " % (addr) + "\n")
                 continue
 
@@ -1372,10 +1370,13 @@ str x6, [x7]
 
                 if entry.lsda_pointer:
                     if Rewriter.emulate_calls:
-                        self.elf.seek(entry.lsda_pointer)
-                        encoding = self.elf.read(1)[0]
+                        container.loader.elffile.stream.seek(entry.lsda_pointer)
+                        encoding = container.loader.elffile.stream.read(2)[1]
                         current[0].append("\t.cfi_personality 0, __gxx_personality_v0")
-                        current[0].append("\t.cfi_lsda 0x%x,.LC%x" % (encoding, entry.lsda_pointer))
+                        if encoding == 0xff:
+                            current[0].append("\t.cfi_lsda 0xff")
+                        else:
+                            current[0].append("\t.cfi_lsda 0x%x, .LC%x" % (lsda_encoding & 0x7f, entry.lsda_pointer))
                     else:
                         debug("LDSA Pointer: %x" % entry.lsda_pointer)
 
