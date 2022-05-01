@@ -10,7 +10,13 @@ mkdir -p bins_rw
 
 for binary_full in ~/bins/*; do
 	binary=$(basename $binary_full)
-	[[ $binary =~ "lbm_r" ]] || continue
+	[[ $binary =~ "ldecod" ]] && continue
+	[[ $binary =~ "imagick_r" ]] && continue
+	[[ $binary =~ "perlbench_r" ]] && continue
+	[[ $binary =~ "nab_r" ]] && continue
+	[[ $binary =~ "xz_r" ]] && continue
+	[[ $binary =~ "cpugcc_r" ]] && continue
+	[[ $binary =~ "lbm_r" ]] && continue
 
 	if [[ $1 == "nothing" ]]; then
 		echo "Not touching ${binary}..."
