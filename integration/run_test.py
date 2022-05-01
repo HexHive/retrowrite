@@ -83,7 +83,7 @@ for binary_full in sys.argv[1:]:
     if len(binary.split("_")) < 2: 
         quit(f"{binary} wrong format")
 
-    if binary not in ["lbm_r"]:
+    if not any(x in binary for x in ["lbm_r"]):
         continue
 
     binary_original_name = "_".join(binary.split("_")[:2])
