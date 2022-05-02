@@ -83,8 +83,9 @@ for binary_full in sys.argv[1:]:
     if len(binary.split("_")) < 2: 
         quit(f"{binary} wrong format")
 
-    if any(x in binary for x in ["perlbench", "cpugcc_r", "mcf_r", "lbm_r", "imagick_r", "nab_r", "xz_r"]):
-        continue
+    # skip those
+    # if any(x in binary for x in ["perlbench", "cpugcc_r", "mcf_r", "lbm_r", "imagick_r", "nab_r", "xz_r"]):
+        # continue
 
     binary_original_name = "_".join(binary.split("_")[:2])
 

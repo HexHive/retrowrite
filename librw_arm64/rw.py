@@ -120,6 +120,7 @@ class Rewriter():
     # DATASECTIONS = [".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     # DATASECTIONS = [".got", ".fini_array",  ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
     # DATASECTIONS = [".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array"]
+    # DATASECTIONS = [".tm_clone_table", ".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array", ".fini_array", ".got.plt"]
     DATASECTIONS = [".tm_clone_table", ".got", ".rodata", ".data", ".bss", ".data.rel.ro", ".init_array", ".fini_array", ".got.plt"]
     CODESECTIONS = [".text", ".init", ".fini", ".plt"]
 

@@ -19,37 +19,17 @@ class Instrument():
             if reg.general_purpose:
                 self.regmap[reg.name] = reg.subregisters[0][0]
 
-    def count_two(self, instruction, idx, free):
-        enter_lbl = "COUNTER2_%x" % (instruction.address)
-
-        instrumentation = """
-        stp x7, x8, [sp, -16]! // save x7, x8
-
-        // build a pointer in x8 to .counted
-        adrp x8, .counted2
-        add x8, x8, :lo12:.counted2
-
-        // add 1 to .counted2
-        ldr x7, [x8]
-        add x7, x7, 1
-        str x7, [x8]
-
-        ldp x7, x8, [sp], 16  // load back x7 and x8
-        """
-        comment = "{}: ".format(str(instruction))
-        return InstrumentedInstruction(instrumentation, enter_lbl, comment)
 
 
-
-    def count_one(self, instruction, idx, free):
+    def count_x(self, instruction, idx, free, x):
         enter_lbl = "COUNTER_%x" % (instruction.address)
 
-        instrumentation = """
+        instrumentation = f"""
         stp x7, x8, [sp, -16]! // save x7, x8
 
         // build a pointer in x8 to .counted
-        adrp x8, .counted
-        add x8, x8, :lo12:.counted
+        adrp x8, .counted{x}
+        add x8, x8, :lo12:.counted{x}
 
         // add 1 to .counted
         ldr x7, [x8]
@@ -61,28 +41,31 @@ class Instrument():
         comment = "{}: ".format(str(instruction))
         return InstrumentedInstruction(instrumentation, enter_lbl, comment)
 
-
-
     def do_instrument(self):
         for faddr, fn in self.rewriter.container.functions.items():
             for idx, instruction in enumerate(fn.cache):
 
                 # if any("adrp" in str(x) for x in instruction.before):
-                if "br"  in instruction.mnemonic:
-                    iinstr = self.count_one(instruction, idx, None)
+                if "br"  == instruction.mnemonic:
+                    iinstr = self.count_x(instruction, idx, None, 0)
                     instruction.instrument_before(iinstr)
 
-                if "blr"  in instruction.mnemonic:
-                    iinstr = self.count_two(instruction, idx, None)
+                elif "bl"  == instruction.mnemonic:
+                    iinstr = self.count_x(instruction, idx, None, 1)
+                    instruction.instrument_before(iinstr)
+
+                elif "blr"  == instruction.mnemonic:
+                    iinstr = self.count_x(instruction, idx, None, 2)
                     instruction.instrument_before(iinstr)
 
         ds = Section(".counter", 0x100000, 0, None, flags="aw")
         content = """
         .file: .string \"/tmp/countfile\"
         .perms: .string \"a\"
-        .format: .string \"br: %lld\\nblr: %lld\\n\"
+        .format: .string \"br: %lld\\nbl: %lld\\nblr: %lld\\n\"
         .align 3
-        .counted: .quad 0x0
+        .counted0: .quad 0x0
+        .counted1: .quad 0x0
         .counted2: .quad 0x0
         """
         ds.cache.append(DataCell.instrumented(content, 0))
@@ -105,11 +88,14 @@ class Instrument():
         bl fopen
 
         // load .counted in x2
-        adrp x2, .counted
-        ldr x2, [x2, :lo12:.counted]
+        adrp x2, .counted0
+        ldr x2, [x2, :lo12:.counted0]
         // load .counted in x3
-        adrp x3, .counted2
-        ldr x3, [x3, :lo12:.counted2]
+        adrp x3, .counted1
+        ldr x3, [x3, :lo12:.counted1]
+
+        adrp x4, .counted2
+        ldr x4, [x4, :lo12:.counted2]
 
         // build a pointer to .format
         adrp x1, .format

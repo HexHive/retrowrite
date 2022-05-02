@@ -21,7 +21,7 @@ TRAITOR_SECS = {
     ".data",
     ".rodata",
     ".init_array",
-    ".fini_array",
+    # ".fini_array",
     ".interp",
     ".data.rel.ro",
     ".noptrdata",
