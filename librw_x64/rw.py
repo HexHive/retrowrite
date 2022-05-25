@@ -627,10 +627,17 @@ class Symbolizer():
                         break
 
                     value = (value + swbase) & 0xFFFFFFFF
-                    if not fn.is_valid_instruction(value):
+                    
+                    if fn.is_valid_instruction(value):
+                        swlbl = ".LC%x-.LC%x" % (value, swbase)
+                    # Switch table entry might refer to the end of function boundary
+                    # Thus, we check whether the value refers to the end of function
+                    elif fn.is_located_at_the_end_of_function(value):
+                        # is_located_at_the_end_of_function() have created .LLCXXX label
+                        swlbl = ".LLC%x-.LC%x" % (value, swbase)
+                    else:
                         break
 
-                    swlbl = ".LC%x-.LC%x" % (value, swbase)
                     rodata.replace(slot, 4, swlbl)
 
     def _adjust_target(self, container, target):
