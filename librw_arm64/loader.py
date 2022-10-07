@@ -327,6 +327,7 @@ class Loader():
                 max_insn = (faddrs[e+1] - addr) // 4
             else:
                 max_insn = (text['sh_size'] - rel_addr)//4
+            max_insn = min(max_insn, (len(textdata) - rel_addr - 1)//4)
             for x in range(max_insn):
                 ins = struct.unpack("<I", textdata[cursor:cursor+4])[0]
                 next_ins = struct.unpack("<I", textdata[cursor+4:cursor+8])[0]

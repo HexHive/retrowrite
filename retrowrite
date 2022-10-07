@@ -176,7 +176,7 @@ if __name__ == "__main__":
     argp.add_argument("--optimize-exceptions", dest="optimize_exceptions", action="store_true",
           help="Parse and rewrite exception handler information. Will speed up the program, but use with care.")
     argp.add_argument("-v", "--verbose", action="store_true",
-            help="Verbose output")
+          help="Verbose output")
 
     argp.set_defaults(ignore_no_pie=False)
     argp.set_defaults(ignore_stripped=False)
@@ -259,8 +259,8 @@ if __name__ == "__main__":
             loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
     else:
 
-        if not ".gcc_except_table" in slist:
-            Rewriter.emulate_calls = False
+        # if not ".gcc_except_table" in slist:
+        Rewriter.emulate_calls = True
 
         loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
         flist = loader.flist_from_symtab() # after loading all sections
