@@ -91,7 +91,7 @@ class Instrument():
         if "sp" in instruction.reg_reads() or "sp" in instruction.reg_writes():
             debug("we do not instrument push/pop for now")
             return InstrumentedInstruction("# not instrumented - push/pop")
-        if "x29" in instruction.reg_reads() or "x29" in instruction.reg_writes():
+        if any([x in instruction.reg_reads() for x in ["x29","fp"]]) or any([x in instruction.reg_writes() for x in ["x29", "fp"]]):
             debug("we do not instrument stack frames for now")
             return InstrumentedInstruction("# not instrumented - stackframe push/pop")
         if "x28" in instruction.reg_reads() or "x28" in instruction.reg_writes():
@@ -105,7 +105,10 @@ class Instrument():
         # we prefer high registers, less likely to go wrong
         affinity = ["x" + str(i) for i in range(17, -1, -1)]
         # do not use registers used by the very same instruction!
+        print(instruction.reg_reads())
         for reg in instruction.reg_reads():
+            print(instruction)
+            print(reg)
             reg64 = get_64bits_reg(reg) if is_reg_32bits(reg) else reg
             if reg64 in affinity:
                 affinity.remove(reg64)

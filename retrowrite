@@ -229,7 +229,8 @@ if __name__ == "__main__":
         print(f"Architecture {arch} not supported!")
         exit(1)
 
-    if args.module and args.module != "counter": Rewriter.detailed_disasm = True
+    if args.asan or (args.module and args.module != "counter"):
+        Rewriter.detailed_disasm = True
 
     loader = Loader(args.bin)
 
@@ -258,10 +259,6 @@ if __name__ == "__main__":
         else:
             loader.load_data_sections(slist, lambda x: x in Rewriter.DATASECTIONS)
     else:
-
-        # if not ".gcc_except_table" in slist:
-        Rewriter.emulate_calls = True
-
         loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
         flist = loader.flist_from_symtab() # after loading all sections
         loader.load_functions(flist)

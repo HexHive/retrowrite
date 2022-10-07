@@ -51,7 +51,10 @@ class Rewriter():
     emulate_calls = True
 
 
+    # tell capstone to give us more details on the disassembly
+    # like which registers are being read/written to
     detailed_disasm = False
+
     GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
         # "_start",
         # "__libc_start_main",
@@ -157,7 +160,6 @@ class Rewriter():
             total_jumps_fixed += function.fix_shortjumps()
             function.update_instruction_count()
             function.fix_jmptbl_size(self.container)
-            print(Rewriter.emulate_calls)
             if Rewriter.emulate_calls or self.container.loader.is_go_binary():
                 function.emulate_calls()
 
@@ -1536,7 +1538,7 @@ str x6, [x7]
                 print("OFFSET",instruction[0]-128)
             if instruction[0] > 64 and instruction[0] < 128:
                 print("ADVANCE_LOC+",instruction[0]-64)
-            # exit(1)
+            # exit(1) # maybe we don't need to exit right away
         return current_loc, cfi_line
 
 
