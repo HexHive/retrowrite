@@ -344,7 +344,7 @@ class Instrument():
                         continue
 
                     # look at start of get_mem_instrumentation()
-                    if any([x in instruction.reg_reads() + instruction.reg_writes() for x in ["sp", "x29", "x28"]]):
+                    if any([x in instruction.reg_reads() + instruction.reg_writes() for x in ["sp", "x29", "fp", "x28"]]):
                         continue
 
                     free_registers = fn.analysis['free_registers'][idx]

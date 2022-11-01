@@ -3,6 +3,7 @@ import copy
 import itertools
 import io
 import struct
+import os
 from collections import defaultdict, deque, OrderedDict
 
 from capstone import CS_OP_IMM, CS_GRP_JUMP, CS_GRP_CALL, CS_OP_MEM, CS_OP_REG
@@ -55,6 +56,16 @@ class Rewriter():
     # like which registers are being read/written to
     detailed_disasm = False
 
+    # This will register a signal handler that will catch reads to executable-only pages
+    # it will also include all text sections another time, read-only, preserving their original
+    # contents that the handler can read from and restore the correct value to
+    data_text_support = False
+
+    # This option, relevant only when data_text_support is True, will make it so the last 
+    # code section will have its ending page-aligned. This is to minimize the calls to the segfault
+    # handler for "valid" reads such as to .rodata on the same page as an executable page
+    optimize_dtsupport_layout = False
+
     GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
         # "_start",
         # "__libc_start_main",
@@ -91,7 +102,7 @@ class Rewriter():
         "_ITM_registerTMCloneTable"
     ]
 
-    # these sections need to be completely regenerated from scracth
+    # these sections need to be completely regenerated from scratch
     IGNORE_SECTIONS = [
         ".dynsym",
         ".dynstr",
@@ -149,7 +160,45 @@ class Rewriter():
         symb.symbolize_data_sections(self.container, None)
         symb.symbolize_text_section(self.container, None)
 
+    def install_segfault_handler(self):
+        with open(os.path.join(os.path.dirname(__file__), '../rwtools_arm64/data_in_text/segfault_handler.s')) as f:
+            code = f.read()
+
+        # TODO:
+        # this needs to be rewritten without libc (e.g., using only syscalls)
+        # so we can avoid instrumenting main
+        # and we can just instrument _start
+        main_func = None
+        for symbol in self.container.symbols:
+            if symbol.name == "main":
+                location = symbol.entry['st_value']
+                main_func = self.container.functions[location]
+                break
+        else:
+            print("Cannot install segfault handler, due to missing main symbol")
+            return
+
+        # we instrument the second instruction
+        # so that we re-use the stack allocation done by main
+        main_func.cache[0].instrument_before(InstrumentedInstruction(code))
+
+        
+    def store_copy_of_original_text(self, fd):
+        fd.write(".original_sections_preserved:\n")
+        codesecs = list(self.container.codesections.values())
+        for e,section in enumerate(codesecs):
+            fd.write(f"original_{section.name[1:]}_preserved:" + "\n")
+            data = section.bytes
+            for i in range(0, len(data), 4): # since it's code, divisible by 4
+                fd.write(f".word {hex(int.from_bytes(data[i:i+4], 'little'))}\n")
+            if e < len(codesecs) - 1 and section.base + section.sz < codesecs[e+1].base:
+                for i in range(section.base + section.sz, codesecs[e+1].base, 4):
+                    fd.write(".word 0x0\n")
+
+        fd.write(".original_sections_end:\n")
+
     def dump(self):
+
         # we fix stuff that gets broken by too much instrumentation added,
         # like 'tbz' short jumps and jump tables.
         # it is *very* important that no further instrumentation is added from now!
@@ -186,6 +235,12 @@ class Rewriter():
                     fd.write(".quad 0" + "\n")
                 for i in range(section.sz % 8):
                     fd.write(".byte 0" + "\n")
+
+
+        # support data interleaved with text
+        if Rewriter.data_text_support:
+            self.install_segfault_handler()
+            self.store_copy_of_original_text(fd)
 
 
         for section in self.container.codesections.values():
@@ -254,19 +309,31 @@ class Rewriter():
                                 fd.write(".cfi_endproc\n")
                 continue
 
+
         # we need one fake section just to represent the copy of the base address of the binary
         fd.write(f".section .fake.elf_header, \"a\", @progbits" + "\n")
-
 
         # add weak symbols
         for symbol in self.container.symbols:
             if "@@" in symbol.name: continue
-            if symbol['st_info']['bind'] == "STB_WEAK":
+            if symbol['st_info']['bind'] == "STB_WEAK" or \
+                    (symbol.secname == ".dynsym" and symbol['st_info']['type'] == "STT_OBJECT"):
                 fd.write(".weak " + symbol.name + "\n")
 
         global FAKE_ELF_BASE
         if not self.container.loader.is_pie():
             FAKE_ELF_BASE = 0
+
+        if Rewriter.data_text_support and Rewriter.optimize_dtsupport_layout:
+            # if we want to support data inside text, some weird shenanigans
+            # will happen with mprotect, due to general linker/loader brokennes
+            # that put sections with different permissions on the same page
+            codesecs = []
+            for name, section in self.container.codesections.items():
+                codesecs += [(section.base, section.base + section.sz, name)]
+            codesecs = sorted(codesecs)
+            info("Rebasing FAKE_ELF_BASE such that section {codesecs[-1][2]} ends at a page-aligned address")
+            FAKE_ELF_BASE -= sorted(codesecs)[-1][1]
 
         # here we insert the list of the original addresses of the sections
         # so that we keep them the same during linking and reproduce the virtual layout
@@ -281,7 +348,6 @@ class Rewriter():
                 # force_section_addr(".o"+sec.name[2:], sec.base, fd)
         for sec in self.container.codesections.values():
             force_section_addr(".fake"+sec.name, FAKE_ELF_BASE + sec.base, fd)
-
 
         if not self.container.loader.is_pie():
             FAKE_ELF_BASE = 0x2000000
@@ -312,7 +378,7 @@ class Rewriter():
 
         fd.close()
 
-        if Rewriter.total_globals > 0:
+        if Rewriter.literal_saves != Rewriter.total_globals:
             info(f"Saved {Rewriter.literal_saves} out of {Rewriter.total_globals} global accesses ({Rewriter.literal_saves / Rewriter.total_globals * 100}% )")
             info(f"Out of {Rewriter.total_text} code pointers, {Rewriter.impossible_text} cannot be saved (of which {Rewriter.impossible_text - Rewriter.trivial_text} are non-trivial, in total {(Rewriter.impossible_text - Rewriter.trivial_text) / Rewriter.total_globals * 100}%) ")
         info(f"Success: retrowritten assembly to {self.outfile}")
@@ -774,6 +840,10 @@ class Symbolizer():
 
         instruction.mnemonic = "adrp"
         instruction.op_str = f"{reg_name}, ({secname} {op} {hex(pages)})"
+
+        if Rewriter.data_text_support:
+            instruction.instrument_after(
+                    InstrumentedInstruction(f"\tadd {reg_name}, {reg_name}, :lo12:{secname} // bruh"))
 
 
     def _get_resolved_address(self, function, inst, inst2, path):

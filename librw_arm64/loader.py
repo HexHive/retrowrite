@@ -59,6 +59,7 @@ class Loader():
             for symbol in section.iter_symbols():
                 if not len(symbol.name):
                     continue
+                symbol.secname = section.name
                 symbol.name = self.sanitize_symbol_name(symbol.name)
                 self.container.symbols += [symbol]
 

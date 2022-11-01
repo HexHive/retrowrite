@@ -5,7 +5,7 @@ setup(
     name='retrowrite',
     version='1.0.0',
     maintainer='',
-    maintainer_email=''
+    maintainer_email='',
     include_package_data=True,
     url='https://github.com/hexhive/retrowrite/',
     description='Retrowrite: A binary rewriting framework',
