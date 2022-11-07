@@ -31,7 +31,6 @@ TRAITOR_SECS = {
 NO_FLAGS_SECS = [
     ".hash",
     ".rela",
-    ".gnu.hash",
     ".note.ABI_tag",
     ".note.gnu.build_id",
     ".note.go.build_id",
@@ -41,6 +40,7 @@ NO_FLAGS_SECS = [
 # layout replication. We change their name.
 CHANGE_NAME_SECS = [
     ".data.rel.ro.local"
+    ".gnu.hash",
 ]
 
 symbol_names = set() # global set of symbol names to avoid duplicates
@@ -812,6 +812,8 @@ class Section():
         self.flags = f", \"{flags}\"" if len(flags) else ', "aw", @progbits'
         if name in list(TRAITOR_SECS)+NO_FLAGS_SECS: # linker will complain if you put flags in those 
             self.flags = ""
+        if name in CHANGE_NAME_SECS:
+            self.name += "_new"
 
     def load(self):
         assert not self.cache
