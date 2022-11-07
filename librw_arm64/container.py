@@ -814,8 +814,6 @@ class Section():
             self.flags = ""
         if name in CHANGE_NAME_SECS:
             self.name += "_new"
-            print("wwwwwwwwwwwwwwwwwwwwwwwwwwwwww")
-        print(name, CHANGE_NAME_SECS)
 
     def load(self):
         assert not self.cache
