@@ -123,6 +123,9 @@ class Loader():
                     bytes = sec.bytes[section_offset:section_offset + size]
 
                     fixed_name = f"func_{hex(faddr)}"
+                    if faddr in fnlist: # if by chance we do actually have function names (android)
+                        fixed_name = self.sanitize_symbol_name(fnlist[faddr]['name'])
+                    
                     bind = "STB_GLOBAL" #main and _init should always be global
                     function = Function(fixed_name, faddr, size, bytes, bind)
                     self.container.add_function(function)
