@@ -649,7 +649,7 @@ class Function():
         results = []
         # Put all function names and define them.
         if self.bind == "STB_GLOBAL":
-            results.append(".globl %s" % (self.name))
+            results.append(".global %s" % (self.name))
         else:
             results.append(".local %s" % (self.name))
         results.append(".type %s, @function" % (self.name))

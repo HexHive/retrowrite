@@ -115,9 +115,12 @@ def assemble(filename, outfile):
     # wlflags += ",--no-check-sections"
 
     pie = "-no-pie" if any("NOPIE" in x for x in last_lines) else "-pie"
+    shr = "-shared " if any("SHARED" in x for x in last_lines) else ""
+
+    if len(shr): pie = ""
 
     print("Assembling...")
-    asmline = f"g++ {filename}  {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
+    asmline = f"g++ {filename} {shr} {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
     print(asmline)
     subprocess.check_output(asmline, shell=True) 
 

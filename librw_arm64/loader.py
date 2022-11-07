@@ -34,6 +34,12 @@ class Loader():
         if not symtab:
             print('No symbol table available, this file is probably stripped!')
             return True
+        return False
+
+    def is_library(self):
+        symtab = self.elffile.get_section_by_name('.symtab')
+        if not symtab:
+            return False
 
         sym = symtab.get_symbol_by_name("main")
         if not sym or not sym[0]:
