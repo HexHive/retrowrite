@@ -39,7 +39,7 @@ NO_FLAGS_SECS = [
 # Sections that might be merged by the linker, and might disrupt
 # layout replication. We change their name.
 CHANGE_NAME_SECS = [
-    ".data.rel.ro.local"
+    ".data.rel.ro.local",
     ".gnu.hash",
 ]
 
@@ -814,6 +814,8 @@ class Section():
             self.flags = ""
         if name in CHANGE_NAME_SECS:
             self.name += "_new"
+            print("wwwwwwwwwwwwwwwwwwwwwwwwwwwwww")
+        print(name, CHANGE_NAME_SECS)
 
     def load(self):
         assert not self.cache
