@@ -177,12 +177,16 @@ mrs x7, nzcv
 // mrs x7, CPSR
 
 mov x9, x0
-ldr x0, =__afl_setup_failure
+//ldr x0, =__afl_setup_failure
+adrp x0, __afl_setup_failure
+add x0, x0, :lo12:__afl_setup_failure
 ldr x0, [x0]
 cmp x0, #0
 bne __afl_return
 
 ldr x0, =__afl_area_ptr
+adrp x0, __afl_area_ptr
+add x0, x0, :lo12:__afl_area_ptr
 ldr x0, [x0]
 cmp x0, #0
 bne __afl_store
@@ -192,7 +196,9 @@ bne __afl_store
 .globl __afl_setup
 __afl_setup:
 
-ldr x0, =.AFL_SHM_ENV
+//ldr x0, =.AFL_SHM_ENV
+adrp x0, .AFL_SHM_ENV
+add x0, x0, :lo12:.AFL_SHM_ENV
 bl getenv
 
 cmp x0, #0
@@ -215,7 +221,9 @@ bhi __afl_forkserver
 .type __afl_setup_abort, @function
 .globl __afl_setup_abort
 __afl_setup_abort:
-ldr x0, =__afl_setup_failure
+//ldr x0, =__afl_setup_failure
+adrp x0, __afl_setup_failure
+add x0, x0, :lo12:__afl_setup_failure
 ldr x1, [x0]
 add x1, x1, #1
 str x1, [x0]
@@ -224,12 +232,18 @@ b __afl_return
 .type __afl_forkserver, @function
 .globl __afl_forkserver
 __afl_forkserver:
-ldr x1, =__afl_area_ptr
+//ldr x1, =__afl_area_ptr
+adrp x1, __afl_area_ptr
+add x1, x1, :lo12:__afl_area_ptr
 str x0, [x1]
 //ldr x5, =__afl_temp
 ldr x5, =.AFL_STATUS_FLAGS
+adrp x5, .AFL_STATUS_FLAGS
+add x5, x5, :lo12:.AFL_STATUS_FLAGS
 mov x0, #{FORKSRV_FD_1}
-ldr x1, =.AFL_STATUS_FLAGS
+//ldr x1, =.AFL_STATUS_FLAGS
+adrp x1, .AFL_STATUS_FLAGS
+add x1, x1, :lo12:.AFL_STATUS_FLAGS
 mov x2, #4
 bl write
 
@@ -240,7 +254,9 @@ bne __afl_fork_resume
 .globl __afl_fork_wait_loop
 __afl_fork_wait_loop:
 mov x0, #{FORKSRV_FD}
-ldr x1, =.AFL_STATUS_FLAGS
+//ldr x1, =.AFL_STATUS_FLAGS
+adrp x1, .AFL_STATUS_FLAGS
+add x1, x1, :lo12:.AFL_STATUS_FLAGS
 mov x2, #4
 bl read
 
@@ -253,7 +269,9 @@ bl fork
 cmp x0, #0
 beq __afl_fork_resume  // I am the child
 blt __afl_die  // useless
-ldr x1, =__afl_fork_pid // I am the father
+//ldr x1, =__afl_fork_pid // I am the father
+adrp x1, __afl_fork_pid
+add x1, x1, :lo12:__afl_fork_pid
 str x0, [x1]  // store pid in __afl_fork_pid
 mov x0, #{FORKSRV_FD_1}
 mov x2, #4
@@ -263,7 +281,9 @@ bl write
 cmp x0, #4
 bne __afl_die
 
-ldr x0, =__afl_fork_pid
+//ldr x0, =__afl_fork_pid
+adrp x0, __afl_fork_pid
+add x0, x0, :lo12:__afl_fork_pid
 ldr x0, [x0]
 // adr x1, __afl_temp
 adrp x1, __afl_temp
@@ -295,15 +315,21 @@ bl close
 .type __afl_store, @function
 .globl __afl_store
 __afl_store:
-ldr x0, =__afl_area_ptr
+//ldr x0, =__afl_area_ptr
+adrp x0, __afl_area_ptr
+add x0, x0, :lo12:__afl_area_ptr
 ldr x0, [x0]
-ldr x1, =__afl_prev_loc
+//ldr x1, =__afl_prev_loc
+adrp x1, __afl_prev_loc
+add x1, x1, :lo12:__afl_prev_loc
 ldr x2, [x1]
 eor x2, x2, x9
 ldrb w3, [x0, x2]
 add x3, x3, #1
 strb w3, [x0, x2]
-mov x0, x9, asr#1
+// mov x0, x9, asr#1 
+asr x9, x9, #1
+mov x0, x9
 str x0, [x1]
 
 
