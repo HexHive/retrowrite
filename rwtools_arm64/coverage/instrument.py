@@ -164,7 +164,7 @@ ldp x0, lr, [sp], #16
 
 
 main_payload_arm = """
-.section afl_payload, "awx", @progbits
+.section afl_payload, "ax", @progbits
 // afl main payload
 .type __afl_maybe_log, @function
 .globl __afl_maybe_log
@@ -184,7 +184,7 @@ ldr x0, [x0]
 cmp x0, #0
 bne __afl_return
 
-ldr x0, =__afl_area_ptr
+//ldr x0, =__afl_area_ptr
 adrp x0, __afl_area_ptr
 add x0, x0, :lo12:__afl_area_ptr
 ldr x0, [x0]
@@ -237,7 +237,7 @@ adrp x1, __afl_area_ptr
 add x1, x1, :lo12:__afl_area_ptr
 str x0, [x1]
 //ldr x5, =__afl_temp
-ldr x5, =.AFL_STATUS_FLAGS
+//ldr x5, =.AFL_STATUS_FLAGS
 adrp x5, .AFL_STATUS_FLAGS
 add x5, x5, :lo12:.AFL_STATUS_FLAGS
 mov x0, #{FORKSRV_FD_1}

@@ -110,6 +110,8 @@ def assemble(filename, outfile):
     wlflags = []
     for sec, addr in secs.items():
         wlflags += ["--section-start="+sec+"="+addr]
+    if any("SYMBOLIC" in x for x in last_lines): 
+        wlflags += ['-Bsymbolic']
     wlflags = "-Wl," + ",".join(wlflags)
     wlflags += " -march=armv8.1-a+crc+crypto+sve"
     wlflags += " -L."
