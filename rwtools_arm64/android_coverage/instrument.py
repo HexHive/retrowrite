@@ -202,9 +202,7 @@ adr x0, myarea
 ldr x0, [x0]
 ldr x0, [x0]
 cmp x0, #0
-bne __afl_return
-
-
+beq __afl_return
 
 .type __afl_store, @function
 .globl __afl_store
