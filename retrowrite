@@ -91,7 +91,7 @@ def assemble(filename, outfile):
         if "DEPENDENCY:" in line:
             deps += [line.split(": ")[1]]
         if "LIB_PATH:" in line:
-            paths += [line.split(": ")[1]]
+            paths += [line.split(": ")[1].strip()]
         if "SECTION:" in line:
             name, addr = line.split(": ")[1].split(" - ")
             secs[name] = addr.strip()
