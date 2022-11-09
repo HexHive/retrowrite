@@ -183,6 +183,16 @@ mrs x7, nzcv
 // mrs x7, CPSR
 
 mov x9, x0
+
+stp x0, x9, [sp, #-16]!
+adr x0, mystring
+adr x1, myarea
+ldr x1, [x1]
+ldr x1, [x1]
+bl printf
+ldp x0, x9, [sp], #16
+
+
 //ldr x0, =__afl_setup_failure
 
 //ldr x0, =__afl_area_ptr
