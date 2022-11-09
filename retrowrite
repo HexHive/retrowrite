@@ -112,11 +112,11 @@ def assemble(filename, outfile):
     wlflags = []
     for sec, addr in secs.items():
         wlflags += ["--section-start="+sec+"="+addr]
-    for p in paths:
-        wlflags += [" -L" + p]
     if any("SYMBOLIC" in x for x in last_lines): 
         wlflags += ['-Bsymbolic']
     wlflags = "-Wl," + ",".join(wlflags)
+    for p in paths:
+        wlflags += " -L" + p
     wlflags += " -march=armv8.1-a+crc+crypto+sve"
     # wlflags += ",--no-check-sections"
 
