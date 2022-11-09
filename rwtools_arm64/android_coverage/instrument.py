@@ -166,7 +166,7 @@ ldp x0, lr, [sp], #16
 main_payload_arm = """
 myarea:
 .quad __afl_area_ptr
-myprev_loc
+myprev_loc:
 .quad __afl_prev_loc
 
 
