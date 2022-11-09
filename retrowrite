@@ -85,11 +85,13 @@ def assemble(filename, outfile):
     f = open(filename, 'r')
     f.seek(max(0, size - 4096)) # we store metadata only at the end
                         # no need to read the whole file
-    deps, secs = [], {}
+    deps, paths, secs = [], ["."], {}
     last_lines = f.readlines()
     for line in last_lines:
         if "DEPENDENCY:" in line:
             deps += [line.split(": ")[1]]
+        if "LIB_PATH:" in line:
+            paths += [line.split(": ")[1]]
         if "SECTION:" in line:
             name, addr = line.split(": ")[1].split(" - ")
             secs[name] = addr.strip()
@@ -110,11 +112,12 @@ def assemble(filename, outfile):
     wlflags = []
     for sec, addr in secs.items():
         wlflags += ["--section-start="+sec+"="+addr]
+    for p in paths:
+        wlflags += [" -L" + p]
     if any("SYMBOLIC" in x for x in last_lines): 
         wlflags += ['-Bsymbolic']
     wlflags = "-Wl," + ",".join(wlflags)
     wlflags += " -march=armv8.1-a+crc+crypto+sve"
-    wlflags += " -L."
     # wlflags += ",--no-check-sections"
 
     pie = "-no-pie" if any("NOPIE" in x for x in last_lines) else "-pie"
