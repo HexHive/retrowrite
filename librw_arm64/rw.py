@@ -520,8 +520,7 @@ class Symbolizer():
                         if any(exit in name for exit in ["abort", "exit"]): #XXX: fix this ugly hack
                             function.nexts[inst_idx] = []
                     else:
-                        critical(instruction)
-                        critical("target outside code section. Aborting.")
+                        critical(str(instruction) + " - target outside code section!")
                         continue
                         # gotent = container.is_target_gotplt(target)
                         # if gotent:
@@ -1006,7 +1005,7 @@ class Symbolizer():
 
         if len(possible_sections) == 0:
             critical(f"No possible section found for {inst}. Aborting")
-            return
+            exit(1)
 
         # self._adjust_adrp_section_pointer(container, possible_sections[0], orig_off, inst)
         # return
@@ -1681,7 +1680,7 @@ class LSDATable():
         if lpstart_raw != DW_EH_encoding_flags['DW_EH_PE_omit']:
             # See https://www.airs.com/blog/archives/464, it should be omit in
             # practice
-            critical("Landing pad found!")
+            info("Landing pad found!")
             raise Exception("We do not handle this case for now")
             base_encoding = lpstart_raw & 0x0F
             modifier      = lpstart_raw & 0xF0
