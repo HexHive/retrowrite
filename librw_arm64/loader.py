@@ -112,6 +112,10 @@ class Loader():
         # is it stripped? 
         else:
             ehfuncs = self.extract_functions_eh_frame()
+            # expand ehfuncs with fnlist
+            for addr, fn in fnlist.items():
+                if (addr, fn['sz']) not in ehfuncs:
+                    ehfuncs += [(addr, fn['sz'])]
             ehfuncs = sorted(ehfuncs)
             if len(ehfuncs):
                 for e, item in enumerate(ehfuncs):
