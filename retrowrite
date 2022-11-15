@@ -231,7 +231,7 @@ if __name__ == "__main__":
         if args.optimize_dtsupport_layout: 
             Rewriter.optimize_dtsupport_layout = True
         if args.no_exceptions: 
-            Rewriter.no_esceptions = True
+            Rewriter.no_exceptions = True
 
     elif arch == "x64":
         rwtools_path = rwtools_path + "_x64."
