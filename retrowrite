@@ -188,6 +188,8 @@ if __name__ == "__main__":
                       help="Ignore stripped executable check (only needed for x64, use with caution)")
     argp.add_argument("--optimize-exceptions", dest="optimize_exceptions", action="store_true",
           help="Parse and rewrite exception handler information. Will speed up the program, but use with care.")
+    argp.add_argument("--no-exceptions", dest="no_exceptions", action="store_true",
+          help="Avoid rewriting exception handling information.")
     argp.add_argument("-v", "--verbose", action="store_true",
           help="Verbose output")
 
@@ -196,6 +198,7 @@ if __name__ == "__main__":
     argp.set_defaults(ignore_no_pie=False)
     argp.set_defaults(ignore_stripped=False)
     argp.set_defaults(optimize_exceptions=False)
+    argp.set_defaults(no_exceptions=False)
 
     args = argp.parse_args()
 
@@ -227,6 +230,8 @@ if __name__ == "__main__":
             Rewriter.data_text_support = True
         if args.optimize_dtsupport_layout: 
             Rewriter.optimize_dtsupport_layout = True
+        if args.no_exceptions: 
+            Rewriter.no_esceptions = True
 
     elif arch == "x64":
         rwtools_path = rwtools_path + "_x64."
@@ -255,7 +260,7 @@ if __name__ == "__main__":
 
     # x64 supports only PIE binaries with symbols (for now)
     if arch == "x64" and loader.is_pie() == False and args.ignore_no_pie == False:
-        print("***** RetroWrite requires a position-independent executable. *****")
+        print("***** The x64 version of RetroWrite requires a position-independent executable. *****")
         print("It looks like %s is not position independent" % args.bin)
         print("If you really want to continue, because you think retrowrite has made a mistake, pass --ignore-no-pie.")
         sys.exit(1)

@@ -65,6 +65,10 @@ class Rewriter():
     # code section will have its ending page-aligned. This is to minimize the calls to the segfault
     # handler for "valid" reads such as to .rodata on the same page as an executable page
     optimize_dtsupport_layout = False
+    
+    # disable exception handling recovery altogether. Useful when .cfi directives
+    # generate linking errors.
+    no_exceptions = False
 
     GCC_FUNCTIONS = [ # functions added by the compiler. No use in rewriting them
         # "_start",
@@ -156,7 +160,8 @@ class Rewriter():
     def symbolize(self):
         info("Symbolizing...")
         symb = Symbolizer()
-        symb.recover_eh_frame(self.container, None)
+        if not Rewriter.no_exceptions:
+            symb.recover_eh_frame(self.container, None)
         symb.symbolize_data_sections(self.container, None)
         symb.symbolize_text_section(self.container, None)
 
