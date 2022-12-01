@@ -1009,8 +1009,8 @@ class Symbolizer():
             # possible_sections += ['.text']
 
         if len(possible_sections) == 0:
-            critical(f"No possible section found for {inst}. Aborting")
-            exit(1)
+            critical(f"No possible section found for {inst}. Might be data inside text?")
+            return
 
         # self._adjust_adrp_section_pointer(container, possible_sections[0], orig_off, inst)
         # return

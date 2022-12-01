@@ -373,8 +373,9 @@ class Function():
         if end_addr > self.cache[-1].address:
             off = end_addr - self.cache[-1].address
             end_addr = self.cache[-1].address
-        assert start_addr in self.instr_count and end_addr in self.instr_count
-        # print(f"total instructions between {hex(start_addr)} and {hex(end_addr)}: {self.instr_count[end_addr] - self.instr_count[start_addr] + off}")
+        if not (start_addr in self.instr_count and end_addr in self.instr_count):
+            critical(f"Instruction at addr {hex(start_addr)} not in any function. Data inside text?)")                       
+            return 0
 
         return self.instr_count[end_addr] - self.instr_count[start_addr] + off
 
@@ -398,9 +399,9 @@ class Function():
                 start = instruction.address
                 target = int(instruction.cs.op_str.split('#')[-1], 16)  # cbz x0, #0xdeadcafe
                 next_instruction = start + INSTR_SIZE
+                print(hex(start))
+                print(instruction)
                 instrs = self.count_instructions(start, target)
-                # if instruction.address == 0x53e684:
-                    # import IPython; IPython.embed() 
                 if instrs > 2**17: #1MB = 2^20 bytes = (2^20 / 4) instrs
                     jumps_fixed += 1
                     instruction.instrument_after(InstrumentedInstruction(
