@@ -4,6 +4,7 @@ from collections import defaultdict
 
 import pandas
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def results_to_csv(inputs, out):
@@ -18,7 +19,7 @@ def results_to_csv(inputs, out):
         data = data.split("\n")
         start = False
         key = os.path.basename(fname)
-        key = key.split(".")[0].replace("-", " ").title()
+        key = key.split(".")[0].replace("_", " ").replace("asan", "ASan").replace("5", "").replace("symbolization", "ARMWrestling")
         keys.append(key)
 
         results[key] = defaultdict(lambda: "NaN")
@@ -34,10 +35,17 @@ def results_to_csv(inputs, out):
                 if len(line) < 2: break
                 if line[-1] != "NR":
                     benchmark = line[0].strip()
-                    # if any([x in benchmark for x in ["x264", "gcc", "nab", "imagick", "lbm"]]):
-                    # if any([x in benchmark for x in ["x264", "gcc" ]]):
-                    if any([x in benchmark for x in ["x264" ]]):
+                    benchmark = benchmark.split(".")[1]
+                    benchmark = benchmark.replace("_r", "")
+                    if any([x in benchmark for x in ["x264", "gcc", "nab", "namd", "imagick", "lbm", "mcf", "xz", "perlbench"]]):
+                        benchmark += "(C)"
                         continue
+                    # else:
+                        # benchmark += "(C++)"
+                    # if any([x in benchmark for x in ["x264", "gcc" ]]):
+                    # if any([x in benchmark for x in ["x264" ,]]):
+                    # if any([x in benchmark for x in ["x264", ]]):
+                        # continue
                     all_benchs.add(benchmark)
                     results[key][benchmark] = float(line[2].strip())
             elif line.startswith("======="):
@@ -45,7 +53,7 @@ def results_to_csv(inputs, out):
 
     csvl = list()
     csvl.append("benchmark,{}".format(','.join(keys)))
-    for bench in sorted(all_benchs):
+    for bench in sorted(all_benchs, key=lambda x: not any(y in x for y in["gcc", "perlbench", "nab", "lbm", "x264", "xz", "imagick", "namd", "mcf"])):
         csvl.extend(
             ["%s,%s" % (bench, ','.join([str(results[k][bench]) for k in keys]))])
 
@@ -75,15 +83,20 @@ def plot(outf):
     print(df)
 
     # ugly patching for cuttin off bars too high
-    height_limit = 3000
+    height_limit = 3250
+    # height_limit = 12000
 
-    ax = df.plot.bar(rot=30, figsize=(12, 7), ylim=(1,height_limit*1.1))
+    sns.set(style="darkgrid", palette="deep")
+    ax = df.plot.bar(rot=30, figsize=(32, 10), ylim=(1,height_limit*1.1))
     ax.set_ylabel("Runtime (seconds)")
-    ax.set_title("SPEC CPU 2017 benchmark results\nCompile flags used: -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3")
+    for x in ax.get_xticklabels() + ax.legend().get_texts() + ax.get_yticklabels() + [ax.title, ax.xaxis.label, ax.yaxis.label]:
+        x.set_fontsize(14)
+    sns.despine()
+    # ax.set_title("SPEC CPU 2017 benchmark results\nCompile flags used: -fno-unsafe-math-optimizations -fno-tree-loop-vectorize -O3")
 
     for p in ax.patches:
-        if p.get_height() < height_limit*0.8: continue
-        ax.annotate(format(p.get_height(), '.0f'),
+        if p.get_height() < height_limit*0.96: continue
+        ax.annotate("("+format(p.get_height(), '.0f')+")",
             (p.get_x() + p.get_width() / 2., min(height_limit, p.get_height())), 
             ha = 'center', va = 'center', 
             xytext = (0, 9), 
@@ -106,22 +119,25 @@ def plot_diff(outf):
     for x in range(1, len(df.columns.values)):
         df.iloc[numrows, x] = sum([df.iloc[i, x] for i in range(numrows)])
 
-    base = "Baseline"
+    base = "baseline"
     sasan = "Source_Asan"
-    basan = "Basan"
-    if base not in df.columns:
-        print("Baseline not found")
-        exit(0)
+    basan = "ARMore call emulation"
+    # if base not in df.columns:
+        # print("Baseline not found")
+        # exit(0)
 
     print(df)
-    print("Overhead on baseline")
-    for i in range(len(df.iloc[:])):
-        for x in range(2, len(df.columns.values)):
-            if df.columns[x] == base: continue
-            # df.iloc[i, x] /= df.iloc[i][base]
-            df.iloc[i, x] = "{:.2f}%".format(df.iloc[i, x] / df.iloc[i][base] * 100 - 100)
+    try:
+        print("Overhead on baseline")
+        for i in range(len(df.iloc[:])):
+            for x in range(2, len(df.columns.values)):
+                if df.columns[x] == base: continue
+                # df.iloc[i, x] /= df.iloc[i][base]
+                df.iloc[i, x] = "{:.2f}%".format(df.iloc[i, x] / df.iloc[i][base] * 100 - 100)
+        print(df)
+    except :
+        pass
 
-    print(df)
 
     df = pandas.read_csv(csvf)
     numrows = len(df.index)
@@ -129,16 +145,16 @@ def plot_diff(outf):
     for x in range(1, len(df.columns.values)):
         df.iloc[numrows, x] = sum([df.iloc[i, x] for i in range(numrows)])
 
-    if sasan not in df.columns:
-        print("Source Asan not found")
-        exit(0)
-    print("Overhead on source ASAN")
-    for i in range(len(df.iloc[:])):
-        for x in range(2, len(df.columns.values)):
-            if df.columns[x] == sasan: continue
-            df.iloc[i, x] /= df.iloc[i][sasan]
+    try:
+        print("Overhead on source ASAN")
+        for i in range(len(df.iloc[:])):
+            for x in range(2, len(df.columns.values)):
+                if df.columns[x] == sasan: continue
+                df.iloc[i, x] /= df.iloc[i][sasan]
+        print(df)
+    except:
+        pass
 
-    print(df)
 
     # delete from down here
 
