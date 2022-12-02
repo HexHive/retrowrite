@@ -227,7 +227,8 @@ class Rewriter():
         # text_fun = self.container.functions[text_section["sh_addr"]]
         start = self.container.loader.elffile.header["e_entry"]
         text_fun = self.container.function_of_address(start)
-        text_fun.cache[(start - text_fun.start) // 4].before.insert(0, InstrumentedInstruction(".globl _start\n_start:"))
+        if text_fun: # libraries might not have an entry point
+            text_fun.cache[(start - text_fun.start) // 4].before.insert(0, InstrumentedInstruction(".globl _start\n_start:"))
 
         fd = open(self.outfile, 'w')
         for sec, section in sorted(
@@ -526,7 +527,7 @@ class Symbolizer():
                             function.nexts[inst_idx] = []
                     else:
                         critical(str(instruction) + " - target outside code section!")
-                        continue
+                        exit(1)
                         # gotent = container.is_target_gotplt(target)
                         # if gotent:
                             # found = False
@@ -1010,7 +1011,7 @@ class Symbolizer():
 
         if len(possible_sections) == 0:
             critical(f"No possible section found for {inst}. Might be data inside text?")
-            return
+            exit(1)
 
         # self._adjust_adrp_section_pointer(container, possible_sections[0], orig_off, inst)
         # return
@@ -1317,8 +1318,6 @@ class Symbolizer():
 
     def _handle_relocation(self, container, section, rel):
         reloc_type = rel['type']
-        # critical(f"{rel['name']} at {hex(rel['offset'])}")
-        # elif reloc_type == ENUM_RELOC_TYPE_x64["R_X86_64_RELATIVE"]:
         if reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_RELATIVE"]:
             value = rel['addend']
             label = "0x%x" % value + " + .fake.elf_header"
@@ -1334,6 +1333,8 @@ class Symbolizer():
             name = rel['name']
             if rel['addend']: name += " + " + str(rel['addend'])
             section.replace(rel['offset'], 8, name)
+        elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_JUMP_SLOT"]:
+            debug(f"Skipping relocation {rel}")
         elif reloc_type == ENUM_RELOC_TYPE_AARCH64["R_AARCH64_COPY"]:
             if rel['name'] in Rewriter.GCC_RELOCATIONS: return
             section.replace(rel['offset'], 8, rel['name'])
@@ -1360,8 +1361,8 @@ str x6, [x7]
             ''' % (rel['name'], rel['offset'], rel['offset'])))
 
         else:
-            print(rel)
-            print("[*] Unhandled relocation {}".format(
+            critical(rel)
+            critical("[*] Unhandled relocation {}".format(
                 describe_reloc_type(reloc_type, container.loader.elffile)))
 
     # def fix_got_section(self, container):
@@ -1437,7 +1438,7 @@ str x6, [x7]
                 lsda_table = None
                 function = container.functions.get(initial_location)
                 if not function:
-                    print("Could not find function at location %d, is this normal ?" % initial_location)
+                    print("Could not find function at location 0x%x, is this normal ?" % initial_location)
                     continue
                 current = cfi_map[function.start]
 
@@ -1511,9 +1512,12 @@ str x6, [x7]
                 if personality:
                     personality_function = personality.function
                     debug("Personality Function: 0x%x" % personality_function)
-                lsda_encoding = entry.augmentation_dict.get('LSDA_encoding', None)
-                if lsda_encoding:
+                lsda_encoding_or_none = entry.augmentation_dict.get('LSDA_encoding', None)
+                if lsda_encoding_or_none:
+                    lsda_encoding = lsda_encoding_or_none
                     debug("LSDA Encoding %d" % lsda_encoding)
+                else:
+                    debug("CIE entry without LSDA_encoding field!")
             elif type(entry) == ZERO:
                 debug(entry.offset)
             else:

@@ -77,6 +77,8 @@ class Loader():
                 if type(entry) == FDE:
                     initial_location = entry.header.initial_location
                     size = entry.header.address_range
+                    if size == 0: 
+                        continue # probably a weak symbol ? 
                     funcs += [(initial_location, size)]
             return funcs
         except:
@@ -156,7 +158,7 @@ class Loader():
                 for sec in self.container.codesections.values():
                     if len(sec.functions):
                         first_func_start = sorted(sec.functions)[0]
-                        if sec.base < first_func_start:
+                        if sec.base <= first_func_start:
                             newsize = first_func_start - sec.base
                             debug("adding filler function at addr ", hex(sec.base), "with size", first_func_start)
                             new_bytes = sec.bytes[:newsize]
@@ -202,8 +204,7 @@ class Loader():
         return (
             # sval['sz'] > 0 and # removed cause .init can have size 0
             (sval['flags'] & SH_FLAGS.SHF_ALLOC) != 0 and (
-                (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) == 1 or sname not in Rewriter.DATASECTIONS
-            ) 
+                (sval['flags'] & SH_FLAGS.SHF_EXECINSTR) != 0) 
         )
 
     def load_sections(self, seclist, section_filter=lambda x: True):
@@ -227,10 +228,10 @@ class Loader():
             ds = Section(sec, sval["base"], sval["sz"], bytes,
                              (sval['align']))
 
-            if self._is_data_section(sec, sval):
-                self.container.add_data_section(ds)
-            elif self._is_code_section(sec, sval):
+            if self._is_code_section(sec, sval):
                 self.container.add_code_section(ds)
+            elif self._is_data_section(sec, sval):
+                self.container.add_data_section(ds)
 
         # Find if there is a plt section
         for sec in seclist:

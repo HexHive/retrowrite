@@ -177,7 +177,7 @@ class Container():
 
 
             newsec = self.section_of_address(function.start)
-            print(hex(function.start), function.name)
+            debug("Fixing 'broken' function ", hex(function.start), function.name)
             # newsec.functions += [function.start]
             base = newsec.base
             data = newsec.bytes
@@ -206,7 +206,7 @@ class Container():
             function.sz = len(bytes)
             newsec.functions_ends.remove(faddr)
             newsec.functions_ends += [faddr + function.sz]
-            print(hex(faddr), hex(faddr + function.sz))
+            debug("Now is ", hex(faddr), hex(faddr + function.sz))
 
 
     def attach_loader(self, loader):
@@ -399,8 +399,6 @@ class Function():
                 start = instruction.address
                 target = int(instruction.cs.op_str.split('#')[-1], 16)  # cbz x0, #0xdeadcafe
                 next_instruction = start + INSTR_SIZE
-                print(hex(start))
-                print(instruction)
                 instrs = self.count_instructions(start, target)
                 if instrs > 2**17: #1MB = 2^20 bytes = (2^20 / 4) instrs
                     jumps_fixed += 1
