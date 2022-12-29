@@ -85,13 +85,15 @@ def assemble(filename, outfile):
     f = open(filename, 'r')
     f.seek(max(0, size - 4096)) # we store metadata only at the end
                         # no need to read the whole file
-    deps, paths, secs = [], ["."], {}
+    deps, paths, secs, cc = [], ["."], {}, "g++"
     last_lines = f.readlines()
     for line in last_lines:
         if "DEPENDENCY:" in line:
             deps += [line.split(": ")[1]]
         if "LIB_PATH:" in line:
             paths += [line.split(": ")[1].strip()]
+        if "CC:" in line:
+            cc = line.split(": ")[1]
         if "SECTION:" in line:
             name, addr = line.split(": ")[1].split(" - ")
             secs[name] = addr.strip()
@@ -126,7 +128,7 @@ def assemble(filename, outfile):
     if len(shr): pie = ""
 
     print("Assembling...")
-    asmline = f"g++ {filename} {shr} {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
+    asmline = f"{cc} {filename} {shr} {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
     print(asmline)
     subprocess.check_output(asmline, shell=True) 
 
