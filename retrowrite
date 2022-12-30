@@ -9,6 +9,7 @@ import sys
 import traceback
 import importlib
 from elftools.elf.elffile import ELFFile
+from librw_arm64.util.logging import info
 
 def load_analysis_cache(loader, outfile):
     with open(outfile + ".analysis_cache") as fd:
@@ -81,6 +82,7 @@ def asank(rw, loader, args):
     return rw
 
 def assemble(filename, outfile):
+    print(f"Assembling {filename} into {outfile}")
     size = os.stat(filename).st_size
     f = open(filename, 'r')
     f.seek(max(0, size - 4096)) # we store metadata only at the end
@@ -89,19 +91,19 @@ def assemble(filename, outfile):
     last_lines = f.readlines()
     for line in last_lines:
         if "DEPENDENCY:" in line:
-            deps += [line.split(": ")[1]]
+            deps += [line.split(": ")[1].strip()]
         if "LIB_PATH:" in line:
             paths += [line.split(": ")[1].strip()]
         if "CC:" in line:
-            cc = line.split(": ")[1]
+            cc = line.split(": ")[1].strip()
         if "SECTION:" in line:
             name, addr = line.split(": ")[1].split(" - ")
             secs[name] = addr.strip()
 
-    print("Will link with the following dependencies:")
-    print("".join(deps))
+    info("Will link with the following dependencies:")
+    print(",".join(deps))
 
-    print("Will link with the following sections:")
+    info("Will link with the following sections:")
     print(secs)
 
     lflags = []
@@ -127,8 +129,8 @@ def assemble(filename, outfile):
 
     if len(shr): pie = ""
 
-    print("Assembling...")
     asmline = f"{cc} {filename} {shr} {pie} -nostartfiles {lflags} {wlflags} -o {outfile}"
+    info("Assembling with the following command:")
     print(asmline)
     subprocess.check_output(asmline, shell=True) 
 
@@ -152,7 +154,7 @@ def assemble(filename, outfile):
     # f.write(ff)
     # f.close()
 
-    print("Done!")
+    print("Done!\n")
 
 
 
@@ -207,6 +209,8 @@ if __name__ == "__main__":
     if args.assemble:
         assemble(args.bin, args.outfile)
         exit(0)
+
+    print(f"Rewriting {args.bin} into {args.outfile}")
 
     elffile = ELFFile(open(args.bin, "rb"))
     arch = elffile.get_machine_arch()

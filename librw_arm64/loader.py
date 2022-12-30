@@ -454,6 +454,6 @@ class Loader():
         if not dynamic: return []
 
         for tag in dynamic.iter_tags("DT_NEEDED"):
-            info("Found dependency {}".format(tag.needed))
             deps += [tag.needed]
+        info(f"Found dependencies {','.join(deps)}")
         return deps
