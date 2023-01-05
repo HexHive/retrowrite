@@ -194,6 +194,8 @@ if __name__ == "__main__":
           help="Parse and rewrite exception handler information. Will speed up the program, but use with care.")
     argp.add_argument("--no-exceptions", dest="no_exceptions", action="store_true",
           help="Avoid rewriting exception handling information.")
+    argp.add_argument("--ghidra", dest="use_ghidra", action="store_true",
+          help="Use ghidra to determine between data and text (aarch64 only)")
     argp.add_argument("-v", "--verbose", action="store_true",
           help="Verbose output")
 
@@ -203,6 +205,7 @@ if __name__ == "__main__":
     argp.set_defaults(ignore_stripped=False)
     argp.set_defaults(optimize_exceptions=False)
     argp.set_defaults(no_exceptions=False)
+    argp.set_defaults(use_ghidra=False)
 
     args = argp.parse_args()
 
@@ -238,6 +241,8 @@ if __name__ == "__main__":
             Rewriter.optimize_dtsupport_layout = True
         if args.no_exceptions: 
             Rewriter.no_exceptions = True
+        if args.use_ghidra: 
+            Rewriter.use_ghidra = True
 
     elif arch == "x64":
         rwtools_path = rwtools_path + "_x64."
@@ -295,7 +300,7 @@ if __name__ == "__main__":
     else:
         loader.load_sections(slist, lambda x: x not in Rewriter.IGNORE_SECTIONS)
         flist = loader.flist_from_symtab() # after loading all sections
-        loader.load_functions(flist)
+        loader.load_functions(flist, args.use_ghidra)
 
 
     reloc_list = loader.reloc_list_from_symtab()

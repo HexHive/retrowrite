@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import struct
-import string
 from collections import defaultdict
 
 from elftools.elf.elffile import ELFFile
@@ -13,12 +12,13 @@ from elftools.dwarf.callframe import FDE
 from .container import Container, Function, Section, disasm_bytes, CHANGE_NAME_SECS
 from .rw import Rewriter
 
-from librw_arm64.util.logging import *
+from librw_arm64.util.logging import debug, info, critical
 
 
 class Loader():
     def __init__(self, fname):
         debug(f"Loading {fname}...")
+        self.fname = fname
         self.fd = open(fname, 'rb')
         self.elffile = ELFFile(self.fd)
         self.container = Container()
@@ -90,8 +90,9 @@ class Loader():
         return name
 
 
-    def load_functions(self, fnlist):
-        debug(f"Loading functions...")
+    def load_functions(self, fnlist, use_ghidra=False):
+        debug("Loading functions...")
+        if use_ghidra: return self.load_functions_ghidra(fnlist)
         text_section = self.elffile.get_section_by_name(".text")
         data = text_section.data()
         base = text_section['sh_addr']
@@ -208,7 +209,7 @@ class Loader():
         )
 
     def load_sections(self, seclist, section_filter=lambda x: True):
-        debug(f"Loading sections...")
+        debug("Loading sections...")
         for sec in [sec for sec in seclist if section_filter(sec)]:
             sval = seclist[sec]
             section = self.elffile.get_section_by_name(sec)
@@ -457,3 +458,78 @@ class Loader():
             deps += [tag.needed]
         info(f"Found dependencies {','.join(deps)}")
         return deps
+
+    def load_functions_ghidra(self):
+        prescript = """
+#!/usr/bin/env python2
+
+from ghidra.app.script import GhidraScript
+setAnalysisOption(currentProgram, "Decompiler Switch Analysis", "false")
+setAnalysisOption(currentProgram, "Stack", "false")
+setAnalysisOption(currentProgram, "ARM Constant Reference Analyzer", "false")
+setAnalysisOption(currentProgram, "x86 Constant Reference Analyzer", "false")
+"""
+        postscript = """
+#!/usr/bin/env python2
+import json
+import __main__ as ghidra_app
+
+args = ghidra_app.getScriptArgs()
+functions = currentProgram.getFunctionManager().getFunctions(True)
+reslist = {}
+for function in list(functions):
+    reslist[function.name] = (hex(int("0x" + str(function.entryPoint), 16) - 0x100000), hex(function.getBody().getNumAddresses()))
+
+with open(args[0], "w") as output_file:
+    json.dump(reslist, output_file)
+"""
+        import distutils.spawn 
+        import os
+        import random
+        import string
+        import json
+        ghidra_exec = distutils.spawn.find_executable("ghidra-headless")
+        if not ghidra_exec: 
+            ghidra_exec = distutils.spawn.find_executable("analyzeHeadless")
+        if not ghidra_exec: 
+            critical("ghidra-headless or analyzeHeadless not found!")
+            exit(1)
+
+        with open("/tmp/prescript", "w") as f:
+            f.write(prescript)
+        with open("/tmp/postscript", "w") as f:
+            f.write(postscript)
+        
+        tmp = "/tmp/{self.fname}_" + "".join(random.choice(string.digits) for _ in range(12))
+        os.system(f"ghidra-headless /tmp HeadlessAnalysis -overwrite -import {self.fname} -scriptPath /tmp -prescript prescript -postscript postscript {tmp}")
+
+        if not os.path.exists(tmp):
+            critical("ghidra analysis failed!")
+            exit(1)
+
+        with open(tmp, "r") as f:
+            fun_dict = json.load(f)
+
+        os.remove(tmp)
+
+        for fname, fattrs in fun_dict.items():
+            faddr, fsize = fattrs
+            faddr = int(faddr, 16)
+    
+            fsize = int(fsize, 16)
+    
+            sec = self.container.section_of_address(faddr)
+            if not sec: continue
+            sec.functions += [faddr]
+            sec.functions_ends += [faddr + fsize]
+
+            section_offset = faddr - sec.base
+            bytes = sec.bytes[section_offset:section_offset + fsize]
+
+            # replace banned chars
+            fixed_name = self.sanitize_symbol_name(fname)
+            bind =  "STB_GLOBAL" 
+            function = Function(fixed_name, faddr, fsize, bytes, bind)
+            self.container.add_function(function)
+
+        
