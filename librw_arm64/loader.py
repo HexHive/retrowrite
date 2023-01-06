@@ -159,7 +159,7 @@ class Loader():
                 for sec in self.container.codesections.values():
                     if len(sec.functions):
                         first_func_start = sorted(sec.functions)[0]
-                        if sec.base <= first_func_start:
+                        if sec.base < first_func_start:
                             newsize = first_func_start - sec.base
                             debug("adding filler function at addr ", hex(sec.base), "with size", first_func_start)
                             new_bytes = sec.bytes[:newsize]
