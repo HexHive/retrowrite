@@ -70,7 +70,7 @@ class Loader():
                 self.container.symbols += [symbol]
 
     def extract_functions_eh_frame(self):
-        funcs = []
+        funcs = {}
         try:
             ehframe_entries = self.elffile.get_dwarf_info().EH_CFI_entries()
             for entry in ehframe_entries:
@@ -79,10 +79,11 @@ class Loader():
                     size = entry.header.address_range
                     if size == 0: 
                         continue # probably a weak symbol ? 
-                    funcs += [(initial_location, size)]
+                    if initial_location not in funcs or funcs[initial_location] < size:
+                        funcs[initial_location] = size
             return funcs
         except:
-            return []
+            return {}
 
     def sanitize_symbol_name(self, name):
         for x in "\'\",-{}; []/*@()%:<>\\":
@@ -117,9 +118,9 @@ class Loader():
             ehfuncs = self.extract_functions_eh_frame()
             # expand ehfuncs with fnlist
             for addr, fn in fnlist.items():
-                if (addr, fn['sz']) not in ehfuncs:
-                    ehfuncs += [(addr, fn['sz'])]
-            ehfuncs = sorted(ehfuncs)
+                if addr not in ehfuncs or ehfuncs[addr] < fn['sz']:
+                    ehfuncs[addr] = fn['sz']
+            ehfuncs = sorted(list(ehfuncs.items()))
             if len(ehfuncs):
                 for e, item in enumerate(ehfuncs):
                     faddr, size = item
