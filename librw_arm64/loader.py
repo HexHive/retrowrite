@@ -504,11 +504,18 @@ with open(args[0], "w") as output_file:
 
         # os.remove(tmp)
 
-        for fname, fattrs in fun_dict.items():
-            faddr, fsize = fattrs
+        # cutoff overlapping functions
+        sorted_flist = sorted(fun_dict.items(), key=lambda x: int(x[1][0], 16))
+
+        for e,attrs in enumerate(sorted_flist):
+            fname = attrs[0]
+            faddr, fsize = attrs[1]
             faddr = int(faddr, 16)
-    
             fsize = int(fsize.replace("L", ""), 16)
+
+            if e+1 < len(sorted_flist) and (faddr+fsize > int(sorted_flist[e+1][1][0], 16)):
+                debug(f"Cutting off function {fname} because overlaps next function")
+                fsize = int(sorted_flist[e+1][1][0], 16) - faddr
     
             sec = self.container.section_of_address(faddr)
             if not sec: continue
