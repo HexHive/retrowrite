@@ -93,7 +93,7 @@ class Loader():
 
     def load_functions(self, fnlist, use_ghidra=False):
         debug("Loading functions...")
-        if use_ghidra: return self.load_functions_ghidra(fnlist)
+        if use_ghidra: return self.load_functions_ghidra()
         text_section = self.elffile.get_section_by_name(".text")
         data = text_section.data()
         base = text_section['sh_addr']
@@ -461,15 +461,6 @@ class Loader():
         return deps
 
     def load_functions_ghidra(self):
-        prescript = """
-#!/usr/bin/env python2
-
-from ghidra.app.script import GhidraScript
-setAnalysisOption(currentProgram, "Decompiler Switch Analysis", "false")
-setAnalysisOption(currentProgram, "Stack", "false")
-setAnalysisOption(currentProgram, "ARM Constant Reference Analyzer", "false")
-setAnalysisOption(currentProgram, "x86 Constant Reference Analyzer", "false")
-"""
         postscript = """
 #!/usr/bin/env python2
 import json
@@ -479,7 +470,9 @@ args = ghidra_app.getScriptArgs()
 functions = currentProgram.getFunctionManager().getFunctions(True)
 reslist = {}
 for function in list(functions):
-    reslist[function.name] = (hex(int("0x" + str(function.entryPoint), 16) - 0x100000), hex(function.getBody().getNumAddresses()))
+    name = function.name
+    while name in reslist: name += "_"
+    reslist[name] = (hex(int("0x" + str(function.entryPoint), 16) - 0x100000), hex(function.getBody().getNumAddresses()))
 
 with open(args[0], "w") as output_file:
     json.dump(reslist, output_file)
@@ -496,13 +489,11 @@ with open(args[0], "w") as output_file:
             critical("ghidra-headless or analyzeHeadless not found!")
             exit(1)
 
-        with open("/tmp/prescript", "w") as f:
-            f.write(prescript)
-        with open("/tmp/postscript", "w") as f:
+        with open("/tmp/postscript.py", "w") as f:
             f.write(postscript)
         
-        tmp = "/tmp/{self.fname}_" + "".join(random.choice(string.digits) for _ in range(12))
-        os.system(f"ghidra-headless /tmp HeadlessAnalysis -overwrite -import {self.fname} -scriptPath /tmp -prescript prescript -postscript postscript {tmp}")
+        tmp = f"/tmp/{self.fname.split('/')[-1]}_" + "".join(random.choice(string.digits) for _ in range(12))
+        os.system(f"{ghidra_exec} /tmp HeadlessAnalysis -overwrite -import {self.fname} -scriptPath /tmp -postscript postscript.py {tmp}")
 
         if not os.path.exists(tmp):
             critical("ghidra analysis failed!")
@@ -511,13 +502,13 @@ with open(args[0], "w") as output_file:
         with open(tmp, "r") as f:
             fun_dict = json.load(f)
 
-        os.remove(tmp)
+        # os.remove(tmp)
 
         for fname, fattrs in fun_dict.items():
             faddr, fsize = fattrs
             faddr = int(faddr, 16)
     
-            fsize = int(fsize, 16)
+            fsize = int(fsize.replace("L", ""), 16)
     
             sec = self.container.section_of_address(faddr)
             if not sec: continue
