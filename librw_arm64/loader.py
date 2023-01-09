@@ -86,7 +86,7 @@ class Loader():
             return {}
 
     def sanitize_symbol_name(self, name):
-        for x in "!?~+=\'\",-{}; []/*@()%:<>\\":
+        for x in "&!?~+=\'\",-{}; []/*@()%:<>\\":
             name = name.replace(x, "_")
         return name
 
