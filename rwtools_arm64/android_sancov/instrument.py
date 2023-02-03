@@ -58,12 +58,17 @@ stp x15, x16, [sp, #-16]!
 mrs x7, nzcv
 stp x7, x8, [sp, #-16]!
 
-ldr x0, =myfile
+
+//ldr x0, =myfile
+adrp x0, myfile
+add x0, x0, :lo12:myfile
 ldr x0, [x0]
 cmp x0, 0
 b.ne 8
 bl setup_file
-ldr x1, =myformat
+//ldr x1, =myformat
+adrp x1, myformat
+add x1, x1, :lo12:myformat
 bl bullshit_{x}
 bullshit_{x}:
     mov x2, lr
@@ -100,10 +105,14 @@ myfile:
 
 setup_file:
 stp x1, lr, [sp, #-16]!
-adr x0, myname
-adr x1, mymode
+adrp x0, myname
+add x0, x0, :lo12:myname
+adrp x1, mymode
+add x1, x1, :lo12:mymode
+
 bl fopen
-adr x1, myfile
+adrp x1, myfile
+add x1, x1, :lo12:myfile
 str x0, [x1]
 ldp x1, lr, [sp], #16
 ret
