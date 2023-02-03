@@ -101,7 +101,7 @@ mymode:
 myfile:
 .quad 0
 
-.section afl_payload, "awx", @progbits
+.section afl_payload, "ax", @progbits
 
 setup_file:
 stp x1, lr, [sp, #-16]!
