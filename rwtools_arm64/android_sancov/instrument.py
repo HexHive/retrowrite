@@ -59,22 +59,14 @@ mrs x7, nzcv
 stp x7, x8, [sp, #-16]!
 
 
-//ldr x0, =myfile
 adrp x0, myfile
 add x0, x0, :lo12:myfile
 ldr x0, [x0]
 cmp x0, 0
 b.ne 8
 bl setup_file
-//ldr x1, =myformat
-adrp x1, myformat
-add x1, x1, :lo12:myformat
-bl bullshit_{x}
-bullshit_{x}:
-    mov x2, lr
-    b ciao_{x}
-ciao_{x}:
-bl fprintf
+
+bl write_pc
 
 ldp x7, x8, [sp], #16
 msr nzcv, x7
@@ -92,28 +84,52 @@ ldp x0, lr, [sp], #16
 
 
 main_payload_arm = """
-myformat:
-.ascii "%p\\n\\0"
 myname:
 .ascii "coverage.log\\0"
-mymode:
-.ascii "w\\0"
 myfile:
 .quad 0
 
 .section afl_payload, "ax", @progbits
 
-setup_file:
-stp x1, lr, [sp, #-16]!
-adrp x0, myname
-add x0, x0, :lo12:myname
-adrp x1, mymode
-add x1, x1, :lo12:mymode
+write_pc:
+    stp x8, lr, [sp, #-16]!
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
 
-bl fopen
-adrp x1, myfile
-add x1, x1, :lo12:myfile
-str x0, [x1]
-ldp x1, lr, [sp], #16
-ret
+    // load fd
+    adrp x0, myfile
+    add x0, x0, :lo12:myfile
+    ldr x0, [x0]
+
+    mov x1, sp // buffer
+    mov x2, 8  // count
+    mov x8, 64 // write
+    svc 0x0 // syscall!
+
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    ldp x8, lr, [sp], #16
+    ret
+
+setup_file:
+    stp x8, lr, [sp, #-16]!
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+
+    mov x0, -100 // AT_FDCWD
+    adrp x1, myname
+    add x1, x1, :lo12:myname
+    mov x2, 0101 // O_CREAT
+    mov x3, 0777 // rwx
+    mov x8, 56 // openat
+    svc 0x80 // syscall!
+
+    adrp x1, myfile
+    add x1, x1, :lo12:myfile
+    str x0, [x1]
+
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    ldp x8, lr, [sp], #16
+    ret
 """
