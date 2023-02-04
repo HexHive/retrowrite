@@ -101,7 +101,7 @@ write_pc:
     add x0, x0, :lo12:myfile
     ldr x0, [x0]
 
-    mov x1, sp // buffer
+    add x1, sp, 40 // buffer
     mov x2, 8  // count
     mov x8, 64 // write
     svc 0x0 // syscall!
@@ -119,7 +119,7 @@ setup_file:
     mov x0, -100 // AT_FDCWD
     adrp x1, myname
     add x1, x1, :lo12:myname
-    mov x2, 0101 // O_CREAT
+    mov x2, 01101 // O_CREAT + O_WRONLY
     mov x3, 0777 // rwx
     mov x8, 56 // openat
     svc 0x80 // syscall!
