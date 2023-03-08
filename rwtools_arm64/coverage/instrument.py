@@ -164,7 +164,7 @@ ldp x0, lr, [sp], #16
 
 
 main_payload_arm = """
-.section afl_payload, "ax", @progbits
+.section afl_payload, "awx", @progbits
 // afl main payload
 .type __afl_maybe_log, @function
 .globl __afl_maybe_log
