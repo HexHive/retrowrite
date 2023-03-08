@@ -62,7 +62,13 @@ class Instrument():
                 fn.cache[2].instrument_before(self.get_mem_instrumentation(fn.cache[2], idx, free_registers))
             for idx, instruction in enumerate(fn.cache):
 
-                if instruction.mnemonic.startswith("b") and idx+1 < len(fn.cache):
+                if (instruction.mnemonic.startswith("b.") or \
+                    instruction.mnemonic.startswith("cb") or \
+                    instruction.mnemonic.startswith("cs") or \
+                    instruction.mnemonic.startswith("cc") or \
+                    instruction.mnemonic.startswith("cin") or \
+                    instruction.mnemonic.startswith("cneg") or \
+                    instruction.mnemonic.startswith("tb")) and idx+1 < len(fn.cache):
                     next_instruction = fn.cache[idx+1] # we need to instrument the instruction after the branch
                     if "invalid" in str(next_instruction): continue
                     free_registers = fn.analysis['free_registers'][idx+1] if fn.analysis else None
