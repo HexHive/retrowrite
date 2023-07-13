@@ -144,7 +144,7 @@ class Loader():
             if section in self.container.sections:
                 self.container.sections[section].add_relocations(relocations)
             else:
-                debug("[*] Relocations for a section that's not loaded:" + str(reloc_section))
+                print("[*] Relocations for a section that's not loaded:" + str(reloc_section))
                 self.container.add_relocations(section, relocations)
 
     def reloc_list_from_symtab(self):
