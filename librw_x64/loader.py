@@ -44,12 +44,12 @@ class Loader():
         return self.elffile['e_type'] == 'ET_DYN' and base_address == 0
 
     def load_functions(self, fnlist):
-        section = self.elffile.get_section_by_name(".text")
-        data = section.data()
-        base = section['sh_addr']
+        text_section = self.elffile.get_section_by_name(".text")
+        text_data = text_section.data()
+        text_base = text_section['sh_addr']
         for faddr, fvalue in fnlist.items():
-            section_offset = faddr - base
-            bytes = data[section_offset:section_offset + fvalue["sz"]]
+            section_offset = faddr - text_base
+            bytes = text_data[section_offset:section_offset + fvalue["sz"]]
             fixed_name = fvalue["name"].replace("@", "_")
 
             function = Function(fixed_name, faddr, fvalue["sz"], bytes,
@@ -58,17 +58,42 @@ class Loader():
 
         section = self.elffile.get_section_by_name(".init_array")
         data = section.data()
-        base = section['sh_addr']
-        for i in range(0, len(data), 8):
+        # section = self.elffile.get_section_by_name(".fini_array")
+        # data += section.data()
+        for e,i in enumerate(range(0, len(data), 8)):
             address = data[i:i+8]
             addr_int = struct.unpack("<Q", address)[0]
             func = self.container.functions.get(addr_int, None)
             if func == None:
-                print("I NEED SOMEBODY HELP")
-            print(func.__dict__)
-            # We need to add them to the function list
-            # we need to "add_function" like right above
-            # self.container.add_function(func)
+                print(f"ERROR: missed .init_array function symbol at {hex(addr_int)}")
+                # TODO 
+                # We need to add them to the function list
+                # we need to "add_function" like right above
+                min_next_func = 0xffffffffffffffff
+                for func in self.container.functions:
+                    if func > addr_int:
+                        min_next_func = min(min_next_func, func)
+                if min_next_func != 0xffffffffffffffff:
+                    sz = min_next_func - addr_int
+                    func_bytes = text_data[addr_int - text_base:addr_int - text_base + sz]
+                    if e == 0:
+                        # skip first initial array and just do ret (problems with _ITM_registerTMClone... begin unlinkable)
+                        self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, b"\xc3"))
+                    else:
+                        self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, func_bytes))
+
+        # fill gaps 
+        # functions = list(sorted(self.container.functions.items()))
+        # print(functions)
+        # for i, f in enumerate(functions):
+        #     _, function = f
+        #     if i < len(functions) - 1:
+        #         if function.start + function.sz < functions[i+1][1].start:
+        #             sz = functions[i+1][1].start - (function.start + function.sz)
+        #             new_start = function.start + function.sz
+        #             func_bytes = text_data[new_start - text_base:new_start + sz - text_base]
+        #             self.container.add_function(Function(f"entry_{hex(new_start)}", new_start, sz, func_bytes))
+            
 
 
     def load_data_sections(self, seclist, section_filter=lambda x: True):
@@ -192,6 +217,7 @@ class Loader():
         function_list = dict()
 
         for section in symbol_tables:
+
             if not isinstance(section, SymbolTableSection):
                 continue
 
@@ -201,6 +227,7 @@ class Loader():
             for symbol in section.iter_symbols():
                 if symbol['st_other']['visibility'] == "STV_HIDDEN":
                     continue
+
 
                 if (symbol['st_info']['type'] == 'STT_FUNC'
                         and symbol['st_shndx'] != 'SHN_UNDEF'):

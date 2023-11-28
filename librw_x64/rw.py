@@ -86,6 +86,7 @@ class Rewriter():
 
         results.append(".section .text")
         results.append(".align 16")
+        results.append(".section .note.GNU-stack,\"\",%progbits")
 
         for _, function in sorted(self.container.functions.items()):
             """
@@ -566,7 +567,7 @@ class Symbolizer():
                     # Check if the target is in .text section.
                     if container.is_in_section(".text", target):
                         function.bbstarts.add(target)
-                        instruction.op_str = ".L%x" % (target)
+                        instruction.op_str = ".LC%x" % (target)
                     elif target in container.plt:
                         instruction.op_str = "{}@PLT".format(
                             container.plt[target])
