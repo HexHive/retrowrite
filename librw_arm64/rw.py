@@ -319,6 +319,9 @@ class Rewriter():
         # we need one fake section just to represent the copy of the base address of the binary
         fd.write(f".section .fake.elf_header, \"a\", @progbits" + "\n")
 
+        # this makes sure the stack is not executable in kernels older than v5.8-rc1
+        fd.write(f".section .note.GNU-stack, \"\",  @progbits" + "\n")
+
         # add weak symbols
         for symbol in self.container.symbols:
             if "@@" in symbol.name: continue
