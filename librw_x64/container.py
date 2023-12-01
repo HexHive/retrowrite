@@ -162,7 +162,7 @@ class Function():
 
     def set_instrumented(self):
         self.instrumented = True
-    
+
     @property
     def true_name(self):
         if self.is_mangled and not self._true_name:
@@ -185,6 +185,17 @@ class Function():
 
         for instruction in self.cache:
             if instruction.address == address:
+                return True
+
+        return False
+
+    def is_located_at_the_end_of_function(self, address):
+        assert self.cache, "Function not disassembled!"
+
+        for instruction in self.cache:
+            if instruction.address + instruction.sz == address:
+                if ".LLC%x:"%(address) not in instruction.after:
+                    instruction.after.append(".LLC%x:"%(address))
                 return True
 
         return False
