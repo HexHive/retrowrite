@@ -57,30 +57,31 @@ class Loader():
             self.container.add_function(function)
 
         section = self.elffile.get_section_by_name(".init_array")
-        data = section.data()
-        # section = self.elffile.get_section_by_name(".fini_array")
-        # data += section.data()
-        for e,i in enumerate(range(0, len(data), 8)):
-            address = data[i:i+8]
-            addr_int = struct.unpack("<Q", address)[0]
-            func = self.container.functions.get(addr_int, None)
-            if func == None:
-                print(f"ERROR: missed .init_array function symbol at {hex(addr_int)}")
-                # TODO 
-                # We need to add them to the function list
-                # we need to "add_function" like right above
-                min_next_func = 0xffffffffffffffff
-                for func in self.container.functions:
-                    if func > addr_int:
-                        min_next_func = min(min_next_func, func)
-                if min_next_func != 0xffffffffffffffff:
-                    sz = min_next_func - addr_int
-                    func_bytes = text_data[addr_int - text_base:addr_int - text_base + sz]
-                    if e == 0:
-                        # skip first initial array and just do ret (problems with _ITM_registerTMClone... begin unlinkable)
-                        self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, b"\xc3"))
-                    else:
-                        self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, func_bytes))
+        if hasattr(section, "data"):
+            data = section.data()
+            # section = self.elffile.get_section_by_name(".fini_array")
+            # data += section.data()
+            for e,i in enumerate(range(0, len(data), 8)):
+                address = data[i:i+8]
+                addr_int = struct.unpack("<Q", address)[0]
+                func = self.container.functions.get(addr_int, None)
+                if func == None:
+                    print(f"ERROR: missed .init_array function symbol at {hex(addr_int)}")
+                    # TODO 
+                    # We need to add them to the function list
+                    # we need to "add_function" like right above
+                    min_next_func = 0xffffffffffffffff
+                    for func in self.container.functions:
+                        if func > addr_int:
+                            min_next_func = min(min_next_func, func)
+                    if min_next_func != 0xffffffffffffffff:
+                        sz = min_next_func - addr_int
+                        func_bytes = text_data[addr_int - text_base:addr_int - text_base + sz]
+                        if e == 0:
+                            # skip first initial array and just do ret (problems with _ITM_registerTMClone... begin unlinkable)
+                            self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, b"\xc3"))
+                        else:
+                            self.container.add_function(Function(f"entry_{hex(addr_int)}", addr_int, sz, func_bytes))
 
         # fill gaps 
         # functions = list(sorted(self.container.functions.items()))
