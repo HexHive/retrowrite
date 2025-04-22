@@ -214,6 +214,13 @@ having to load and parse binaries or assembly files.
 <!--See [fuzzing/docker](fuzzing/docker) for more information on building a docker image for-->
 <!--fuzzing and reproducing results.-->
 
+#### d. Obfuscate a binary by randomizing the order of instructions (x86 only for now):
+
+The `jumparound` pass randomizes the order of instructions in a function. It can be found
+in folder `rwtools_x64/jumparound`. To use it, you need to specify the `-m` option as following:
+
+`retrowrite -m jumparound <input file> <output asm>`
+
 
 
 # KRetrowrite
