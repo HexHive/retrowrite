@@ -43,9 +43,9 @@ class Instrument():
 
             # the stack should now be fixed
             # now we can randomize everything except the first and last instruction
-            instructions = fn.cache[1:-1]
+            instructions = fn.cache[2:-2]
             random.shuffle(instructions)
-            fn.cache[1:-1] = instructions
+            fn.cache[2:-2] = instructions
 
 
 
